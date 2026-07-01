@@ -340,7 +340,18 @@ export const emitDataChange = (
     action,
     timestamp: Date.now(),
     record: changedDocument ?? null,
-    station: station ?? null,
+    station: station ?? changedDocument?.station ?? null,
+    isCustomStation:
+      changedDocument?.isCustomStation === true ||
+      (Array.isArray(changedDocument?.entries) &&
+        changedDocument.entries.some((e: any) => e?.isCustomStation === true)) ||
+      null,
+    customCountry:
+      changedDocument?.customCountry ||
+      (Array.isArray(changedDocument?.entries)
+        ? changedDocument.entries.find((e: any) => e?.customCountry)?.customCountry
+        : undefined) ||
+      null,
   });
 };
 

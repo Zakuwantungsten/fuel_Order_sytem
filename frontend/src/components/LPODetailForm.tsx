@@ -541,15 +541,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const [showStationDropdown, setShowStationDropdown] = useState(false);
   const [showGoingCheckpointDropdown, setShowGoingCheckpointDropdown] = useState(false);
   const [showReturningCheckpointDropdown, setShowReturningCheckpointDropdown] = useState(false);
-  const [showCustomGoingDropdown, setShowCustomGoingDropdown] = useState(false);
-  const [showCustomReturnDropdown, setShowCustomReturnDropdown] = useState(false);
   
   // Refs for dropdown positioning
   const stationDropdownRef = React.useRef<HTMLDivElement>(null);
   const goingCheckpointRef = React.useRef<HTMLDivElement>(null);
   const returningCheckpointRef = React.useRef<HTMLDivElement>(null);
-  const customGoingRef = React.useRef<HTMLDivElement>(null);
-  const customReturnRef = React.useRef<HTMLDivElement>(null);
   
   // Ref to prevent double-paste operations
   const isPastingRef = React.useRef(false);
@@ -589,27 +585,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       if (returningCheckpointRef.current && !returningCheckpointRef.current.contains(event.target as Node)) {
         setShowReturningCheckpointDropdown(false);
       }
-      if (customGoingRef.current && !customGoingRef.current.contains(event.target as Node)) {
-        setShowCustomGoingDropdown(false);
-      }
-      if (customReturnRef.current && !customReturnRef.current.contains(event.target as Node)) {
-        setShowCustomReturnDropdown(false);
-      }
     };
     const handleScroll = (event: Event) => {
       const target = event.target as Node;
       if (
         stationDropdownRef.current?.contains(target) ||
         goingCheckpointRef.current?.contains(target) ||
-        returningCheckpointRef.current?.contains(target) ||
-        customGoingRef.current?.contains(target) ||
-        customReturnRef.current?.contains(target)
+        returningCheckpointRef.current?.contains(target)
       ) return;
       setShowStationDropdown(false);
       setShowGoingCheckpointDropdown(false);
       setShowReturningCheckpointDropdown(false);
-      setShowCustomGoingDropdown(false);
-      setShowCustomReturnDropdown(false);
     };
 
     const scrollEl = document.getElementById('main-scroll-container');

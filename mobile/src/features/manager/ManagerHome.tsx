@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../auth/AuthContext';
 import { getApiErrorMessage } from '../../api/client';
-import { getStationCurrencyMap, getSuperManagerStations } from '../../api/config';
+import { getStationCurrencyMap, getSuperManagerAccess, getLpoFilterStations } from '../../api/config';
 import {
   LpoEntry,
   LpoPage,
@@ -46,6 +46,7 @@ export default function ManagerHome() {
   const [search, setSearch] = useState('');
   // Multi-select: empty = all allowed stations
   const [selectedStations, setSelectedStations] = useState<string[]>([]);
+  const [customZambiaOnly, setCustomZambiaOnly] = useState(false);
   const [stationPickerOpen, setStationPickerOpen] = useState(false);
   const [sort, setSort] = useState<LpoSortKey>('newest');
   const [sortOpen, setSortOpen] = useState(false);
@@ -79,20 +80,47 @@ export default function ManagerHome() {
 
   const superMgr = isSuperManager(user);
 
-  const { data: configuredStations } = useQuery({
-    queryKey: ['sm-stations', user?.role],
-    queryFn: getSuperManagerStations,
+  const { data: smAccess } = useQuery({
+    queryKey: ['sm-access', user?.role],
+    queryFn: getSuperManagerAccess,
     enabled: superMgr,
   });
 
-  const stations = useMemo(() => availableStations(user, configuredStations), [user, configuredStations]);
+  const { data: configuredStations } = useQuery({
+    queryKey: ['sm-stations', user?.role],
+    queryFn: async () => (await getSuperManagerAccess()).configuredStations,
+    enabled: superMgr,
+  });
+
+  const { data: filterStations } = useQuery({
+    queryKey: ['lpo-filter-stations', user?.role],
+    queryFn: getLpoFilterStations,
+    enabled: superMgr,
+    staleTime: 60_000,
+  });
+
+  const regularStations = useMemo(() => {
+    const base = availableStations(user, configuredStations);
+    const fromApi = filterStations?.regularStations ?? [];
+    return Array.from(new Set([...base, ...fromApi])).sort();
+  }, [user, configuredStations, filterStations?.regularStations]);
+
+  const customStations = useMemo(() => {
+    if (!filterStations?.customZambiaEnabled) return [];
+    return filterStations.customStations ?? [];
+  }, [filterStations]);
+
+  const showCustomSection = customStations.length > 0 || smAccess?.customZambiaEnabled;
+
+  const stations = regularStations;
 
   const stationLabel = useMemo(() => {
     if (!superMgr) return stations[0] ?? 'Your station';
+    if (customZambiaOnly && selectedStations.length === 0) return 'Custom Zambia';
     if (selectedStations.length === 0) return 'All stations';
     if (selectedStations.length === 1) return shortName(selectedStations[0]);
     return `${selectedStations.length} stations`;
-  }, [superMgr, stations, selectedStations]);
+  }, [superMgr, stations, selectedStations, customZambiaOnly]);
 
   const sortLabel = SORT_OPTIONS.find((o) => o.key === sort)?.label ?? 'Newest';
 
@@ -103,9 +131,11 @@ export default function ManagerHome() {
       user?.station,
       user?.username,
       selectedStations.join(','),
+      customZambiaOnly,
       search,
       sort,
-      stations.join(','),
+      regularStations.join(','),
+      customStations.join(','),
     ],
     initialPageParam: 1,
     queryFn: ({ pageParam }) =>
@@ -115,7 +145,8 @@ export default function ManagerHome() {
         search,
         sort,
         selectedStations: superMgr ? selectedStations : undefined,
-        allowedStations: superMgr ? stations : undefined,
+        allowedStations: superMgr ? regularStations : undefined,
+        customZambiaOnly: superMgr ? customZambiaOnly : undefined,
       }),
     getNextPageParam: (last) => (last.page < last.totalPages ? last.page + 1 : undefined),
     refetchInterval: 60_000, // Fallback polling — socket invalidation handles real-time
@@ -163,9 +194,15 @@ export default function ManagerHome() {
 
   // Toggle a station in/out of the selection
   function toggleStation(s: string) {
+    setCustomZambiaOnly(false);
     setSelectedStations((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
     );
+  }
+
+  function toggleCustomZambiaAll() {
+    setCustomZambiaOnly((prev) => !prev);
+    setSelectedStations([]);
   }
 
   return (
@@ -202,14 +239,14 @@ export default function ManagerHome() {
       </View>
 
       {/* Station filter button (super manager only) */}
-      {superMgr && stations.length > 0 ? (
+      {superMgr && (stations.length > 0 || showCustomSection) ? (
         <Pressable
           onPress={() => setStationPickerOpen(true)}
           style={({ pressed }) => [
             styles.stationFilterBtn,
             {
               backgroundColor: colors.surface,
-              borderColor: selectedStations.length > 0 ? colors.primary : colors.border,
+              borderColor: selectedStations.length > 0 || customZambiaOnly ? colors.primary : colors.border,
               marginHorizontal: spacing.md,
               marginTop: spacing.sm,
               borderRadius: radius.md,
@@ -220,24 +257,24 @@ export default function ManagerHome() {
           <Ionicons
             name="business-outline"
             size={16}
-            color={selectedStations.length > 0 ? colors.primary : colors.textMuted}
+            color={selectedStations.length > 0 || customZambiaOnly ? colors.primary : colors.textMuted}
           />
           <Text
             style={{
               flex: 1,
               marginLeft: spacing.sm,
               fontSize: font.body,
-              color: selectedStations.length > 0 ? colors.primary : colors.text,
-              fontWeight: selectedStations.length > 0 ? weight.semibold : weight.regular,
+              color: selectedStations.length > 0 || customZambiaOnly ? colors.primary : colors.text,
+              fontWeight: selectedStations.length > 0 || customZambiaOnly ? weight.semibold : weight.regular,
             }}
             numberOfLines={1}
           >
             {stationLabel}
           </Text>
-          {selectedStations.length > 0 ? (
+          {(selectedStations.length > 0 || customZambiaOnly) ? (
             <View style={[styles.filterBadge, { backgroundColor: colors.primary }]}>
               <Text style={{ color: colors.onPrimary, fontSize: font.tiny, fontWeight: weight.bold }}>
-                {selectedStations.length}
+                {customZambiaOnly ? 'C' : selectedStations.length}
               </Text>
             </View>
           ) : null}
@@ -352,7 +389,7 @@ export default function ManagerHome() {
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <Pressable
-                  onPress={() => setSelectedStations([...stations])}
+                  onPress={() => { setSelectedStations([...stations, ...customStations]); setCustomZambiaOnly(false); }}
                   hitSlop={8}
                 >
                   <Text style={{ color: colors.primary, fontSize: font.small, fontWeight: weight.semibold }}>
@@ -361,7 +398,7 @@ export default function ManagerHome() {
                 </Pressable>
                 <Text style={{ color: colors.border, fontSize: font.body }}>|</Text>
                 <Pressable
-                  onPress={() => setSelectedStations([])}
+                  onPress={() => { setSelectedStations([]); setCustomZambiaOnly(false); }}
                   hitSlop={8}
                 >
                   <Text style={{ color: colors.textMuted, fontSize: font.small, fontWeight: weight.semibold }}>
@@ -387,7 +424,6 @@ export default function ManagerHome() {
                       },
                     ]}
                   >
-                    {/* Custom checkbox */}
                     <View
                       style={[
                         styles.checkbox,
@@ -425,6 +461,102 @@ export default function ManagerHome() {
                   </Pressable>
                 );
               })}
+
+              {showCustomSection ? (
+                <>
+                  <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
+                    <Text style={{ color: colors.textMuted, fontSize: font.small, fontWeight: weight.bold }}>
+                      CUSTOM (ZAMBIA)
+                    </Text>
+                  </View>
+
+                  {smAccess?.customZambiaEnabled ? (
+                    <Pressable
+                      onPress={toggleCustomZambiaAll}
+                      style={({ pressed }) => [
+                        styles.stationRow,
+                        {
+                          backgroundColor: pressed ? colors.surfaceAlt : 'transparent',
+                          borderBottomColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.checkbox,
+                          {
+                            borderColor: customZambiaOnly ? colors.primary : colors.border,
+                            backgroundColor: customZambiaOnly ? colors.primary : 'transparent',
+                          },
+                        ]}
+                      >
+                        {customZambiaOnly ? (
+                          <Ionicons name="checkmark" size={13} color={colors.onPrimary} />
+                        ) : null}
+                      </View>
+                      <View style={{ flex: 1, marginLeft: spacing.sm }}>
+                        <Text
+                          style={{
+                            color: customZambiaOnly ? colors.primary : colors.text,
+                            fontSize: font.body,
+                            fontWeight: customZambiaOnly ? weight.bold : weight.semibold,
+                          }}
+                        >
+                          All custom stations
+                        </Text>
+                        <Text style={{ color: colors.textMuted, fontSize: font.small, marginTop: 1 }}>
+                          Unlisted Zambia stations
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ) : null}
+
+                  {customStations.map((s) => {
+                    const checked = selectedStations.includes(s);
+                    return (
+                      <Pressable
+                        key={`custom-${s}`}
+                        onPress={() => toggleStation(s)}
+                        style={({ pressed }) => [
+                          styles.stationRow,
+                          {
+                            backgroundColor: pressed ? colors.surfaceAlt : 'transparent',
+                            borderBottomColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.checkbox,
+                            {
+                              borderColor: checked ? colors.primary : colors.border,
+                              backgroundColor: checked ? colors.primary : 'transparent',
+                            },
+                          ]}
+                        >
+                          {checked ? (
+                            <Ionicons name="checkmark" size={13} color={colors.onPrimary} />
+                          ) : null}
+                        </View>
+                        <View style={{ flex: 1, marginLeft: spacing.sm }}>
+                          <Text
+                            style={{
+                              color: checked ? colors.primary : colors.text,
+                              fontSize: font.body,
+                              fontWeight: checked ? weight.bold : weight.semibold,
+                            }}
+                          >
+                            {shortName(s)}
+                          </Text>
+                          <Text style={{ color: colors.textMuted, fontSize: font.small, marginTop: 1 }}>
+                            {s}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </>
+              ) : null}
             </ScrollView>
 
             {/* Apply / close button */}
@@ -436,7 +568,9 @@ export default function ManagerHome() {
               ]}
             >
               <Text style={{ color: colors.onPrimary, fontSize: font.body, fontWeight: weight.bold }}>
-                {selectedStations.length === 0
+                {customZambiaOnly
+                  ? 'Show custom Zambia'
+                  : selectedStations.length === 0
                   ? 'Show All Stations'
                   : `Show ${selectedStations.length} Station${selectedStations.length !== 1 ? 's' : ''}`}
               </Text>
@@ -722,6 +856,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sectionHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   stationRow: {

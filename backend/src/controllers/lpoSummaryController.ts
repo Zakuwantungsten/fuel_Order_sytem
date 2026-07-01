@@ -12,7 +12,7 @@ import unifiedExportService from '../services/unifiedExportService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
 import { acquireLock as acquireLockRecord, releaseLock as releaseLockRecord, getDisplayName } from '../services/lockService';
-import { checkAndPromoteStartedJourney, getFuelAutomationFlags, getManagerAccessConfig } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getFuelAutomationFlags, getManagerAccessConfig, buildCustomZambiaLpoFilter, buildSuperManagerStationOrClauses } from '../services/journeyService';
 import { formatDONumber, parseDONumber } from '../utils/doNumberFormatter';
 import {
   createLPOCreatedNotification,
@@ -1111,7 +1111,7 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       message: 'LPO document created successfully',
       data: { ...responseData, id: responseData._id },
     });
-    emitDataChange('lpo_summaries', 'create', undefined, lpoSummary.station);
+    emitDataChange('lpo_summaries', 'create', lpoSummary.toObject(), lpoSummary.station);
     emitDataChange('fuel_records', 'update');
 
     // Notify station manager / super_manager / drivers (best-effort).
@@ -2973,8 +2973,7 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
     }
   }
   emitDataChange('lpo_summaries', 'update');
-  emitDataChange('lpo_summaries', 'create', undefined, createdLpo?.station);
-
+  emitDataChange('lpo_summaries', 'create', createdLpo?.toObject?.() ?? createdLpo, createdLpo?.station);
   if (createdLpo) {
     createLPOCreatedNotification(createdLpo, req.user?.username || 'system').catch(() => {});
   }
@@ -3217,10 +3216,11 @@ const USERNAME_STATION_MAPPING: Record<string, string> = {
  */
 async function resolveManagerScope(
   user: { userId: string; username: string; role: string } | undefined
-): Promise<{ forcedStation?: string; allowedStations?: string[]; excludedStations?: string[]; dateFloor?: string } | null> {
+): Promise<{ forcedStation?: string; allowedStations?: string[]; excludedStations?: string[]; dateFloor?: string; includeCustomZambia?: boolean } | null> {
   if (!user || !ALL_MANAGER_TIER_ROLES.includes(user.role)) return null;
 
   const access = await getManagerAccessConfig();
+  const includeCustomZambia = access.superManagerNotifyCustomZambia;
 
   // Date floor (applies to every manager-tier role).
   let dateFloor: string | undefined;
@@ -3233,9 +3233,9 @@ async function resolveManagerScope(
   if (user.role === 'super_manager') {
     // Configured allow-list wins; otherwise fall back to the default exclusions.
     if (access.superManagerStations.length > 0) {
-      return { allowedStations: access.superManagerStations, dateFloor };
+      return { allowedStations: access.superManagerStations, dateFloor, includeCustomZambia };
     }
-    return { excludedStations: DEFAULT_SUPER_MANAGER_EXCLUDED, dateFloor };
+    return { excludedStations: DEFAULT_SUPER_MANAGER_EXCLUDED, dateFloor, includeCustomZambia };
   }
 
   // Station-scoped roles: force their own station.
@@ -3253,31 +3253,157 @@ async function resolveManagerScope(
   return { forcedStation: station, dateFloor };
 }
 
+type ManagerScope = NonNullable<Awaited<ReturnType<typeof resolveManagerScope>>>;
+
+/** Apply manager-tier station scoping (incl. custom Zambia LPOs for super_manager). */
+function applyManagerStationScope(
+  docMatch: Record<string, any>,
+  scope: ManagerScope,
+  opts: {
+    station?: string;
+    stations?: string;
+    customZambiaOnly?: string;
+    hasSearch?: boolean;
+  }
+): void {
+  if (scope.forcedStation !== undefined) {
+    delete docMatch.$or;
+    delete docMatch.$nor;
+    delete docMatch.$and;
+    const s = sanitizeRegexInput(scope.forcedStation);
+    docMatch.station = s ? { $regex: `^${s}$`, $options: 'i' } : '\0__no_station__';
+    return;
+  }
+
+  const includeCustom = scope.includeCustomZambia === true;
+  const pickedSingle = opts.station && !opts.hasSearch ? (opts.station as string).toUpperCase().trim() : '';
+  const customZambiaOnly = opts.customZambiaOnly === 'true' && includeCustom;
+  const multiList =
+    opts.stations && !opts.station && !opts.hasSearch
+      ? (opts.stations as string).split(',').map((x) => sanitizeRegexInput(x.trim())).filter(Boolean)
+      : [];
+
+  delete docMatch.$nor;
+
+  if (scope.allowedStations && scope.allowedStations.length > 0) {
+    const allowed = scope.allowedStations.map((s) => s.toUpperCase().trim());
+    const scopeOr = buildSuperManagerStationOrClauses(scope.allowedStations, includeCustom);
+
+    if (customZambiaOnly) {
+      delete docMatch.$or;
+      delete docMatch.$and;
+      delete docMatch.station;
+      Object.assign(docMatch, buildCustomZambiaLpoFilter());
+      return;
+    }
+
+    if (multiList.length > 0) {
+      delete docMatch.station;
+      docMatch.$and = [
+        { $or: multiList.map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } })) },
+        { $or: scopeOr },
+      ];
+      return;
+    }
+
+    if (pickedSingle) {
+      delete docMatch.$or;
+      delete docMatch.$and;
+      const s = sanitizeRegexInput(pickedSingle);
+      if (allowed.includes(pickedSingle)) {
+        docMatch.station = { $regex: `^${s}$`, $options: 'i' };
+      } else if (includeCustom) {
+        docMatch.$and = [
+          { station: { $regex: `^${s}$`, $options: 'i' } },
+          buildCustomZambiaLpoFilter(),
+        ];
+      } else {
+        docMatch.station = '\0__no_station__';
+      }
+      return;
+    }
+
+    delete docMatch.station;
+    delete docMatch.$and;
+    docMatch.$or = scopeOr;
+    return;
+  }
+
+  if (scope.excludedStations && scope.excludedStations.length > 0) {
+    const excluded = scope.excludedStations;
+
+    if (customZambiaOnly) {
+      delete docMatch.$or;
+      delete docMatch.$and;
+      delete docMatch.station;
+      delete docMatch.$nor;
+      Object.assign(docMatch, buildCustomZambiaLpoFilter());
+      return;
+    }
+
+    if (multiList.length > 0) {
+      delete docMatch.station;
+      delete docMatch.$nor;
+      docMatch.$and = [
+        { $or: multiList.map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } })) },
+        {
+          $nor: excluded
+            .map((st) => sanitizeRegexInput(st))
+            .filter(Boolean)
+            .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } })),
+        },
+      ];
+      return;
+    }
+
+    if (pickedSingle) {
+      delete docMatch.$or;
+      delete docMatch.$and;
+      delete docMatch.$nor;
+      if (!excluded.includes(pickedSingle)) {
+        const s = sanitizeRegexInput(pickedSingle);
+        docMatch.station = { $regex: `^${s}$`, $options: 'i' };
+      } else {
+        docMatch.station = '\0__no_station__';
+      }
+      return;
+    }
+
+    delete docMatch.station;
+    delete docMatch.$and;
+    docMatch.$nor = excluded
+      .map((st) => sanitizeRegexInput(st))
+      .filter(Boolean)
+      .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
+  }
+}
+
 export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { page, limit } = getPaginationParams(req.query);
-    const { dateFrom, dateTo, lpoNo, truckNo, station, stations, search, status, isRefer, isDriverAccount, sort } = req.query;
+    const { dateFrom, dateTo, lpoNo, truckNo, station, stations, customZambiaOnly, search, status, isRefer, isDriverAccount, sort } = req.query;
 
     const docMatch: any = { isDeleted: false };
+    const scopeEarly = await resolveManagerScope(req.user);
+    const managerTier = !!scopeEarly;
 
     if (lpoNo && !search) {
       const s = sanitizeRegexInput(lpoNo as string);
       if (s) docMatch.lpoNo = { $regex: `^${s}`, $options: 'i' };
     }
-    if (station && !search) {
-      const s = sanitizeRegexInput(station as string);
-      if (s) docMatch.station = { $regex: `^${s}`, $options: 'i' };
-    }
-    // Multi-station filter (e.g. super_manager's allowed station list). Ignored
-    // when a single `station` or `search` is supplied. Matches exact station
-    // names case-insensitively.
-    if (stations && !station && !search) {
-      const list = (stations as string)
-        .split(',')
-        .map((x) => sanitizeRegexInput(x.trim()))
-        .filter(Boolean);
-      if (list.length > 0) {
-        docMatch.$or = list.map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
+    if (!managerTier) {
+      if (station && !search) {
+        const s = sanitizeRegexInput(station as string);
+        if (s) docMatch.station = { $regex: `^${s}`, $options: 'i' };
+      }
+      if (stations && !station && !search) {
+        const list = (stations as string)
+          .split(',')
+          .map((x) => sanitizeRegexInput(x.trim()))
+          .filter(Boolean);
+        if (list.length > 0) {
+          docMatch.$or = list.map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
+        }
       }
     }
     if (dateFrom || dateTo) {
@@ -3290,50 +3416,14 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
     // Station + date scoping is applied here (NOT trusting the client) so a
     // manager can never widen their view by editing query params. Runs even
     // when `search` is present, so search stays within the allowed scope.
-    const scope = await resolveManagerScope(req.user);
+    const scope = scopeEarly;
     if (scope) {
-      if (scope.forcedStation !== undefined) {
-        // manager / station_manager → locked to their own station.
-        delete docMatch.$or;
-        const s = sanitizeRegexInput(scope.forcedStation);
-        // Empty/unresolvable station deliberately matches nothing.
-        docMatch.station = s
-          ? { $regex: `^${s}$`, $options: 'i' }
-          : ' __no_station__';
-      } else if (scope.allowedStations && scope.allowedStations.length > 0) {
-        // super_manager with a configured allow-list. Honor a client-picked
-        // single station only if it is within the list; otherwise restrict to
-        // the whole list.
-        delete docMatch.$or;
-        const allowed = scope.allowedStations;
-        const picked = station ? (station as string).toUpperCase().trim() : '';
-        if (picked && allowed.includes(picked)) {
-          const s = sanitizeRegexInput(picked);
-          docMatch.station = { $regex: `^${s}$`, $options: 'i' };
-        } else {
-          delete docMatch.station;
-          docMatch.$or = allowed
-            .map((st) => sanitizeRegexInput(st))
-            .filter(Boolean)
-            .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
-        }
-      } else if (scope.excludedStations && scope.excludedStations.length > 0) {
-        // super_manager with no configured list → default-exclude the hidden set.
-        // Honor a client-picked single station unless it is in the excluded set.
-        delete docMatch.$or;
-        const excluded = scope.excludedStations;
-        const picked = station ? (station as string).toUpperCase().trim() : '';
-        if (picked && !excluded.includes(picked)) {
-          const s = sanitizeRegexInput(picked);
-          docMatch.station = { $regex: `^${s}$`, $options: 'i' };
-        } else {
-          delete docMatch.station;
-          docMatch.$nor = excluded
-            .map((st) => sanitizeRegexInput(st))
-            .filter(Boolean)
-            .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
-        }
-      }
+      applyManagerStationScope(docMatch, scope, {
+        station: station as string | undefined,
+        stations: stations as string | undefined,
+        customZambiaOnly: customZambiaOnly as string | undefined,
+        hasSearch: !!search,
+      });
       // Date floor: tighten $gte, never loosen it.
       if (scope.dateFloor) {
         docMatch.date = docMatch.date || {};
@@ -3433,20 +3523,7 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
     const scope = await resolveManagerScope(req.user);
     let scopedDateFloor: string | undefined;
     if (scope) {
-      if (scope.forcedStation !== undefined) {
-        const s = sanitizeRegexInput(scope.forcedStation);
-        baseMatch.station = s ? { $regex: `^${s}$`, $options: 'i' } : ' __no_station__';
-      } else if (scope.allowedStations && scope.allowedStations.length > 0) {
-        baseMatch.$or = scope.allowedStations
-          .map((st) => sanitizeRegexInput(st))
-          .filter(Boolean)
-          .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
-      } else if (scope.excludedStations && scope.excludedStations.length > 0) {
-        baseMatch.$nor = scope.excludedStations
-          .map((st) => sanitizeRegexInput(st))
-          .filter(Boolean)
-          .map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
-      }
+      applyManagerStationScope(baseMatch, scope, {});
       scopedDateFloor = scope.dateFloor;
     }
 
@@ -3504,7 +3581,28 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
       .filter((v, i, arr) => arr.indexOf(v) === i)
       .sort();
 
-    res.json({ periods, stations });
+    const includeCustom = scope?.includeCustomZambia === true;
+    const regularSet = new Set(
+      (scope?.allowedStations && scope.allowedStations.length > 0
+        ? scope.allowedStations
+        : [
+            'INFINITY', 'LAKE CHILABOMBWE', 'LAKE NDOLA', 'LAKE KAPIRI', 'LAKE KITWE',
+            'LAKE KABANGWA', 'LAKE CHINGOLA', 'LAKE TUNDUMA', 'GBP MOROGORO', 'GBP KANGE', 'GPB KANGE',
+          ].filter((s) => !DEFAULT_SUPER_MANAGER_EXCLUDED.includes(s))
+      ).map((s) => s.toUpperCase().trim())
+    );
+    const regularStations = [...regularSet].sort();
+    const customStations = includeCustom
+      ? stations.filter((s) => !regularSet.has(s) && s !== 'CASH' && s !== 'CUSTOM')
+      : [];
+
+    res.json({
+      periods,
+      stations,
+      regularStations,
+      customStations,
+      customZambiaEnabled: includeCustom,
+    });
   } catch (error) {
     logger.error('Error fetching LPO entry filters:', error);
     throw new ApiError(500, 'Failed to fetch available filters');

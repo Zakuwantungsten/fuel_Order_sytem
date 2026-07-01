@@ -59,6 +59,46 @@ export interface ManagerAccessConfig {
   /** Notify super_manager for custom-station LPOs in Zambia. */
   superManagerNotifyCustomZambia: boolean;
 }
+
+/** Country match for custom-station LPOs treated as Zambia (missing => Zambia). */
+const CUSTOM_ZAMBIA_COUNTRY_OR = [
+  { customCountry: { $regex: /^zambia$/i } },
+  { customCountry: { $exists: false } },
+  { customCountry: null },
+  { customCountry: '' },
+];
+
+/** Mongo filter: LPO documents that are custom stations in Zambia. */
+export function buildCustomZambiaLpoFilter(): Record<string, unknown> {
+  return {
+    $or: [
+      { isCustomStation: true, $or: CUSTOM_ZAMBIA_COUNTRY_OR },
+      {
+        entries: {
+          $elemMatch: { isCustomStation: true, $or: CUSTOM_ZAMBIA_COUNTRY_OR },
+        },
+      },
+    ],
+  };
+}
+
+/** Build $or clauses for super_manager: configured stations + optional custom Zambia. */
+export function buildSuperManagerStationOrClauses(
+  allowedStations: string[],
+  includeCustomZambia: boolean
+): Record<string, unknown>[] {
+  const clauses: Record<string, unknown>[] = allowedStations
+    .map((st) => (st || '').trim())
+    .filter(Boolean)
+    .map((st) => {
+      const escaped = st.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return { station: { $regex: new RegExp(`^${escaped}$`, 'i') } };
+    });
+  if (includeCustomZambia) {
+    clauses.push(buildCustomZambiaLpoFilter());
+  }
+  return clauses;
+}
 let _managerAccessCache: ManagerAccessConfig | null = null;
 let _managerAccessCacheUpdatedAt = 0;
 

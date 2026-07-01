@@ -185,6 +185,8 @@ export interface LpoQueryOpts {
   selectedStations?: string[];
   /** Super_manager's allowed station list (used when no specific station is selected). */
   allowedStations?: string[];
+  /** When true, show only custom-station LPOs in Zambia. */
+  customZambiaOnly?: boolean;
 }
 
 /**
@@ -206,14 +208,15 @@ export async function getManagerLpoPage(
   const sel = opts.selectedStations ?? [];
   const specificStation = sel.length === 1 ? sel[0] : null;
   const multipleStations = sel.length > 1 ? sel : null;
-  const usingAllowedList = superMgr && !specificStation && !multipleStations && !!opts.allowedStations?.length;
+  const usingAllowedList =
+    superMgr && !specificStation && !multipleStations && !opts.customZambiaOnly && !!opts.allowedStations?.length;
 
   const params: Record<string, any> = { page, limit };
   if (search && search.trim()) params.search = search.trim();
   if (opts.sort) params.sort = opts.sort;
-
-  // Server-side station scoping.
-  if (superMgr) {
+  if (opts.customZambiaOnly && !specificStation && !multipleStations) {
+    params.customZambiaOnly = 'true';
+  } else if (superMgr) {
     if (specificStation) {
       params.station = specificStation;
     } else if (multipleStations) {

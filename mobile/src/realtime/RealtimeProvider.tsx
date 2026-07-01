@@ -21,14 +21,24 @@ import type { AuthUser } from '../types';
  */
 /** Returns true if an lpo_summaries event for this station should affect this user. */
 function isStationRelevant(
-  eventStation: string,
+  payload: {
+    station?: string | null;
+    isCustomStation?: boolean | null;
+    customCountry?: string | null;
+  },
   user: AuthUser | null,
-  smStations: string[] | undefined
+  smStations: string[] | undefined,
+  customZambiaEnabled?: boolean
 ): boolean {
   if (!user) return false;
-  const st = eventStation.toUpperCase().trim();
+  const st = (payload.station || '').toUpperCase().trim();
+
   if (isSuperManager(user)) {
-    // Empty list means "all stations" — no admin restriction configured yet.
+    if (payload.isCustomStation && customZambiaEnabled !== false) {
+      const country = (payload.customCountry || 'Zambia').toLowerCase();
+      if (country === 'zambia') return true;
+    }
+    if (!st) return true;
     if (!smStations || smStations.length === 0) return true;
     return smStations.some((s) => s.toUpperCase().trim() === st);
   }
@@ -36,7 +46,6 @@ function isStationRelevant(
     const myStation = resolveUserStation(user)?.toUpperCase().trim() ?? '';
     return myStation === st;
   }
-  // All other roles (admin, super_admin, etc.) receive everything.
   return true;
 }
 
@@ -68,19 +77,23 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ['notif-count'] });
       };
 
-      socket.on('data_changed', (payload: { collection?: string; station?: string | null }) => {
+      socket.on('data_changed', (payload: {
+        collection?: string;
+        station?: string | null;
+        isCustomStation?: boolean | null;
+        customCountry?: string | null;
+      }) => {
         switch (payload?.collection) {
           case 'lpo_summaries': {
-            const eventStation = payload.station;
-            // If station is unknown (legacy emit site, e.g. DO cascade) fall through
-            // but still use silent invalidation to avoid a reload spinner.
-            if (eventStation) {
-              const smStations = queryClient.getQueryData<string[]>(['sm-stations', user?.role]);
-              if (!isStationRelevant(eventStation, user, smStations)) break;
+            const smStations = queryClient.getQueryData<string[]>(['sm-stations', user?.role]);
+            const smAccess = queryClient.getQueryData<{ customZambiaEnabled?: boolean }>(['sm-access', user?.role]);
+            if (payload.station || payload.isCustomStation) {
+              if (!isStationRelevant(payload, user, smStations, smAccess?.customZambiaEnabled)) break;
             }
             // Mark stale without an immediate background re-fetch — no spinner, no
             // forced reload. The 60 s poll or a user-initiated tap will do the fetch.
             queryClient.invalidateQueries({ queryKey: ['manager-lpos'], refetchType: 'none' });
+            queryClient.invalidateQueries({ queryKey: ['lpo-filter-stations'], refetchType: 'none' });
             queryClient.invalidateQueries({ queryKey: ['driver-dashboard'], refetchType: 'none' });
             // Increment the signal so ManagerHome shows the "New entries" chip.
             queryClient.setQueryData<number>(['lpo-update-signal'], (prev) => (prev ?? 0) + 1);
@@ -95,6 +108,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
             break;
           case 'journey_config':
             queryClient.invalidateQueries({ queryKey: ['sm-stations'] });
+            queryClient.invalidateQueries({ queryKey: ['sm-access'] });
+            queryClient.invalidateQueries({ queryKey: ['lpo-filter-stations'] });
             break;
         }
       });

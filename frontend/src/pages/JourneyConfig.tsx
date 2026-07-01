@@ -1014,10 +1014,10 @@ function SuperManagerStationsCard() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                Notify for custom Zambia stations
+                Custom Zambia stations
               </p>
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                Super manager receives LPO notifications when an unlisted custom station in <strong>Zambia</strong> is used. The entered station name appears in the notification.
+                Super manager can <strong>view</strong> and receive <strong>notifications</strong> for unlisted custom stations in Zambia.
               </p>
             </div>
             <Switch
