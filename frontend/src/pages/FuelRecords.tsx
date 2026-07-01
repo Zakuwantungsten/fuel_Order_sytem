@@ -932,7 +932,7 @@ const FuelRecords = () => {
     const currentMonth = getCurrentMonthKey();
     const defaultMonth = availableMonths.includes(currentMonth)
       ? currentMonth
-      : availableMonths[availableMonths.length - 1] ?? currentMonth;
+      : availableMonths[0] ?? currentMonth;
     return (
       searchTerm !== '' ||
       routeFilter !== '' ||
@@ -952,7 +952,7 @@ const FuelRecords = () => {
     if (availableMonths.includes(currentMonth)) {
       setSelectedMonth(currentMonth);
     } else if (availableMonths.length > 0) {
-      setSelectedMonth(availableMonths[availableMonths.length - 1]);
+      setSelectedMonth(availableMonths[0]);
     } else {
       setSelectedMonth(currentMonth);
     }
