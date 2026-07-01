@@ -8,11 +8,13 @@ import {
   AppNotification,
   NotificationsResult,
   dismissAllNotifications,
+  dismissNotification,
   getNotifications,
   markAllNotificationsRead,
   markNotificationRead,
 } from '../../src/api/notifications';
 import { Card, EmptyState, Loading } from '../../src/components/ui';
+import { SwipeableRow } from '../../src/components/SwipeableRow';
 import { navigateFromNotification } from '../../src/navigation/notificationRouting';
 import { markAllReadAndClearBadge } from '../../src/notifications/badge';
 import { useTheme } from '../../src/theme';
@@ -28,6 +30,11 @@ function iconFor(type: string): { icon: IoniconName; tone: 'primary' | 'danger' 
   if (type === 'error') return { icon: 'alert-circle', tone: 'danger' };
   if (type === 'warning') return { icon: 'warning', tone: 'warning' };
   return { icon: 'notifications', tone: 'primary' };
+}
+
+function isNavigable(item: AppNotification): boolean {
+  const lpoTypes = new Set(['lpo_created', 'lpo_amended', 'lpo_cancelled']);
+  return lpoTypes.has(item.type) && item.metadata?.lpoNo != null;
 }
 
 export default function NotificationsScreen() {
@@ -56,22 +63,57 @@ export default function NotificationsScreen() {
     },
   });
 
+  const dismissOne = useMutation({
+    mutationFn: dismissNotification,
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['notifications'] });
+      const prev = queryClient.getQueryData<NotificationsResult>(['notifications']);
+      if (prev) {
+        queryClient.setQueryData<NotificationsResult>(['notifications'], {
+          ...prev,
+          notifications: prev.notifications.filter((n) => n.id !== id),
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['notifications'], ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notif-count'] });
+    },
+  });
+
+  const clearAll = useMutation({
+    mutationFn: dismissAllNotifications,
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['notifications'] });
+      const prev = queryClient.getQueryData<NotificationsResult>(['notifications']);
+      queryClient.setQueryData<NotificationsResult>(['notifications'], {
+        notifications: [],
+        unreadCount: 0,
+      });
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['notifications'], ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notif-count'] });
+    },
+  });
+
   const items = query.data?.notifications ?? [];
   const isUnread = (n: AppNotification) =>
     n.status === 'pending' && !(user?._id && n.readBy?.includes(user._id));
 
   function handleItemPress(item: AppNotification) {
+    if (!item.id) return;
     if (isUnread(item)) markRead.mutate(item.id);
-    if (navigateFromNotification(router, item)) return;
+    navigateFromNotification(router, item);
   }
-
-  const clearAll = useMutation({
-    mutationFn: dismissAllNotifications,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notif-count'] });
-    },
-  });
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -81,9 +123,21 @@ export default function NotificationsScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.onHeader} />
         </Pressable>
         <Text style={[styles.htitle, { color: colors.onHeader }]}>Notifications</Text>
-        <Pressable onPress={() => clearAll.mutate()} hitSlop={8} accessibilityLabel="Clear all" style={styles.hbtn}>
-          <Ionicons name="checkmark-done" size={22} color={colors.onHeader} />
-        </Pressable>
+        {items.length > 0 ? (
+          <Pressable
+            onPress={() => clearAll.mutate()}
+            disabled={clearAll.isPending}
+            hitSlop={8}
+            accessibilityLabel="Clear all notifications"
+            style={[styles.clearBtn, { opacity: clearAll.isPending ? 0.6 : 1 }]}
+          >
+            <Text style={{ color: colors.onHeader, fontSize: font.small, fontWeight: weight.semibold }}>
+              Clear all
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={styles.hbtn} />
+        )}
       </View>
 
       {query.isLoading ? (
@@ -95,6 +149,20 @@ export default function NotificationsScreen() {
           contentContainerStyle={{ padding: spacing.md }}
           onRefresh={query.refetch}
           refreshing={query.isRefetching}
+          ListHeaderComponent={
+            items.length > 0 ? (
+              <Text
+                style={{
+                  fontSize: font.tiny,
+                  color: colors.textMuted,
+                  textAlign: 'center',
+                  marginBottom: spacing.sm,
+                }}
+              >
+                Swipe left or right to dismiss
+              </Text>
+            ) : null
+          }
           ListEmptyComponent={
             <Card>
               <EmptyState icon="notifications-off-outline" title="No notifications" subtitle="You're all caught up." />
@@ -103,27 +171,44 @@ export default function NotificationsScreen() {
           renderItem={({ item }) => {
             const meta = iconFor(item.type);
             const unread = isUnread(item);
+            const navigable = isNavigable(item);
             return (
-              <Pressable onPress={() => handleItemPress(item)}>
-                <Card
-                  accent={unread ? colors[meta.tone] : colors.border}
-                  style={{ marginBottom: spacing.sm, backgroundColor: unread ? colors.primaryMuted : colors.surface }}
+              <SwipeableRow
+                actionColor={colors.danger}
+                onDismiss={() => item.id && dismissOne.mutate(item.id)}
+              >
+                <Pressable
+                  onPress={() => handleItemPress(item)}
+                  disabled={!navigable && !unread}
+                  style={{ marginBottom: spacing.sm }}
                 >
-                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                    <Ionicons name={meta.icon} size={22} color={colors[meta.tone]} style={{ marginTop: 2 }} />
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.titleRow}>
-                        <Text style={{ flex: 1, fontSize: font.body, fontWeight: weight.bold, color: colors.text }}>{item.title}</Text>
-                        {unread ? <View style={[styles.dot, { backgroundColor: colors.primary }]} /> : null}
+                  <Card
+                    accent={unread ? colors[meta.tone] : colors.border}
+                    style={{ backgroundColor: unread ? colors.primaryMuted : colors.surface }}
+                  >
+                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                      <Ionicons name={meta.icon} size={22} color={colors[meta.tone]} style={{ marginTop: 2 }} />
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.titleRow}>
+                          <Text style={{ flex: 1, fontSize: font.body, fontWeight: weight.bold, color: colors.text }}>
+                            {item.title}
+                          </Text>
+                          {unread ? <View style={[styles.dot, { backgroundColor: colors.primary }]} /> : null}
+                        </View>
+                        <Text style={{ fontSize: font.small, color: colors.textMuted, marginTop: 2 }}>{item.message}</Text>
+                        <Text style={{ fontSize: font.tiny, color: colors.textMuted, marginTop: 4 }}>
+                          {new Date(item.createdAt).toLocaleString()}
+                        </Text>
+                        {navigable ? (
+                          <Text style={{ fontSize: font.tiny, color: colors.primary, marginTop: 4, fontWeight: weight.semibold }}>
+                            Tap to view LPO
+                          </Text>
+                        ) : null}
                       </View>
-                      <Text style={{ fontSize: font.small, color: colors.textMuted, marginTop: 2 }}>{item.message}</Text>
-                      <Text style={{ fontSize: font.tiny, color: colors.textMuted, marginTop: 4 }}>
-                        {new Date(item.createdAt).toLocaleString()}
-                      </Text>
                     </View>
-                  </View>
-                </Card>
-              </Pressable>
+                  </Card>
+                </Pressable>
+              </SwipeableRow>
             );
           }}
         />
@@ -135,6 +220,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 12 },
   hbtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  clearBtn: { paddingHorizontal: 12, height: 44, alignItems: 'center', justifyContent: 'center' },
   htitle: { flex: 1, fontSize: 20, fontWeight: '800', marginLeft: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },

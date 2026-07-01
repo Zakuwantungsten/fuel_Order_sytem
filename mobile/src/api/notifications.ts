@@ -19,10 +19,18 @@ export interface NotificationsResult {
   unreadCount: number;
 }
 
+function normalizeNotification(raw: Record<string, unknown>): AppNotification {
+  const id = String(raw.id ?? raw._id ?? '');
+  return { ...(raw as AppNotification), id };
+}
+
 export async function getNotifications(): Promise<NotificationsResult> {
   const res = await apiClient.get('/notifications', { params: { limit: 50 } });
+  const rows = (res.data?.data ?? []) as Record<string, unknown>[];
   return {
-    notifications: (res.data?.data ?? []) as AppNotification[],
+    notifications: rows
+      .map(normalizeNotification)
+      .filter((n) => n.status !== 'dismissed'),
     unreadCount: res.data?.unreadCount ?? 0,
   };
 }
@@ -39,6 +47,10 @@ export async function markNotificationRead(id: string): Promise<void> {
 /** Mark every notification read (resets the badge) without hiding them. */
 export async function markAllNotificationsRead(): Promise<void> {
   await apiClient.patch('/notifications/read-all', {});
+}
+
+export async function dismissNotification(id: string): Promise<void> {
+  await apiClient.patch(`/notifications/${id}/dismiss`, {});
 }
 
 export async function dismissAllNotifications(): Promise<void> {

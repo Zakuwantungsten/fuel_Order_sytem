@@ -64,6 +64,7 @@ export default function ManagerHome({
   const flatListRef = useRef<FlatList>(null);
   const lastKnownFirstId = useRef<string | undefined>(undefined);
   const prevUpdateSignalRef = useRef<number | undefined>(undefined);
+  const lastHighlightRef = useRef<string | null>(null);
 
   const { data: currencyMap } = useQuery({
     queryKey: ['station-currencies'],
@@ -162,6 +163,18 @@ export default function ManagerHome({
 
   const entries = useMemo(() => query.data?.pages.flatMap((p) => p.entries) ?? [], [query.data]);
   const total = query.data?.pages[0]?.total ?? 0;
+
+  // Clear filters once per notification deep link so the target LPO can be found.
+  useEffect(() => {
+    if (!highlightLpoNo) return;
+    const key = `${highlightLpoNo}|${highlightTruckNo ?? ''}`;
+    if (lastHighlightRef.current === key) return;
+    lastHighlightRef.current = key;
+    setSearchInput('');
+    setSearch('');
+    setSelectedStations([]);
+    setCustomZambiaOnly(false);
+  }, [highlightLpoNo, highlightTruckNo]);
 
   // Scroll to and highlight a truck row when opened from a notification deep link.
   useEffect(() => {

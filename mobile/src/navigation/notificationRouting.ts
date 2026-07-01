@@ -12,12 +12,18 @@ export function resolveHighlightTruck(type: string, truckNo?: string): string | 
 type NotificationSource = Pick<AppNotification, 'type' | 'metadata' | 'relatedId'>;
 
 function lpoRouteParams(source: NotificationSource): Record<string, string> | null {
-  if (!LPO_TYPES.has(source.type) || !source.metadata?.lpoNo) return null;
+  if (!LPO_TYPES.has(source.type) || source.metadata?.lpoNo == null) return null;
   const truckNo = resolveHighlightTruck(source.type, source.metadata.truckNo);
   return {
     highlightLpoNo: String(source.metadata.lpoNo),
     ...(truckNo ? { highlightTruckNo: truckNo } : {}),
   };
+}
+
+function parseLpoNo(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return '';
 }
 
 /** Find the list index for a highlighted LPO truck row. */
@@ -37,17 +43,18 @@ export function findLpoHighlightIndex<T extends { lpoNo?: string | number; truck
 export function navigateFromNotification(router: Router, source: NotificationSource): boolean {
   const params = lpoRouteParams(source);
   if (!params) return false;
-  router.push({ pathname: '/(app)/home', params });
+  // replace (not push) so params reach the existing home screen in the stack.
+  router.replace({ pathname: '/(app)/home', params });
   return true;
 }
 
 /** Navigate from Expo push `data` payload. Returns true if handled. */
 export function navigateFromPushData(router: Router, data: Record<string, unknown>): boolean {
   const type = typeof data.type === 'string' ? data.type : '';
-  const lpoNo = typeof data.lpoNo === 'string' ? data.lpoNo : '';
+  const lpoNo = parseLpoNo(data.lpoNo);
   if (!LPO_TYPES.has(type) || !lpoNo) return false;
   const truckNo = typeof data.truckNo === 'string' ? data.truckNo : undefined;
-  router.push({
+  router.replace({
     pathname: '/(app)/home',
     params: {
       highlightLpoNo: lpoNo,
