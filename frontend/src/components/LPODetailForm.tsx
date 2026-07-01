@@ -4065,27 +4065,39 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   </div>
 
                   {/* Rate */}
-                  <div className="w-[88px] shrink-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400">
-                        Rate
-                      </label>
-                      <div className="flex rounded overflow-hidden border border-purple-200 dark:border-purple-700 text-[9px] leading-none">
-                        <button
-                          type="button"
-                          onClick={() => setCustomCurrency('USD')}
-                          className={`px-1 py-0.5 font-bold ${customCurrency === 'USD' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-700 text-purple-600'}`}
-                        >
-                          $
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCustomCurrency('TZS')}
-                          className={`px-1 py-0.5 font-bold ${customCurrency === 'TZS' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-700 text-purple-600'}`}
-                        >
-                          TSh
-                        </button>
-                      </div>
+                  <div className="w-[104px] shrink-0">
+                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1.5">
+                      Rate
+                    </label>
+                    <div
+                      className="flex p-0.5 mb-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-700"
+                      role="group"
+                      aria-label="Rate currency"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setCustomCurrency('USD')}
+                        aria-pressed={customCurrency === 'USD'}
+                        className={`flex-1 min-w-0 py-1 px-1 rounded-md text-[10px] font-semibold leading-tight transition-all duration-200 cursor-pointer ${
+                          customCurrency === 'USD'
+                            ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-600/20'
+                            : 'text-purple-600 dark:text-purple-400 hover:bg-purple-100/80 dark:hover:bg-purple-900/50'
+                        }`}
+                      >
+                        USD
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomCurrency('TZS')}
+                        aria-pressed={customCurrency === 'TZS'}
+                        className={`flex-1 min-w-0 py-1 px-1 rounded-md text-[10px] font-semibold leading-tight transition-all duration-200 cursor-pointer ${
+                          customCurrency === 'TZS'
+                            ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-600/20'
+                            : 'text-purple-600 dark:text-purple-400 hover:bg-purple-100/80 dark:hover:bg-purple-900/50'
+                        }`}
+                      >
+                        TZS
+                      </button>
                     </div>
                     <input
                       type="number"
