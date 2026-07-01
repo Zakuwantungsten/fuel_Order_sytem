@@ -31,6 +31,22 @@ function formatPrice(p: number, currency?: 'USD' | 'TZS') {
   return `TZS ${p.toLocaleString('en-TZ', { maximumFractionDigits: 0 })}`;
 }
 
+/** Strip currency labels, thousand separators, and spaces before parsing. */
+function normalizePriceInput(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^(TZS|USD|\$)\s*/i, '')
+    .replace(/\s*(TZS|USD|\$|\/\s*L?)\s*$/i, '')
+    .replace(/,/g, '')
+    .replace(/\s+/g, '');
+}
+
+function parsePriceInput(raw: string): number {
+  const cleaned = normalizePriceInput(raw);
+  if (!cleaned) return NaN;
+  return parseFloat(cleaned);
+}
+
 function formatDate(d: string) {
   return new Date(d).toLocaleString('en-GB', {
     year: 'numeric', month: 'short', day: '2-digit',
@@ -67,7 +83,7 @@ function ScheduleSlideOver({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const price = parseFloat(newPrice);
+    const price = parsePriceInput(newPrice);
     if (!stationId || isNaN(price) || price <= 0) {
       toast.error('Please select a station and enter a valid price.');
       return;
@@ -132,6 +148,10 @@ function ScheduleSlideOver({
                 inputMode="decimal"
                 value={newPrice}
                 onChange={(e) => setNewPrice(e.target.value)}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  setNewPrice(normalizePriceInput(e.clipboardData.getData('text')));
+                }}
                 placeholder="0.00"
                 className="flex-1 px-3 py-2.5 text-sm bg-transparent outline-none text-gray-900 dark:text-white placeholder:text-gray-400"
               />
@@ -177,7 +197,7 @@ function EditPriceModal({
   const [sameError, setSameError] = useState(false);
 
   async function save() {
-    const price = parseFloat(value);
+    const price = parsePriceInput(value);
     if (isNaN(price) || price <= 0) { onMessage('Enter a valid price', 'error'); return; }
     if (price === station.pricePerLiter) { setSameError(true); return; }
     setSameError(false);
@@ -231,6 +251,11 @@ function EditPriceModal({
                 inputMode="decimal"
                 value={value}
                 onChange={(e) => { setValue(e.target.value); setSameError(false); }}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  setValue(normalizePriceInput(e.clipboardData.getData('text')));
+                  setSameError(false);
+                }}
                 onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose(); }}
                 placeholder="0.00"
                 autoFocus
@@ -276,25 +301,34 @@ function StationRow({
   onEdit: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-sm transition-all group">
-      <div className="flex items-center gap-2.5">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onEdit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
+      className="flex items-center justify-between px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50/40 dark:hover:bg-blue-900/10 hover:shadow-sm transition-all cursor-pointer group"
+      aria-label={`Edit price for ${station.name}`}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
         <span className="w-2 h-6 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-        <div>
+        <div className="min-w-0">
           <p className="font-semibold text-gray-900 dark:text-white text-sm leading-tight">{station.name}</p>
           <p className="text-xs text-gray-400 leading-tight">{station.location}</p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0 ml-3">
         <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">
           {formatPrice(station.pricePerLiter, station.currency)}<span className="text-xs font-normal text-gray-400 ml-0.5">/L</span>
         </span>
-        <button
-          onClick={onEdit}
-          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-xs font-semibold transition-all"
-        >
+        <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 group-hover:bg-blue-100 dark:bg-blue-900/30 dark:group-hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-xs font-semibold transition-colors">
           <Edit3 className="w-3 h-3" />
           Edit
-        </button>
+        </span>
       </div>
     </div>
   );
