@@ -30,30 +30,6 @@ interface FuelRecordInspectModalProps {
   truckNumber?: string;
 }
 
-export function calculateMbeyaReturnBalance(fuelRecord: FuelRecord): {
-  standardAllocation: number;
-  tundumaFuel: number;
-  availableBalance: number;
-  hasReceivedTundumaFuel: boolean;
-  suggestedLiters: number;
-  reason: string;
-} {
-  const standardAllocation = 400;
-  const tundumaFuel = fuelRecord.tundumaReturn || 0;
-  const availableBalance = Math.max(0, standardAllocation - tundumaFuel);
-  const reason = tundumaFuel > 0
-    ? `Standard ${standardAllocation}L - ${tundumaFuel}L (Tunduma) = ${availableBalance}L available`
-    : `Standard allocation: ${standardAllocation}L`;
-  return {
-    standardAllocation,
-    tundumaFuel,
-    availableBalance,
-    hasReceivedTundumaFuel: tundumaFuel > 0,
-    suggestedLiters: availableBalance,
-    reason,
-  };
-}
-
 function calculateTotalFuel(record: FuelRecord): number {
   return (
     (record.mmsaYard || 0) +
@@ -155,7 +131,6 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
   if (!isOpen) return null;
 
   const totalFuel = fuelRecord ? calculateTotalFuel(fuelRecord) : 0;
-  const mbeyaBalance = fuelRecord ? calculateMbeyaReturnBalance(fuelRecord) : null;
   const frontierField = fuelRecord ? getFrontierField(fuelRecord) : null;
   const badge = fuelRecord ? getStatusBadge(fuelRecord) : null;
   const balance = fuelRecord?.balance || 0;
@@ -519,22 +494,6 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                     </div>
                   </div>
                 </div>
-
-                {/* Mbeya balance note */}
-                {mbeyaBalance?.hasReceivedTundumaFuel && (
-                  <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-xl p-4">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Mbeya Return Balance Note</p>
-                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                          Standard 400L − Tunduma {mbeyaBalance.tundumaFuel}L ={' '}
-                          <strong className="text-green-700 dark:text-green-300">{mbeyaBalance.availableBalance}L available</strong>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </>
           )}

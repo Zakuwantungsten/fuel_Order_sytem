@@ -13,7 +13,7 @@ import {
   CANCELLATION_POINT_TO_FUEL_FIELD,
   FUEL_RECORD_COLUMNS
 } from '../services/cancellationService';
-import FuelRecordInspectModal, { calculateMbeyaReturnBalance } from './FuelRecordInspectModal';
+import FuelRecordInspectModal from './FuelRecordInspectModal';
 import { useGridNav } from '../hooks/useGridNav';
 import ForwardLPOModal from './ForwardLPOModal';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
@@ -63,13 +63,6 @@ interface EntryAutoFillData {
   // Warning states for trucks without valid fuel records
   warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | null;
   warningMessage?: string;
-  // Balance info for Mbeya returning and other checkpoints
-  balanceInfo?: {
-    availableBalance: number;
-    standardAllocation: number;
-    suggestedLiters: number;
-    reason: string;
-  };
   // Journey navigation: track available journeys and current selection
   allJourneys?: {
     active: FuelRecord | null;
@@ -2162,12 +2155,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 )
               : { liters: noStationDefaultLitersRef.current, rate: noStationRateRef.current });
 
-        // Calculate balance info for Mbeya returning (INFINITY station)
-        let balanceInfo = undefined;
-        if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
-          balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
-        }
-
         // Auto-fill the entry - USE CALLBACK FORM to avoid race conditions
         setFormData(prev => {
           const newEntries = [...(prev.entries || [])];
@@ -2197,12 +2184,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             amount: defaults.liters * defaults.rate
           };
           
-          // If Mbeya balance info suggests different liters, update
-          if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
-            newEntries[index].liters = balanceInfo.suggestedLiters;
-            newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
-          }
-
           const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
           
           return { ...prev, entries: newEntries, total };
@@ -2222,7 +2203,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             referenceDoNo: prev[index]?.entryType === 'da' ? doNumber : prev[index]?.referenceDoNo,
             warningType: result.warningType || null,
             warningMessage: result.message,
-            balanceInfo,  // Store balance info for display
             formulaStatus: defaults.formulaStatus || null,
             formulaMessage: defaults.formulaMessage,
             // Journey navigation: store all available journeys
@@ -2331,12 +2311,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             )
           : { liters: noStationDefaultLitersRef.current, rate: noStationRateRef.current });
 
-    // Calculate balance info for Mbeya returning
-    let balanceInfo = undefined;
-    if (result.fuelRecord && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
-      balanceInfo = calculateMbeyaReturnBalance(result.fuelRecord);
-    }
-
     // Auto-fill the entry with truck number and details
     setFormData(prev => {
       const newEntries = [...(prev.entries || [])];
@@ -2362,11 +2336,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         amount: defaults.liters * defaults.rate
       };
 
-      if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
-        newEntries[index].liters = balanceInfo.suggestedLiters;
-        newEntries[index].amount = balanceInfo.suggestedLiters * newEntries[index].rate;
-      }
-
       const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
 
       return { ...prev, entries: newEntries, total };
@@ -2388,7 +2357,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         referenceDoNo: prev[index]?.entryType === 'da' ? doNoUpper : prev[index]?.referenceDoNo,
         warningType: result.warningType || null,
         warningMessage: result.message,
-        balanceInfo,
         formulaStatus: defaults.formulaStatus || null,
         formulaMessage: defaults.formulaMessage,
       }
@@ -2571,16 +2539,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
       let litersToSet = defaults.liters;
 
-      // Calculate balance info for Mbeya returning (INFINITY station)
-      let balanceInfo = undefined;
-      if (formData.station?.toUpperCase() === 'INFINITY' && newDirection === 'returning') {
-        balanceInfo = calculateMbeyaReturnBalance(fuelRecord);
-        // If suggested liters differs from standard, use it
-        if (balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
-          litersToSet = balanceInfo.suggestedLiters;
-        }
-      }
-
       // USE CALLBACK FORM to avoid race conditions
       setFormData(prev => {
         const newEntries = [...(prev.entries || [])];
@@ -2616,7 +2574,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           ...prev[index],
           direction: newDirection,
           returnDoMissing: newDirection === 'returning' ? returnDoMissing : prev[index]?.returnDoMissing,
-          balanceInfo: newDirection === 'returning' ? balanceInfo : undefined,
           formulaStatus: defaults.formulaStatus || null,
           formulaMessage: defaults.formulaMessage,
         }
@@ -2677,16 +2634,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         ) 
       : { liters: 350, rate: 1.2 };
 
-    // Calculate balance info for Mbeya returning
-    let balanceInfo = undefined;
-    if (selectedJourney && formData.station?.toUpperCase() === 'INFINITY' && direction === 'returning') {
-      balanceInfo = calculateMbeyaReturnBalance(selectedJourney);
-    }
-
     let litersToSet = defaults.liters;
-    if (balanceInfo && balanceInfo.suggestedLiters !== defaults.liters && balanceInfo.suggestedLiters > 0) {
-      litersToSet = balanceInfo.suggestedLiters;
-    }
 
     // Update form data
     setFormData(prev => {
@@ -2713,7 +2661,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         fuelRecordId: selectedJourney.id || selectedJourney._id,
         selectedJourneyIndex: journeyIndex,
         selectedJourneyType: targetJourneyType,
-        balanceInfo,
         warningType: null, // Clear warning when explicitly selecting a journey
         formulaStatus: defaults.formulaStatus || null,
         formulaMessage: defaults.formulaMessage,
@@ -3275,7 +3222,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 selectedJourneyIndex: prev?.selectedJourneyIndex,
                 selectedJourneyType:  prev?.selectedJourneyType,
                 // Reset station-specific computed fields — they re-derive on station select
-                balanceInfo:          undefined,
                 formulaStatus:        null,
                 formulaMessage:       undefined,
                 returnDoMissing:      prev?.returnDoMissing,
@@ -3392,8 +3338,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         (af.allJourneys.active && af.allJourneys.queued.length > 0) ||
         (!af.allJourneys.active && af.allJourneys.queued.length > 1)
       )) ||
-      // Only open the Status column for a REDUCED Mbeya balance — standard 400L needs no annotation
-      (af.balanceInfo && af.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && af.balanceInfo.suggestedLiters < af.balanceInfo.standardAllocation) ||
       (af.formulaStatus === 'missing_data' || af.formulaStatus === 'error')
     );
   });
@@ -4394,14 +4338,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           className="w-full px-1 py-px border border-gray-300 dark:border-gray-600 rounded text-[9px] focus:ring-1 focus:ring-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
                       </div>
                     </div>
-                    {/* Balance hint — only shown when Mbeya return is reduced below standard */}
-                    {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation && (
-                      <div className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
-                        <Fuel className="w-3 h-3 inline mr-0.5" />
-                        {`${autoFill.balanceInfo.suggestedLiters}L (reduced — balance too low for full ${autoFill.balanceInfo.standardAllocation}L)`}
-                      </div>
-                    )}
-
                     {/* Card actions */}
                     <div className="flex items-center gap-2 pt-1.5 mt-1.5 border-t border-gray-200 dark:border-gray-600">
                       <button
@@ -4830,13 +4766,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 {autoFill.formulaStatus === 'applied' && (
                                   <div className="text-green-600 dark:text-green-400" title={autoFill.formulaMessage}>
                                     ✓ {autoFill.formulaMessage}
-                                  </div>
-                                )}
-                                {/* Balance info hint (Infinity return) — only shown when allocation is reduced below standard */}
-                                {autoFill.balanceInfo && autoFill.direction === 'returning' && formData.station?.toUpperCase() === 'INFINITY' && autoFill.balanceInfo.suggestedLiters < autoFill.balanceInfo.standardAllocation && (
-                                  <div className="text-amber-600 dark:text-amber-400" title={autoFill.balanceInfo.reason}>
-                                    <Fuel className="w-3 h-3 inline mr-1" />
-                                    {`${autoFill.balanceInfo.suggestedLiters}L (reduced — balance too low for full ${autoFill.balanceInfo.standardAllocation}L)`}
                                   </div>
                                 )}
                               </div>
