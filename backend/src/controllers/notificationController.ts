@@ -1002,7 +1002,7 @@ export const createLPOCreatedNotification = async (
     sendPushToRecipients(recipients, {
       title,
       body: message,
-      data: lpoPushData('lpo_created', { lpoNo: lpoDoc.lpoNo, station, truckNo: truckNos.join(', ') }, lpoDoc._id.toString()),
+      data: lpoPushData('lpo_created', { lpoNo: lpoDoc.lpoNo, truckNo: truckNos.join(', ') }, lpoDoc._id.toString()),
     });
     emitDataChange('notifications', 'create');
     logger.info(`LPO created notification: ${lpoDoc.lpoNo} @ ${station} → ${recipients.join(', ')}`);
@@ -1044,7 +1044,7 @@ export const createLPOCancelledNotification = async (
     sendPushToRecipients(recipients, {
       title,
       body: message,
-      data: lpoPushData('lpo_cancelled', { lpoNo: lpoDoc.lpoNo, station, truckNo: entry.truckNo }, lpoDoc._id.toString()),
+      data: lpoPushData('lpo_cancelled', { lpoNo: lpoDoc.lpoNo, truckNo: entry.truckNo }, lpoDoc._id.toString()),
     });
     emitDataChange('notifications', 'create');
     logger.info(`LPO cancelled notification: ${lpoDoc.lpoNo} truck ${entry.truckNo} @ ${station}`);
@@ -1088,7 +1088,7 @@ export const createLPOAmendedNotification = async (
     sendPushToRecipients(recipients, {
       title,
       body: message,
-      data: lpoPushData('lpo_amended', { lpoNo: lpoDoc.lpoNo, station, truckNo: entry.truckNo }, lpoDoc._id.toString()),
+      data: lpoPushData('lpo_amended', { lpoNo: lpoDoc.lpoNo, truckNo: entry.truckNo }, lpoDoc._id.toString()),
     });
     emitDataChange('notifications', 'create');
     logger.info(`LPO amended notification: ${lpoDoc.lpoNo} truck ${entry.truckNo} @ ${station}`);
