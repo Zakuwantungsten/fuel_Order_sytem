@@ -3979,51 +3979,125 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
           {/* Custom Station Section - Only shown when CUSTOM is selected */}
           {formData.station === 'CUSTOM' && (
-            <div className="mb-[22px] p-[18px] rounded-[14px] border border-purple-200 dark:border-purple-900/50 bg-gradient-to-b from-violet-50/70 to-white dark:from-violet-900/10 dark:to-transparent">
-              <div className="flex items-center gap-2.5 mb-4">
-                  <span className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center shrink-0 bg-violet-200/70 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
-                    <MapPin className="w-4 h-4" />
-                  </span>
-                  <div>
-                    <div className="text-[13.5px] font-bold text-violet-800 dark:text-violet-300">Custom station (unlisted)</div>
-                    <div className="text-[11.5px] font-medium text-violet-600 dark:text-violet-400">For ad-hoc stations. Name it and map which fuel-record column each direction updates.</div>
-                  </div>
-                </div>
+            <div className="mb-[22px] p-4 rounded-xl border border-purple-200/80 dark:border-purple-800/60 bg-white dark:bg-gray-800/40 shadow-sm">
+              <p className="text-xs font-semibold text-purple-800 dark:text-purple-300 mb-3">
+                Custom station — unlisted / ad-hoc
+              </p>
 
-                {/* Custom Station Name, Rate and Default Liters */}
-                <div className="mb-4 flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1 min-w-0">
-                    <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-1">
-                      Station Name *
+              <div className="overflow-x-auto">
+                <div className="flex items-end gap-2 min-w-[920px] pb-0.5">
+                  {/* Station name */}
+                  <div className="flex-[2] min-w-[150px]">
+                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
+                      Station name *
                     </label>
                     <input
                       type="text"
                       value={customStationName}
                       onChange={(e) => setCustomStationName(e.target.value)}
-                      placeholder="e.g., Lake Station Near Kapiri"
+                      placeholder="e.g. Lake Near Kapiri"
                       required
-                      className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full h-9 px-2.5 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                   </div>
-                  <div className="w-full sm:w-40">
+
+                  {/* Going */}
+                  <div className="w-[148px] shrink-0">
+                    <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-green-700 dark:text-green-400 mb-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={customGoingEnabled}
+                        onChange={(e) => {
+                          setCustomGoingEnabled(e.target.checked);
+                          if (!e.target.checked) setCustomGoingCheckpoint('');
+                        }}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      />
+                      Going
+                    </label>
+                    <select
+                      value={customGoingCheckpoint}
+                      disabled={!customGoingEnabled}
+                      onChange={(e) => setCustomGoingCheckpoint(e.target.value)}
+                      className={`w-full h-9 px-2 text-xs border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-40 disabled:cursor-not-allowed ${
+                        customGoingEnabled && !customGoingCheckpoint
+                          ? 'border-red-300 dark:border-red-600'
+                          : 'border-green-200 dark:border-green-700'
+                      }`}
+                    >
+                      <option value="">Checkpoint…</option>
+                      {FUEL_RECORD_COLUMNS.going.map((col) => (
+                        <option key={col.field} value={col.field}>{col.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Return */}
+                  <div className="w-[148px] shrink-0">
+                    <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400 mb-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={customReturnEnabled}
+                        onChange={(e) => {
+                          setCustomReturnEnabled(e.target.checked);
+                          if (!e.target.checked) setCustomReturnCheckpoint('');
+                        }}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Return
+                    </label>
+                    <select
+                      value={customReturnCheckpoint}
+                      disabled={!customReturnEnabled}
+                      onChange={(e) => setCustomReturnCheckpoint(e.target.value)}
+                      className={`w-full h-9 px-2 text-xs border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-40 disabled:cursor-not-allowed ${
+                        customReturnEnabled && !customReturnCheckpoint
+                          ? 'border-red-300 dark:border-red-600'
+                          : 'border-blue-200 dark:border-blue-700'
+                      }`}
+                    >
+                      <option value="">Checkpoint…</option>
+                      {FUEL_RECORD_COLUMNS.return.map((col) => (
+                        <option key={col.field} value={col.field}>{col.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Country */}
+                  <div className="w-[108px] shrink-0">
+                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
+                      Country
+                    </label>
+                    <select
+                      value={customCountry}
+                      onChange={(e) => setCustomCountry(e.target.value)}
+                      className="w-full h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value="Zambia">Zambia</option>
+                      <option value="Tanzania">Tanzania</option>
+                    </select>
+                  </div>
+
+                  {/* Rate */}
+                  <div className="w-[88px] shrink-0">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-sm font-medium text-purple-800 dark:text-purple-300">
-                        Rate ({customCurrency})
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400">
+                        Rate
                       </label>
-                      <div className="flex rounded overflow-hidden border border-purple-300 dark:border-purple-600 text-xs">
+                      <div className="flex rounded overflow-hidden border border-purple-200 dark:border-purple-700 text-[9px] leading-none">
                         <button
                           type="button"
                           onClick={() => setCustomCurrency('USD')}
-                          className={`px-2 py-0.5 font-medium transition-colors ${customCurrency === 'USD' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20'}`}
+                          className={`px-1 py-0.5 font-bold ${customCurrency === 'USD' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-700 text-purple-600'}`}
                         >
-                          USD
+                          $
                         </button>
                         <button
                           type="button"
                           onClick={() => setCustomCurrency('TZS')}
-                          className={`px-2 py-0.5 font-medium transition-colors ${customCurrency === 'TZS' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20'}`}
+                          className={`px-1 py-0.5 font-bold ${customCurrency === 'TZS' ? 'bg-purple-600 text-white' : 'bg-white dark:bg-gray-700 text-purple-600'}`}
                         >
-                          TZS
+                          TSh
                         </button>
                       </div>
                     </div>
@@ -4031,15 +4105,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       type="number"
                       value={customRate || ''}
                       onChange={(e) => setCustomRate(parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
+                      placeholder="0"
                       step="0.01"
                       min="0"
-                      className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
                     />
                   </div>
-                  <div className="w-full sm:w-32">
-                    <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-1">
-                      Default Liters
+
+                  {/* Default liters */}
+                  <div className="w-[72px] shrink-0">
+                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
+                      Liters
                     </label>
                     <input
                       type="number"
@@ -4048,178 +4124,25 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       placeholder="0"
                       step="1"
                       min="0"
-                      className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
                     />
                   </div>
                 </div>
-
-                {/* Country */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-1">
-                    Country
-                  </label>
-                  <select
-                    value={customCountry}
-                    onChange={(e) => setCustomCountry(e.target.value)}
-                    className="w-full sm:w-48 px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    <option value="Zambia">Zambia</option>
-                    <option value="Tanzania">Tanzania</option>
-                  </select>
-                </div>
-
-                {/* Direction Selection */}
-                <div className="space-y-4">
-                  {/* Custom1 - Going Direction */}
-                  <div className={`p-3 rounded-lg border ${customGoingEnabled ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20' : 'border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-700/50'}`}>
-                    <label className="flex items-center space-x-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={customGoingEnabled}
-                        onChange={(e) => {
-                          setCustomGoingEnabled(e.target.checked);
-                          if (!e.target.checked) setCustomGoingCheckpoint('');
-                        }}
-                        className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                      />
-                      <div>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">
-                          Custom1 - Going Direction
-                        </span>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          For trucks with Going DO - fuel amount will be recorded in the selected column
-                        </p>
-                      </div>
-                    </label>
-                    
-                    {customGoingEnabled && (
-                      <div className="mt-3 ml-8 relative" ref={customGoingRef}>
-                        <label className="block text-sm font-medium text-green-700 dark:text-green-300 mb-1">
-                          Select Fuel Record Column for Going *
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setShowCustomGoingDropdown(!showCustomGoingDropdown)}
-                          className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between ${
-                            !customGoingCheckpoint ? 'border-red-300 dark:border-red-600' : 'border-green-300 dark:border-green-600'
-                          }`}
-                        >
-                          <span className={!customGoingCheckpoint ? 'text-gray-400' : ''}>
-                            {customGoingCheckpoint ? FUEL_RECORD_COLUMNS.going.find(c => c.field === customGoingCheckpoint)?.label : 'Select checkpoint column...'}
-                          </span>
-                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showCustomGoingDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showCustomGoingDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                            {FUEL_RECORD_COLUMNS.going.map((col) => (
-                              <button
-                                key={col.field}
-                                type="button"
-                                onClick={() => {
-                                  setCustomGoingCheckpoint(col.field);
-                                  setShowCustomGoingDropdown(false);
-                                }}
-                                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                                  customGoingCheckpoint === col.field ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'
-                                }`}
-                              >
-                                <span>{col.label}</span>
-                                {customGoingCheckpoint === col.field && <Check className="w-4 h-4" />}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {!customGoingCheckpoint && (
-                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                            ⚠ Please select where Going fuel amounts should be recorded
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Custom2 - Return Direction */}
-                  <div className={`p-3 rounded-lg border ${customReturnEnabled ? 'border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-900/20' : 'border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-700/50'}`}>
-                    <label className="flex items-center space-x-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={customReturnEnabled}
-                        onChange={(e) => {
-                          setCustomReturnEnabled(e.target.checked);
-                          if (!e.target.checked) setCustomReturnCheckpoint('');
-                        }}
-                        className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <div>
-                        <span className="font-medium text-gray-900 dark:text-gray-100">
-                          Custom2 - Return Direction
-                        </span>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          For trucks with Return DO - fuel amount will be recorded in the selected column
-                        </p>
-                      </div>
-                    </label>
-                    
-                    {customReturnEnabled && (
-                      <div className="mt-3 ml-8 relative" ref={customReturnRef}>
-                        <label className="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">
-                          Select Fuel Record Column for Return *
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setShowCustomReturnDropdown(!showCustomReturnDropdown)}
-                          className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between ${
-                            !customReturnCheckpoint ? 'border-red-300 dark:border-red-600' : 'border-blue-300 dark:border-blue-600'
-                          }`}
-                        >
-                          <span className={!customReturnCheckpoint ? 'text-gray-400' : ''}>
-                            {customReturnCheckpoint ? FUEL_RECORD_COLUMNS.return.find(c => c.field === customReturnCheckpoint)?.label : 'Select checkpoint column...'}
-                          </span>
-                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showCustomReturnDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showCustomReturnDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                            {FUEL_RECORD_COLUMNS.return.map((col) => (
-                              <button
-                                key={col.field}
-                                type="button"
-                                onClick={() => {
-                                  setCustomReturnCheckpoint(col.field);
-                                  setShowCustomReturnDropdown(false);
-                                }}
-                                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                                  customReturnCheckpoint === col.field ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
-                                }`}
-                              >
-                                <span>{col.label}</span>
-                                {customReturnCheckpoint === col.field && <Check className="w-4 h-4" />}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {!customReturnCheckpoint && (
-                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                            ⚠ Please select where Return fuel amounts should be recorded
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Validation warning */}
-                {!customStationName && (
-                  <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                    ⚠ Please enter a station name
-                  </p>
-                )}
-                {customStationName && !customGoingEnabled && !customReturnEnabled && (
-                  <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                    ⚠ Please select at least one direction (Going or Return)
-                  </p>
-                )}
               </div>
-            )}
+
+              {/* Inline validation */}
+              {(!customStationName || (!customGoingEnabled && !customReturnEnabled) ||
+                (customGoingEnabled && !customGoingCheckpoint) ||
+                (customReturnEnabled && !customReturnCheckpoint)) && (
+                <p className="mt-2 text-[11px] text-red-600 dark:text-red-400">
+                  {!customStationName && 'Station name required. '}
+                  {customStationName && !customGoingEnabled && !customReturnEnabled && 'Enable Going or Return. '}
+                  {customGoingEnabled && !customGoingCheckpoint && 'Select Going checkpoint. '}
+                  {customReturnEnabled && !customReturnCheckpoint && 'Select Return checkpoint.'}
+                </p>
+              )}
+            </div>
+          )}
 
 
           {/* ===== 02 · FUEL SUPPLY DETAILS ===== */}
