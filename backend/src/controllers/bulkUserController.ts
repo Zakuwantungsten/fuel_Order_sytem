@@ -1,8 +1,10 @@
 import { Response } from 'express';
 import { User } from '../models';
 import type { AuthRequest } from '../middleware/auth';
+import { invalidateAuthUserCache } from '../middleware/auth';
 import { AuditService } from '../utils/auditService';
 import logger from '../utils/logger';
+import { emitToUser, emitDataChange } from '../services/websocket';
 
 const PROTECTED_ROLES = ['super_admin'];
 
@@ -85,7 +87,31 @@ export const bulkAction = async (req: AuthRequest, res: Response): Promise<void>
   else if (action === 'deactivate') update = { isActive: false };
   else if (action === 'change_role') update = { role };
 
-  const result = await User.updateMany({ _id: { $in: userIds } }, { $set: update });
+  // For deactivation, identify currently-active targets so we can revoke sessions
+  const usersToDeactivate =
+    action === 'deactivate'
+      ? await User.find({ _id: { $in: userIds }, isActive: true, isDeleted: false })
+          .select('_id username')
+          .lean()
+      : [];
+
+  const updatePayload: Record<string, unknown> =
+    action === 'deactivate'
+      ? { $set: update, $unset: { refreshToken: 1 } }
+      : { $set: update };
+
+  const result = await User.updateMany({ _id: { $in: userIds } }, updatePayload);
+
+  if (action === 'deactivate' && usersToDeactivate.length > 0) {
+    for (const u of usersToDeactivate) {
+      invalidateAuthUserCache(u._id.toString());
+      emitToUser(u.username, 'session_event', {
+        type: 'account_deactivated',
+        message: 'Your account has been deactivated by an administrator.',
+      });
+    }
+    emitDataChange('users', 'update');
+  }
 
   await AuditService.log({
     userId: req.user?.userId,

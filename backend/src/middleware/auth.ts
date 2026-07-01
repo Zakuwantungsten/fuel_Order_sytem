@@ -42,6 +42,7 @@ interface CachedAuthUser {
   role: UserRole;
   isActive: boolean;
   isDeleted: boolean;
+  isBanned?: boolean;
   passwordResetAt?: Date;
   createdAt?: Date;
 }
@@ -60,7 +61,7 @@ async function getAuthUser(userId: string): Promise<CachedAuthUser | null> {
   if (hit && Date.now() < hit.expiry) return hit.user;
 
   const user = await User.findById(userId)
-    .select('username role isActive isDeleted passwordResetAt createdAt')
+    .select('username role isActive isDeleted isBanned passwordResetAt createdAt')
     .lean<(CachedAuthUser & { _id: unknown }) | null>();
 
   // Negative results are cached too, so a revoked token doesn't hit the DB on
@@ -312,10 +313,10 @@ export const authenticate = async (
     // Verify existence in database (short-TTL cached — see getAuthUser above)
     const user = await getAuthUser(decoded.userId);
 
-    if (!user || !user.isActive || user.isDeleted) {
+    if (!user || user.isDeleted) {
       const ip = getClientIp(req);
       
-      const reason = !user ? 'User not found' : !user.isActive ? 'User inactive' : 'User deleted';
+      const reason = !user ? 'User not found' : 'User deleted';
       
       SecurityEventLogger.logUnauthorized({
         userId: decoded.userId,
@@ -325,6 +326,45 @@ export const authenticate = async (
         endpoint: req.path,
         method: req.method,
         errorReason: reason,
+      }).catch(() => {});
+      
+      res.status(401).json({
+        success: false,
+        message: 'User no longer exists or is inactive.',
+      });
+      return;
+    }
+
+    if (user.isBanned) {
+      const ip = getClientIp(req);
+      SecurityEventLogger.logUnauthorized({
+        userId: decoded.userId,
+        username: decoded.username,
+        ipAddress: ip,
+        userAgent: req.get('user-agent'),
+        endpoint: req.path,
+        method: req.method,
+        errorReason: 'User banned',
+      }).catch(() => {});
+
+      res.status(403).json({
+        success: false,
+        message: 'Your account has been banned. Please contact administrator.',
+      });
+      return;
+    }
+
+    if (!user.isActive) {
+      const ip = getClientIp(req);
+      
+      SecurityEventLogger.logUnauthorized({
+        userId: decoded.userId,
+        username: decoded.username,
+        ipAddress: ip,
+        userAgent: req.get('user-agent'),
+        endpoint: req.path,
+        method: req.method,
+        errorReason: 'User inactive',
       }).catch(() => {});
       
       res.status(401).json({

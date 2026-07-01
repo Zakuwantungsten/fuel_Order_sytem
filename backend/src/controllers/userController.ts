@@ -655,6 +655,10 @@ export const toggleUserStatus = async (req: AuthRequest, res: Response): Promise
 
     // Toggle status
     user.isActive = !user.isActive;
+    // Revoke refresh tokens when deactivating so existing sessions cannot renew
+    if (!user.isActive) {
+      user.refreshToken = undefined;
+    }
     await user.save();
 
     invalidateAuthUserCache(id);

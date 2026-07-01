@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   MoreHorizontal, Edit2, Key, LogOut, ShieldCheck, Ban,
@@ -34,30 +34,44 @@ export default function UserActionsMenu({ user, onAction }: UserActionsMenuProps
   const [open, setOpen] = useState(false);
   const [focusIndex, setFocusIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
-  // Close on outside click
+  const isInsideMenu = useCallback((target: Node | null) => {
+    if (!target) return false;
+    return (
+      !!ref.current?.contains(target) ||
+      !!menuRef.current?.contains(target)
+    );
+  }, []);
+
+  // Close on outside click — only while open; include portaled menu in hit-test
   useEffect(() => {
+    if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (!isInsideMenu(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  }, [open, isInsideMenu]);
 
-  // Close on scroll or resize (keeps portal in sync)
+  // Close on scroll outside menu/trigger, or on resize (keeps portal in sync)
   useEffect(() => {
     if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
-    return () => {
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
+    const handleScroll = (e: Event) => {
+      if (isInsideMenu(e.target as Node)) return;
+      setOpen(false);
     };
-  }, [open]);
+    const handleResize = () => setOpen(false);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [open, isInsideMenu]);
 
   const handleAction = (action: UserAction) => {
     setOpen(false);
@@ -205,8 +219,10 @@ export default function UserActionsMenu({ user, onAction }: UserActionsMenuProps
 
       {open && createPortal(
         <div
+          ref={menuRef}
           role="menu"
           onKeyDown={handleKeyDown}
+          onMouseDown={(e) => e.stopPropagation()}
           style={{ ...menuStyle, zIndex: 9999 }}
           className="w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 overflow-hidden"
         >

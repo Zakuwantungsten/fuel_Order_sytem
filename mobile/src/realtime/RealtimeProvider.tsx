@@ -10,6 +10,16 @@ import { useToast } from '../components/NotificationToast';
 import { isSuperManager, resolveUserStation } from '../api/manager';
 import type { AuthUser } from '../types';
 
+/** Session events that terminate the current session — kept in sync with web NotificationBell. */
+const SESSION_TERMINATING_EVENTS = new Set([
+  'force_logout',
+  'account_deactivated',
+  'account_banned',
+  'account_deleted',
+  'password_reset',
+  'account_updated',
+]);
+
 /**
  * Maintains a single Socket.io connection while authenticated and refreshes
  * react-query caches in response to live server events:
@@ -153,13 +163,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
-      // Admin reset this user's password or forced a logout while the app was open.
-      // Sign out immediately so the user is directed to login with their new credentials.
+      // Admin session actions (ban, deactivate, password reset, force logout, etc.)
+      // Sign out immediately so the user must re-authenticate.
       socket.on('session_event', async (payload?: { type?: string }) => {
-        if (payload?.type === 'password_reset' || payload?.type === 'force_logout') {
-          await signOut();
-          router.replace('/login');
-        }
+        if (!payload?.type || !SESSION_TERMINATING_EVENTS.has(payload.type)) return;
+        await signOut();
+        router.replace('/login');
       });
     })();
 

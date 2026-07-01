@@ -130,34 +130,43 @@ export default function UsersView() {
     return { total, active, inactive, banned };
   }, [users, pagination.total]);
 
+  // ── Toggle active status (immediate API commit; undo re-activates/deactivates) ─
+  const runToggleStatus = useCallback(async (user: User) => {
+    const willDeactivate = user.isActive;
+    const label = willDeactivate ? 'deactivated' : 'activated';
+    const userId = String(user.id || (user as any)._id);
+    const opt = mutations.prepareOptimisticToggle(userId);
+    await opt.apply();
+    try {
+      await opt.commit();
+    } catch {
+      opt.revert();
+      toast.error(`Failed to ${willDeactivate ? 'deactivate' : 'activate'} user`);
+      return;
+    }
+    undo.trigger({
+      message: `${user.firstName} ${user.lastName} ${label}`,
+      onCommit: async () => { /* API already committed */ },
+      onUndo: async () => {
+        try {
+          await usersAPI.toggleStatus(userId);
+          invalidate();
+        } catch {
+          toast.error('Failed to undo status change');
+        }
+      },
+    });
+  }, [mutations, undo, invalidate]);
+
   // ── Row Action Handler ───────────────────────────────────────────────────
   const handleAction = useCallback((action: UserAction, user: User) => {
     switch (action) {
       case 'edit':
         setEditModalUser(user);
         break;
-      case 'toggle_status': {
-        const willDeactivate = user.isActive;
-        const label = willDeactivate ? 'deactivated' : 'activated';
-        const userId = String(user.id || (user as any)._id);
-        const opt = mutations.prepareOptimisticToggle(userId);
-        opt.apply();
-        undo.trigger({
-          message: `${user.firstName} ${user.lastName} ${label}`,
-          onCommit: async () => {
-            try {
-              await opt.commit();
-            } catch {
-              opt.revert();
-              toast.error(`Failed to ${willDeactivate ? 'deactivate' : 'activate'} user`);
-            }
-          },
-          onUndo: async () => {
-            opt.revert();
-          },
-        });
+      case 'toggle_status':
+        void runToggleStatus(user);
         break;
-      }
       case 'reset_password':
         setResetPwModalUser(user);
         break;
@@ -174,7 +183,7 @@ export default function UsersView() {
         openSimpleModal('delete', user);
         break;
     }
-  }, [undo, invalidate, openSimpleModal]);
+  }, [undo, openSimpleModal, runToggleStatus]);
 
   // ── Simple Modal Confirmation ──────────────────────────────────────────
   const handleSimpleConfirm = useCallback(async () => {
