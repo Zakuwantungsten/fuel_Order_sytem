@@ -164,6 +164,7 @@ export interface LPOSummary {
   customStationName?: string;
   customGoingCheckpoint?: string;
   customReturnCheckpoint?: string;
+  customCountry?: string;
 }
 
 // LPO Forwarding Types
@@ -257,6 +258,7 @@ export interface LPODetail {
   // Custom checkpoint mapping: which fuel record column to update based on direction
   customGoingCheckpoint?: string;   // Fuel record field for going direction (Custom1)
   customReturnCheckpoint?: string;  // Fuel record field for return direction (Custom2)
+  customCountry?: string;           // Country for custom stations (default Zambia)
 }
 
 // Fuel Record Types

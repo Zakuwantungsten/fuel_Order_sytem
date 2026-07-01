@@ -2734,6 +2734,7 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
     sourceLpoId,
     targetStation,
     customStationName,
+    customCountry,
     customGoingCheckpoint,
     customReturnCheckpoint,
     rate,
@@ -2759,6 +2760,7 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
   if (isCustomTarget && !customStationName) {
     throw new ApiError(400, 'Custom station name is required when target is CUSTOM');
   }
+  const resolvedCustomCountry = (customCountry || 'Zambia').toString().trim();
 
   const fuelFlags = await getFuelAutomationFlags();
   // Manual columns are required when auto is off, OR when the target is a CUSTOM
@@ -2887,6 +2889,7 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
         customStationName: isCustomTarget ? customStationName : sel.entry.customStationName,
         customGoingCheckpoint: isCustomTarget ? customGoingCheckpoint : sel.entry.customGoingCheckpoint,
         customReturnCheckpoint: isCustomTarget ? customReturnCheckpoint : sel.entry.customReturnCheckpoint,
+        customCountry: isCustomTarget ? resolvedCustomCountry : sel.entry.customCountry,
       }));
 
       const lpoDate = date || new Date().toISOString().split('T')[0];
@@ -2905,11 +2908,14 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
       }
 
       const total = newEntries.reduce((sum, e) => sum + e.amount, 0);
+      const resolvedStation = isCustomTarget
+        ? String(customStationName).toUpperCase().trim()
+        : String(targetStation).toUpperCase();
       const created = await LPOSummary.create([{
         lpoNo: newLpoNo,
         date: lpoDate,
         year,
-        station: String(targetStation).toUpperCase(),
+        station: resolvedStation,
         orderOf: orderOf || sourceLpo.orderOf,
         currency: resolvedCurrency,
         entries: newEntries,
@@ -2923,6 +2929,7 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
         customStationName: isCustomTarget ? customStationName : undefined,
         customGoingCheckpoint: isCustomTarget ? customGoingCheckpoint : undefined,
         customReturnCheckpoint: isCustomTarget ? customReturnCheckpoint : undefined,
+        customCountry: isCustomTarget ? resolvedCustomCountry : undefined,
       }], { session });
       createdLpo = created[0];
 
@@ -2966,7 +2973,11 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
     }
   }
   emitDataChange('lpo_summaries', 'update');
-  emitDataChange('lpo_summaries', 'create');
+  emitDataChange('lpo_summaries', 'create', undefined, createdLpo?.station);
+
+  if (createdLpo) {
+    createLPOCreatedNotification(createdLpo, req.user?.username || 'system').catch(() => {});
+  }
 
   await AuditService.log({
     userId: req.user?.userId,

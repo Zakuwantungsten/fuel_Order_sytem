@@ -12,16 +12,48 @@ import { sendPushToRecipients } from '../services/pushNotificationService';
 import { createDriverUserId } from '../utils/truckNumber';
 import { getManagerAccessConfig } from '../services/journeyService';
 
+/** Resolve the display station name and custom-Zambia flag for LPO notifications. */
+function resolveLpoNotifyContext(lpoDoc: any): { station: string; isCustomZambia: boolean } {
+  const entries: any[] = lpoDoc?.entries || [];
+  const isCustom =
+    lpoDoc?.isCustomStation === true ||
+    entries.some((e) => e?.isCustomStation === true);
+
+  const rawStation = (lpoDoc?.station || '').toString().trim();
+  const stationUp = rawStation.toUpperCase();
+  const customName = (lpoDoc?.customStationName || entries.find((e) => e?.customStationName)?.customStationName || '')
+    .toString()
+    .trim();
+
+  // Use the entered station name — never show the literal "CUSTOM" label.
+  const displayStation = (stationUp === 'CUSTOM' && customName)
+    ? customName.toUpperCase()
+    : stationUp;
+
+  const countryRaw = (
+    lpoDoc?.customCountry ||
+    entries.find((e) => e?.customCountry)?.customCountry ||
+    'Zambia'
+  ).toString().trim();
+
+  const isCustomZambia = isCustom && countryRaw.toLowerCase() === 'zambia';
+
+  return { station: displayStation, isCustomZambia };
+}
+
 /**
  * Build LPO notification recipients: station managers assigned to this station
  * (looked up live from the DB by role + station field), the super_manager role
  * for stations in their configured list, and specific drivers.
  *
- * The old approach used a hardcoded username map which silently missed managers
- * whenever their username didn't match the expected pattern. The DB lookup is
- * reliable as long as the manager user's `station` field is set correctly.
+ * When `isCustomZambia` is true and journey config allows it, super_manager is
+ * always included — custom free-text station names won't match superManagerStations.
  */
-async function buildLpoRecipients(station: string, truckNos: string[]): Promise<string[]> {
+async function buildLpoRecipients(
+  station: string,
+  truckNos: string[],
+  opts?: { isCustomZambia?: boolean }
+): Promise<string[]> {
   const recipients = new Set<string>();
 
   // Escape the station name so it is safe inside a RegExp literal.
@@ -43,14 +75,13 @@ async function buildLpoRecipients(station: string, truckNos: string[]): Promise<
     recipients.add((mgr._id as any).toString());
   }
 
-  // Super manager — only send to stations they are configured to manage.
-  // superManagerStations empty means "all stations" (no restriction configured).
-  const { superManagerStations } = await getManagerAccessConfig();
+  const { superManagerStations, superManagerNotifyCustomZambia } = await getManagerAccessConfig();
   const stationUp = station.toUpperCase().trim();
-  const smReceives =
+  const smReceivesListed =
     superManagerStations.length === 0 ||
     superManagerStations.some((s) => s.toUpperCase().trim() === stationUp);
-  if (smReceives) recipients.add('super_manager');
+  const smReceivesCustomZambia = !!(opts?.isCustomZambia && superManagerNotifyCustomZambia);
+  if (smReceivesListed || smReceivesCustomZambia) recipients.add('super_manager');
 
   for (const t of truckNos) {
     if (t && t.trim()) recipients.add(createDriverUserId(t));
@@ -926,14 +957,14 @@ export const createLPOCreatedNotification = async (
   createdBy: string
 ): Promise<void> => {
   try {
-    const station = lpoDoc.station?.toUpperCase()?.trim();
+    const { station, isCustomZambia } = resolveLpoNotifyContext(lpoDoc);
     if (!station || station === 'CASH') return;
 
     const activeEntries = (lpoDoc.entries || []).filter((e: any) => !e.isCancelled);
     if (activeEntries.length === 0) return;
 
     const truckNos: string[] = activeEntries.map((e: any) => e.truckNo).filter(Boolean);
-    const recipients = await buildLpoRecipients(station, truckNos);
+    const recipients = await buildLpoRecipients(station, truckNos, { isCustomZambia });
     if (recipients.length === 0) return;
 
     const totalLtrs = activeEntries.reduce((s: number, e: any) => s + (e.liters || 0), 0);
@@ -970,10 +1001,10 @@ export const createLPOCancelledNotification = async (
   createdBy: string
 ): Promise<void> => {
   try {
-    const station = lpoDoc.station?.toUpperCase()?.trim();
+    const { station, isCustomZambia } = resolveLpoNotifyContext(lpoDoc);
     if (!station || station === 'CASH') return;
 
-    const recipients = await buildLpoRecipients(station, [entry.truckNo]);
+    const recipients = await buildLpoRecipients(station, [entry.truckNo], { isCustomZambia });
     if (recipients.length === 0) return;
 
     const title = `LPO Cancelled — ${station}`;
@@ -1008,10 +1039,10 @@ export const createLPOAmendedNotification = async (
   createdBy: string
 ): Promise<void> => {
   try {
-    const station = lpoDoc.station?.toUpperCase()?.trim();
+    const { station, isCustomZambia } = resolveLpoNotifyContext(lpoDoc);
     if (!station || station === 'CASH') return;
 
-    const recipients = await buildLpoRecipients(station, [entry.truckNo]);
+    const recipients = await buildLpoRecipients(station, [entry.truckNo], { isCustomZambia });
     if (recipients.length === 0) return;
 
     const change =

@@ -878,6 +878,8 @@ function SuperManagerStationsCard() {
   // LPO lookback window (days) for ALL manager-tier roles. '0' / '' => unlimited.
   const [lookback, setLookback] = useState('0');
   const [savedLookback, setSavedLookback] = useState('0');
+  const [notifyCustomZambia, setNotifyCustomZambia] = useState(true);
+  const [savedNotifyCustomZambia, setSavedNotifyCustomZambia] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -897,6 +899,9 @@ function SuperManagerStationsCard() {
       const lb = String(cfg.managerLpoLookbackDays ?? 0);
       setLookback(lb);
       setSavedLookback(lb);
+      const notifyZ = cfg.superManagerNotifyCustomZambia !== false;
+      setNotifyCustomZambia(notifyZ);
+      setSavedNotifyCustomZambia(notifyZ);
     } catch {
       toast.error('Failed to load super-manager station access');
     } finally {
@@ -924,12 +929,15 @@ function SuperManagerStationsCard() {
     return a.some((v, i) => v !== b[i]);
   }, [selected, saved]);
 
-  const isDirty = stationsDirty || normalizedLookback !== parseInt(savedLookback, 10);
+  const isDirty = stationsDirty || normalizedLookback !== parseInt(savedLookback, 10) || notifyCustomZambia !== savedNotifyCustomZambia;
 
   const handleSave = async () => {
     setSaving(true);
     try {
       let cfg = await configAPI.updateSuperManagerStations(selected);
+      if (notifyCustomZambia !== savedNotifyCustomZambia) {
+        cfg = await configAPI.updateSuperManagerNotifyCustomZambia(notifyCustomZambia);
+      }
       if (normalizedLookback !== parseInt(savedLookback, 10)) {
         cfg = await configAPI.updateManagerLpoLookbackDays(normalizedLookback);
       }
@@ -939,6 +947,9 @@ function SuperManagerStationsCard() {
       const lb = String(cfg.managerLpoLookbackDays ?? normalizedLookback);
       setLookback(lb);
       setSavedLookback(lb);
+      const notifyZ = cfg.superManagerNotifyCustomZambia !== false;
+      setNotifyCustomZambia(notifyZ);
+      setSavedNotifyCustomZambia(notifyZ);
       toast.success('Manager access settings saved');
     } catch {
       toast.error('Failed to save manager access settings');
@@ -998,6 +1009,26 @@ function SuperManagerStationsCard() {
           </div>
         )}
 
+        {/* Custom Zambia station notifications */}
+        <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                Notify for custom Zambia stations
+              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                Super manager receives LPO notifications when an unlisted custom station in <strong>Zambia</strong> is used. The entered station name appears in the notification.
+              </p>
+            </div>
+            <Switch
+              checked={notifyCustomZambia}
+              onChange={setNotifyCustomZambia}
+              disabled={loading || saving}
+              label="Notify super manager for custom Zambia station LPOs"
+            />
+          </div>
+        </div>
+
         {/* LPO date-range (lookback) window for manager-tier roles */}
         <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
           <label htmlFor="manager-lpo-lookback" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -1025,7 +1056,7 @@ function SuperManagerStationsCard() {
         <div className="flex items-center justify-end gap-1.5 pt-1">
           <button
             type="button"
-            onClick={() => { setSelected(saved); setLookback(savedLookback); }}
+            onClick={() => { setSelected(saved); setLookback(savedLookback); setNotifyCustomZambia(savedNotifyCustomZambia); }}
             disabled={!isDirty || saving}
             className="inline-flex items-center gap-1 rounded-lg border border-gray-300 dark:border-gray-600 px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 disabled:opacity-50"
           >

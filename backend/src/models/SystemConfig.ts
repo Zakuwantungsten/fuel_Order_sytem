@@ -74,6 +74,9 @@ export interface IJourneyConfig {
   // Stations a super_manager is allowed to view LPOs for. Empty/unset => default
   // (all stations except the hard-excluded set, resolved on the client).
   superManagerStations?: string[];
+  // When true, super_manager receives LPO notifications for custom (unlisted)
+  // stations tagged with country Zambia.
+  superManagerNotifyCustomZambia?: boolean;
   // How many days back manager-tier roles (manager, station_manager, super_manager)
   // are allowed to see LPOs in the web/mobile manager views. 0/unset => unlimited.
   // Enforced server-side so a manager can't widen the window by editing the client.
@@ -358,6 +361,10 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
       superManagerStations: {
         type: [String],
         default: [],
+      },
+      superManagerNotifyCustomZambia: {
+        type: Boolean,
+        default: true,
       },
       // 0 = unlimited. Capped at 10 years so a typo can't disable the floor entirely.
       managerLpoLookbackDays: { type: Number, default: 0, min: 0, max: 3650 },

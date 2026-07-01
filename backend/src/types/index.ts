@@ -372,6 +372,7 @@ export interface ILPODetail {
   customStationName?: string;
   customGoingCheckpoint?: string;   // Fuel record field for going direction (Custom1)
   customReturnCheckpoint?: string;  // Fuel record field for return direction (Custom2)
+  customCountry?: string;           // Country for custom stations (default Zambia)
 }
 
 // Cancellation Point Types
@@ -463,6 +464,11 @@ export interface ILPOSummary {
   currency?: string;   // Currency for this LPO (USD or TZS)
   createdBy?: string;  // Username of who created this LPO
   approvedBy?: string;  // Name of approver (optional - for any LPO that needs approval signature)
+  isCustomStation?: boolean;
+  customStationName?: string;
+  customGoingCheckpoint?: string;
+  customReturnCheckpoint?: string;
+  customCountry?: string;
   isDeleted: boolean;
   deletedAt?: Date;
   editLock?: {

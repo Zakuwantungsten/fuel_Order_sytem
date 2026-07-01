@@ -839,6 +839,7 @@ export const lpoDocumentsAPI = {
     sourceLpoId: string | number;
     targetStation: string;
     customStationName?: string;
+    customCountry?: string;
     customGoingCheckpoint?: string;
     customReturnCheckpoint?: string;
     rate: number;
@@ -1641,6 +1642,8 @@ export interface JourneyConfig {
   selectableColumns?: string[];
   // Stations a super_manager may view (empty => default all-allowed)
   superManagerStations?: string[];
+  // Notify super_manager when a custom-station LPO is created in Zambia
+  superManagerNotifyCustomZambia?: boolean;
   // Days back manager-tier roles may see LPOs in the manager views (0 => unlimited)
   managerLpoLookbackDays?: number;
   // Whether to auto-download PDF immediately after DO creation (single or bulk)
@@ -2308,6 +2311,11 @@ export const configAPI = {
   // Update only the super-manager allowed-stations list (partial journey-config update)
   updateSuperManagerStations: async (superManagerStations: string[]): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', { superManagerStations });
+    return response.data.data;
+  },
+
+  updateSuperManagerNotifyCustomZambia: async (superManagerNotifyCustomZambia: boolean): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { superManagerNotifyCustomZambia });
     return response.data.data;
   },
 

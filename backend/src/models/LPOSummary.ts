@@ -122,6 +122,11 @@ const lpoDetailSchema = new Schema<ILPODetail>(
       type: String,
       trim: true,
     },
+    customCountry: {
+      type: String,
+      trim: true,
+      default: 'Zambia',
+    },
     // Refer truck fields (partner/third-party company trucks)
     isRefer: {
       type: Boolean,
@@ -197,6 +202,26 @@ const lpoSummarySchema = new Schema<ILPOSummaryDocument>(
       type: String,
       enum: ['USD', 'TZS'],
       default: 'TZS',
+    },
+    isCustomStation: {
+      type: Boolean,
+      default: false,
+    },
+    customStationName: {
+      type: String,
+      trim: true,
+    },
+    customGoingCheckpoint: {
+      type: String,
+      trim: true,
+    },
+    customReturnCheckpoint: {
+      type: String,
+      trim: true,
+    },
+    customCountry: {
+      type: String,
+      trim: true,
     },
     createdBy: {
       type: String,

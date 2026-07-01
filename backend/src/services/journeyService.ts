@@ -56,6 +56,8 @@ export interface ManagerAccessConfig {
   superManagerStations: string[];
   /** Days back manager-tier roles may see LPOs. 0 => unlimited. */
   managerLpoLookbackDays: number;
+  /** Notify super_manager for custom-station LPOs in Zambia. */
+  superManagerNotifyCustomZambia: boolean;
 }
 let _managerAccessCache: ManagerAccessConfig | null = null;
 let _managerAccessCacheUpdatedAt = 0;
@@ -84,22 +86,24 @@ export async function getManagerAccessConfig(): Promise<ManagerAccessConfig> {
 
   try {
     const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false })
-      .select('journeyConfig.superManagerStations journeyConfig.managerLpoLookbackDays')
+      .select('journeyConfig.superManagerStations journeyConfig.managerLpoLookbackDays journeyConfig.superManagerNotifyCustomZambia')
       .lean();
     const stations = (cfg?.journeyConfig?.superManagerStations || [])
       .map((s) => (s || '').toUpperCase().trim())
       .filter(Boolean);
     const lookbackRaw = Number(cfg?.journeyConfig?.managerLpoLookbackDays);
+    const notifyCustomZambia = cfg?.journeyConfig?.superManagerNotifyCustomZambia;
     const result: ManagerAccessConfig = {
       superManagerStations: stations,
       managerLpoLookbackDays: Number.isFinite(lookbackRaw) && lookbackRaw > 0 ? Math.floor(lookbackRaw) : 0,
+      superManagerNotifyCustomZambia: notifyCustomZambia !== false,
     };
     _managerAccessCache = result;
     _managerAccessCacheUpdatedAt = now;
     return result;
   } catch (error: any) {
     logger.error(`Failed to load manager-access config, using permissive defaults: ${error.message}`);
-    return { superManagerStations: [], managerLpoLookbackDays: 0 };
+    return { superManagerStations: [], managerLpoLookbackDays: 0, superManagerNotifyCustomZambia: true };
   }
 }
 

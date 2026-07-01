@@ -136,6 +136,7 @@ interface StoredFormData {
   customReturnEnabled: boolean;
   customGoingCheckpoint: string;
   customReturnCheckpoint: string;
+  customCountry: string;
   noStationRate: number;
   noStationDefaultLiters: number;
   savedAt: string;
@@ -514,6 +515,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
     return '';
   });
+  const [customCountry, setCustomCountry] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      return stored?.customCountry ?? 'Zambia';
+    }
+    return 'Zambia';
+  });
   const [noStationRate, setNoStationRate] = useState(() => {
     if (!initialData) {
       const stored = loadFormFromStorage();
@@ -716,6 +724,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setCustomReturnEnabled(stored.customReturnEnabled ?? false);
     setCustomGoingCheckpoint(stored.customGoingCheckpoint ?? '');
     setCustomReturnCheckpoint(stored.customReturnCheckpoint ?? '');
+    setCustomCountry(stored.customCountry ?? 'Zambia');
     setNoStationRate(stored.noStationRate ?? 0);
     setNoStationDefaultLiters(stored.noStationDefaultLiters ?? 0);
     setHasDraft(true);
@@ -863,6 +872,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         customReturnEnabled,
         customGoingCheckpoint,
         customReturnCheckpoint,
+        customCountry,
         noStationRate,
         noStationDefaultLiters,
         savedAt: new Date().toISOString(),
@@ -889,6 +899,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     customReturnEnabled,
     customGoingCheckpoint,
     customReturnCheckpoint,
+    customCountry,
     noStationRate,
     noStationDefaultLiters,
     initialData
@@ -2984,6 +2995,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         customStationName: formData.station === 'CUSTOM' ? customStationName : undefined,
         customGoingCheckpoint: formData.station === 'CUSTOM' && customGoingEnabled ? customGoingCheckpoint : undefined,
         customReturnCheckpoint: formData.station === 'CUSTOM' && customReturnEnabled ? customReturnCheckpoint : undefined,
+        customCountry: formData.station === 'CUSTOM' ? customCountry : undefined,
       };
     });
 
@@ -3074,6 +3086,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       customStationName: formData.station === 'CUSTOM' ? customStationName : undefined,
       customGoingCheckpoint: formData.station === 'CUSTOM' && customGoingEnabled ? customGoingCheckpoint : undefined,
       customReturnCheckpoint: formData.station === 'CUSTOM' && customReturnEnabled ? customReturnCheckpoint : undefined,
+      customCountry: formData.station === 'CUSTOM' ? customCountry : undefined,
     };
 
     setIsSubmitting(true);
@@ -4038,6 +4051,21 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                   </div>
+                </div>
+
+                {/* Country */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-1">
+                    Country
+                  </label>
+                  <select
+                    value={customCountry}
+                    onChange={(e) => setCustomCountry(e.target.value)}
+                    className="w-full sm:w-48 px-3 py-2 border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    <option value="Zambia">Zambia</option>
+                    <option value="Tanzania">Tanzania</option>
+                  </select>
                 </div>
 
                 {/* Direction Selection */}
