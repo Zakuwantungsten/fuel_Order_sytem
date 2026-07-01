@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import { currencyForStation, currencySymbol } from '../../api/manager';
 import { AppHeader } from '../../components/AppHeader';
 import { Card, EmptyState, Loading, Muted, Screen, SectionHeader, StatTile, Tag } from '../../components/ui';
 import { LpoDetailsSheet } from '../../components/LpoDetailsSheet';
+import { findLpoHighlightIndex } from '../../navigation/notificationRouting';
 import { useTheme } from '../../theme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -27,12 +28,21 @@ function phaseMeta(phase: JourneyPhase, colors: ReturnType<typeof useTheme>['col
   }
 }
 
-export default function DriverHome() {
+export default function DriverHome({
+  highlightLpoNo,
+  highlightTruckNo,
+}: {
+  highlightLpoNo?: string;
+  highlightTruckNo?: string;
+} = {}) {
   const { user } = useAuth();
   const { colors, spacing, radius, font, weight } = useTheme();
   const truck = user?.truckNo ?? '';
 
   const [selected, setSelected] = useState<DriverLpoEntry | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const rowOffsets = useRef<Record<string, number>>({});
 
   const query = useQuery<DriverDashboard>({
     queryKey: ['driver-dashboard', truck],
@@ -50,6 +60,20 @@ export default function DriverHome() {
   const onRefresh = useCallback(() => {
     query.refetch();
   }, [query]);
+
+  useEffect(() => {
+    if (!highlightLpoNo || !query.data?.lpoEntries?.length) return;
+    const idx = findLpoHighlightIndex(query.data.lpoEntries, highlightLpoNo, highlightTruckNo);
+    if (idx < 0) return;
+    const entry = query.data.lpoEntries[idx];
+    setHighlightedId(entry.id);
+    const offset = rowOffsets.current[entry.id];
+    if (offset != null) {
+      scrollRef.current?.scrollTo({ y: Math.max(0, offset - 24), animated: true });
+    }
+    const t = setTimeout(() => setHighlightedId(null), 5000);
+    return () => clearTimeout(t);
+  }, [highlightLpoNo, highlightTruckNo, query.data?.lpoEntries]);
 
   if (!truck) {
     return (
@@ -87,6 +111,7 @@ export default function DriverHome() {
     <Screen>
       <AppHeader title="limka" subtitle={truck} badge="Driver" />
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={{ padding: spacing.md }}
         refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
@@ -141,7 +166,7 @@ export default function DriverHome() {
                 <EmptyState icon="receipt-outline" title="No fuel orders yet" subtitle="LPO entries appear here once created." />
               </Card>
             ) : (
-              data!.lpoEntries.map((e) => <LpoCard key={e.id} entry={e} />)
+              data!.lpoEntries.map((e) => <LpoCard key={e.id} entry={e} highlighted={e.id === highlightedId} />)
             )}
           </>
         )}
@@ -194,7 +219,7 @@ export default function DriverHome() {
     );
   }
 
-  function LpoCard({ entry }: { entry: DriverLpoEntry }) {
+  function LpoCard({ entry, highlighted }: { entry: DriverLpoEntry; highlighted?: boolean }) {
     const cancelled = entry.isCancelled;
     const amended = !cancelled && !!entry.amendedAt;
     const driverAc = entry.isDriverAccount && !cancelled;
@@ -204,8 +229,23 @@ export default function DriverHome() {
     const dateLabel = entry.date ? new Date(entry.date).toLocaleDateString() : null;
 
     return (
-      <Pressable onPress={() => setSelected(entry)} style={({ pressed }) => ({ opacity: pressed ? 0.9 : 1 })}>
-        <Card style={{ marginBottom: spacing.sm, padding: 0, overflow: 'hidden' }}>
+      <Pressable
+        onPress={() => setSelected(entry)}
+        onLayout={(e) => {
+          rowOffsets.current[entry.id] = e.nativeEvent.layout.y;
+        }}
+        style={({ pressed }) => ({ opacity: pressed ? 0.9 : 1 })}
+      >
+        <Card
+          style={{
+            marginBottom: spacing.sm,
+            padding: 0,
+            overflow: 'hidden',
+            ...(highlighted
+              ? { borderColor: colors.warning, borderWidth: 2, backgroundColor: colors.warningMuted }
+              : {}),
+          }}
+        >
           {/* Header: station (stands out) + amount */}
           <View style={[styles.lpoHeader, { padding: spacing.md, paddingBottom: spacing.sm }]}>
             <View style={[styles.inline, { gap: spacing.sm, flex: 1 }]}>

@@ -114,7 +114,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
-      socket.on('notification', async (payload?: { title?: string; message?: string; type?: string }) => {
+      socket.on('notification', async (payload?: {
+        title?: string;
+        message?: string;
+        type?: string;
+        metadata?: Record<string, any>;
+        relatedId?: string;
+      }) => {
         // Refresh badge + notification list.
         refreshNotifications();
 
@@ -123,6 +129,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         let title = payload?.title;
         let message = payload?.message;
         let type = payload?.type;
+        let metadata = payload?.metadata;
+        let relatedId = payload?.relatedId;
 
         if (!title || !message) {
           try {
@@ -132,6 +140,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
               title = latest.title;
               message = latest.message;
               type = latest.type;
+              metadata = latest.metadata;
+              relatedId = latest.relatedId;
             }
           } catch {
             // Non-fatal — toast just won't show if we can't get the content.
@@ -139,11 +149,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (title && message) {
-          // In-app banner toast (works in Expo Go too).
-          showToast({ title, message, type });
-          // Background delivery is handled by the backend's Expo FCM/APNs push.
-          // Scheduling a local notification here would cause a duplicate system banner
-          // since the socket only fires while the app is in foreground.
+          showToast({ title, message, type, metadata, relatedId });
         }
       });
 

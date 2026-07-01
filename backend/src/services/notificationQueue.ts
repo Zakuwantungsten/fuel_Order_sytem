@@ -20,6 +20,7 @@ export interface PushJobData {
     body: string;
     url?: string;
     tag?: string;
+    data?: Record<string, string>;
   };
 }
 

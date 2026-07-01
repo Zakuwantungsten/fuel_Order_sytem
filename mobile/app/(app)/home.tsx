@@ -1,5 +1,6 @@
 import React from 'react';
 import { ScrollView, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../src/auth/AuthContext';
 import { roleHomeFor } from '../../src/auth/roles';
 import { AppHeader } from '../../src/components/AppHeader';
@@ -31,9 +32,27 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const { spacing } = useTheme();
   const home = roleHomeFor(user?.role);
+  const { highlightLpoNo, highlightTruckNo } = useLocalSearchParams<{
+    highlightLpoNo?: string;
+    highlightTruckNo?: string;
+  }>();
 
-  if (home === 'driver') return <DriverHome />;
-  if (home === 'manager') return <ManagerHome />;
+  if (home === 'driver') {
+    return (
+      <DriverHome
+        highlightLpoNo={highlightLpoNo}
+        highlightTruckNo={highlightTruckNo}
+      />
+    );
+  }
+  if (home === 'manager') {
+    return (
+      <ManagerHome
+        highlightLpoNo={highlightLpoNo}
+        highlightTruckNo={highlightTruckNo}
+      />
+    );
+  }
 
   const info = PLACEHOLDER[home];
   return (

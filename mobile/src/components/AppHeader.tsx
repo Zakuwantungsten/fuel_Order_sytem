@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { useTheme } from '../theme';
 import { useAuth } from '../auth/AuthContext';
 import { roleLabel } from '../auth/roles';
 import { getNotificationCount } from '../api/notifications';
+import { setOsBadgeCount } from '../notifications/badge';
 import ChangePasswordModal from './ChangePasswordModal';
 
 /**
@@ -36,6 +37,11 @@ export function AppHeader({
     enabled: !!user,
     refetchInterval: 60_000,
   });
+
+  useEffect(() => {
+    if (!user) return;
+    void setOsBadgeCount(unread);
+  }, [unread, user]);
 
   // Driver accounts are virtual users; /auth/change-password only works for staff.
   const canChangePassword = !!user && user.role !== 'driver';

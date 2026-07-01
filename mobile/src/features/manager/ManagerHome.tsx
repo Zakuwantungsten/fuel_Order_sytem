@@ -29,6 +29,7 @@ import {
 import { AppHeader } from '../../components/AppHeader';
 import { Card, EmptyState, Loading, Tag } from '../../components/ui';
 import { LpoDetailsSheet } from '../../components/LpoDetailsSheet';
+import { findLpoHighlightIndex } from '../../navigation/notificationRouting';
 import { useTheme } from '../../theme';
 
 const PAGE_SIZE = 30;
@@ -38,7 +39,13 @@ function shortName(s: string) {
   return s.replace(/^LAKE\s+/i, '').replace(/^GBP\s+/i, '').replace(/^GPB\s+/i, '');
 }
 
-export default function ManagerHome() {
+export default function ManagerHome({
+  highlightLpoNo,
+  highlightTruckNo,
+}: {
+  highlightLpoNo?: string;
+  highlightTruckNo?: string;
+} = {}) {
   const { user } = useAuth();
   const { colors, spacing, radius, font, weight } = useTheme();
 
@@ -52,6 +59,7 @@ export default function ManagerHome() {
   const [sortOpen, setSortOpen] = useState(false);
   const [selected, setSelected] = useState<LpoEntry | null>(null);
   const [newEntriesAvailable, setNewEntriesAvailable] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const lastKnownFirstId = useRef<string | undefined>(undefined);
@@ -154,6 +162,34 @@ export default function ManagerHome() {
 
   const entries = useMemo(() => query.data?.pages.flatMap((p) => p.entries) ?? [], [query.data]);
   const total = query.data?.pages[0]?.total ?? 0;
+
+  // Scroll to and highlight a truck row when opened from a notification deep link.
+  useEffect(() => {
+    if (!highlightLpoNo || query.isLoading) return;
+    if (query.isFetchingNextPage) return;
+
+    const idx = findLpoHighlightIndex(entries, highlightLpoNo, highlightTruckNo);
+    if (idx >= 0) {
+      const entry = entries[idx];
+      setHighlightedId(entry.id);
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.25 });
+      });
+      const t = setTimeout(() => setHighlightedId(null), 5000);
+      return () => clearTimeout(t);
+    }
+
+    if (query.hasNextPage && !query.isFetchingNextPage) {
+      query.fetchNextPage();
+    }
+  }, [
+    highlightLpoNo,
+    highlightTruckNo,
+    entries,
+    query.isLoading,
+    query.hasNextPage,
+    query.isFetchingNextPage,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset the "new entries" signal whenever the sort changes so we don't show a
   // stale chip after switching from a different sort back to newest.
@@ -326,8 +362,14 @@ export default function ManagerHome() {
             ref={flatListRef}
             data={entries}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <LpoRow entry={item} />}
+            renderItem={({ item }) => <LpoRow entry={item} highlighted={item.id === highlightedId} />}
             contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: spacing.xl }}
+            onScrollToIndexFailed={(info) => {
+              flatListRef.current?.scrollToOffset({
+                offset: Math.max(0, info.averageItemLength * info.index),
+                animated: true,
+              });
+            }}
             onRefresh={() => {
               setNewEntriesAvailable(false);
               lastKnownFirstId.current = undefined;
@@ -648,7 +690,7 @@ export default function ManagerHome() {
     </View>
   );
 
-  function LpoRow({ entry }: { entry: LpoEntry }) {
+  function LpoRow({ entry, highlighted }: { entry: LpoEntry; highlighted?: boolean }) {
     const cancelled = entry.isCancelled;
     const amended = !cancelled && !!entry.amendedAt;
     const dim = cancelled ? 0.55 : 1;
@@ -662,7 +704,14 @@ export default function ManagerHome() {
 
     return (
       <Pressable onPress={() => setSelected(entry)} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
-        <Card style={styles.row}>
+        <Card
+          style={[
+            styles.row,
+            highlighted
+              ? { borderColor: colors.warning, borderWidth: 2, backgroundColor: colors.warningMuted }
+              : undefined,
+          ]}
+        >
           {/* Identity row */}
           <View style={styles.idRow}>
             <View style={styles.idLeft}>
@@ -708,7 +757,7 @@ export default function ManagerHome() {
                 >
                   {entry.truckNo}
                 </Text>
-                {cancelled ? <Tag label="CANCELLED" color={colors.textMuted} /> : null}
+                {cancelled ? <Tag label="CANCELLED" color={colors.danger} bg={colors.dangerMuted} /> : null}
                 {amended ? <Tag label="AMENDED" color={colors.warning} /> : null}
                 {entry.isDriverAccount && !cancelled ? <Tag label="DRIVER A/C" color={colors.warning} /> : null}
                 {entry.isRefer && !cancelled ? <Tag label="REFER" color={colors.info} /> : null}

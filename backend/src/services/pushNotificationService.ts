@@ -42,9 +42,18 @@ function ensureVapidConfigured(): boolean {
  *
  * This is the function all controllers should call — it never blocks the HTTP response.
  */
+export type PushPayload = {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+  /** Structured deep-link fields (Expo requires string values). */
+  data?: Record<string, string>;
+};
+
 export async function sendPushToRecipients(
   recipients: string[],
-  payload: { title: string; body: string; url?: string; tag?: string }
+  payload: PushPayload
 ): Promise<void> {
   // NOTE: do NOT gate on VAPID here. VAPID is only needed for *browser* web-push;
   // Expo (mobile) push uses FCM/APNs and must still fire when VAPID is unset
@@ -68,7 +77,7 @@ export async function sendPushToRecipients(
  */
 export async function sendPushDirect(
   recipients: string[],
-  payload: { title: string; body: string; url?: string; tag?: string }
+  payload: PushPayload
 ): Promise<void> {
   // Web-push needs VAPID; Expo push does not. Resolve VAPID availability once and
   // skip only the browser sends if it's missing — Expo sends always proceed.
@@ -95,6 +104,7 @@ export async function sendPushDirect(
       body:  payload.body,
       url:   payload.url || '/',
       tag:   payload.tag || 'fuel-order-notification',
+      ...(payload.data || {}),
     });
 
     // --- Web Push (VAPID) — only when keys are configured ---
@@ -121,7 +131,7 @@ export async function sendPushDirect(
         to: sub.expoPushToken,
         title: payload.title,
         body:  payload.body,
-        data:  { url: payload.url || '/' },
+        data:  { url: payload.url || '/', ...(payload.data || {}) },
         // Custom tone bundled in the app (iOS uses this filename; Android uses the
         // 'default' channel's sound). Invalid/missing falls back to the system sound.
         sound: 'notification.wav',

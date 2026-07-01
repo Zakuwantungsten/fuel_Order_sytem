@@ -102,6 +102,21 @@ const lpoWsPayload = (n: any) => ({
   isRead: false,
 });
 
+/** Deep-link payload for mobile Expo push taps. */
+function lpoPushData(type: string, metadata: { lpoNo: string; truckNo?: string }, relatedId: string) {
+  const rawTruck = metadata.truckNo || '';
+  const truckNo =
+    type === 'lpo_created'
+      ? rawTruck.split(',')[0]?.trim() || ''
+      : rawTruck.trim();
+  return {
+    type,
+    lpoNo: metadata.lpoNo,
+    truckNo,
+    relatedId,
+  };
+}
+
 // Helper: build the clean notification message used for config-missing alerts
 function buildConfigMessage(
   type: 'both' | 'missing_total_liters' | 'missing_extra_fuel',
@@ -984,7 +999,11 @@ export const createLPOCreatedNotification = async (
     });
 
     emitNotification(recipients, lpoWsPayload(notification));
-    sendPushToRecipients(recipients, { title, body: message });
+    sendPushToRecipients(recipients, {
+      title,
+      body: message,
+      data: lpoPushData('lpo_created', { lpoNo: lpoDoc.lpoNo, station, truckNo: truckNos.join(', ') }, lpoDoc._id.toString()),
+    });
     emitDataChange('notifications', 'create');
     logger.info(`LPO created notification: ${lpoDoc.lpoNo} @ ${station} → ${recipients.join(', ')}`);
   } catch (error) {
@@ -1022,7 +1041,11 @@ export const createLPOCancelledNotification = async (
     });
 
     emitNotification(recipients, lpoWsPayload(notification));
-    sendPushToRecipients(recipients, { title, body: message });
+    sendPushToRecipients(recipients, {
+      title,
+      body: message,
+      data: lpoPushData('lpo_cancelled', { lpoNo: lpoDoc.lpoNo, station, truckNo: entry.truckNo }, lpoDoc._id.toString()),
+    });
     emitDataChange('notifications', 'create');
     logger.info(`LPO cancelled notification: ${lpoDoc.lpoNo} truck ${entry.truckNo} @ ${station}`);
   } catch (error) {
@@ -1062,7 +1085,11 @@ export const createLPOAmendedNotification = async (
     });
 
     emitNotification(recipients, lpoWsPayload(notification));
-    sendPushToRecipients(recipients, { title, body: message });
+    sendPushToRecipients(recipients, {
+      title,
+      body: message,
+      data: lpoPushData('lpo_amended', { lpoNo: lpoDoc.lpoNo, station, truckNo: entry.truckNo }, lpoDoc._id.toString()),
+    });
     emitDataChange('notifications', 'create');
     logger.info(`LPO amended notification: ${lpoDoc.lpoNo} truck ${entry.truckNo} @ ${station}`);
   } catch (error) {

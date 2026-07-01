@@ -13,6 +13,8 @@ import {
   markNotificationRead,
 } from '../../src/api/notifications';
 import { Card, EmptyState, Loading } from '../../src/components/ui';
+import { navigateFromNotification } from '../../src/navigation/notificationRouting';
+import { markAllReadAndClearBadge } from '../../src/notifications/badge';
 import { useTheme } from '../../src/theme';
 import { useAuth } from '../../src/auth/AuthContext';
 
@@ -40,19 +42,9 @@ export default function NotificationsScreen() {
     queryFn: getNotifications,
   });
 
-  // Opening the panel clears the unread badge: mark everything read once on mount
-  // (the items stay visible — they just lose the "unread" dot). The count query is
-  // then refreshed so the header badge drops to zero.
+  // Opening the panel clears badges instantly, then syncs read state with the server.
   React.useEffect(() => {
-    let cancelled = false;
-    markAllNotificationsRead()
-      .then(() => {
-        if (cancelled) return;
-        queryClient.invalidateQueries({ queryKey: ['notif-count'] });
-        queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      })
-      .catch(() => { /* non-fatal — badge will reset on next fetch */ });
-    return () => { cancelled = true; };
+    void markAllReadAndClearBadge(queryClient, markAllNotificationsRead);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -64,6 +56,15 @@ export default function NotificationsScreen() {
     },
   });
 
+  const items = query.data?.notifications ?? [];
+  const isUnread = (n: AppNotification) =>
+    n.status === 'pending' && !(user?._id && n.readBy?.includes(user._id));
+
+  function handleItemPress(item: AppNotification) {
+    if (isUnread(item)) markRead.mutate(item.id);
+    if (navigateFromNotification(router, item)) return;
+  }
+
   const clearAll = useMutation({
     mutationFn: dismissAllNotifications,
     onSuccess: () => {
@@ -71,10 +72,6 @@ export default function NotificationsScreen() {
       queryClient.invalidateQueries({ queryKey: ['notif-count'] });
     },
   });
-
-  const items = query.data?.notifications ?? [];
-  const isUnread = (n: AppNotification) =>
-    n.status === 'pending' && !(user?._id && n.readBy?.includes(user._id));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -107,7 +104,7 @@ export default function NotificationsScreen() {
             const meta = iconFor(item.type);
             const unread = isUnread(item);
             return (
-              <Pressable onPress={() => unread && markRead.mutate(item.id)}>
+              <Pressable onPress={() => handleItemPress(item)}>
                 <Card
                   accent={unread ? colors[meta.tone] : colors.border}
                   style={{ marginBottom: spacing.sm, backgroundColor: unread ? colors.primaryMuted : colors.surface }}

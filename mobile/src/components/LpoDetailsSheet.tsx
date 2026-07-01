@@ -70,7 +70,7 @@ export function LpoDetailsSheet({ item, onClose }: { item: LpoDetailsItem; onClo
 
             {(item.isCancelled || item.amended || item.isDriverAccount || item.isRefer) ? (
               <View style={styles.tagRow}>
-                {item.isCancelled ? <Tag label="CANCELLED" color={colors.danger} /> : null}
+                {item.isCancelled ? <Tag label="CANCELLED" color={colors.danger} bg={colors.dangerMuted} /> : null}
                 {item.amended && !item.isCancelled ? <Tag label="AMENDED" color={colors.warning} /> : null}
                 {item.isDriverAccount ? <Tag label="DRIVER A/C" color={colors.warning} /> : null}
                 {item.isRefer ? <Tag label="REFER" color={colors.info} /> : null}

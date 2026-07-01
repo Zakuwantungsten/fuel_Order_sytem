@@ -2,7 +2,12 @@ import React, { createContext, useCallback, useContext, useRef, useState } from 
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../theme';
+import { navigateFromNotification } from '../navigation/notificationRouting';
+import { markAllReadAndClearBadge } from '../notifications/badge';
+import { markAllNotificationsRead } from '../api/notifications';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -10,6 +15,8 @@ export interface ToastData {
   title: string;
   message: string;
   type?: string;
+  metadata?: Record<string, any>;
+  relatedId?: string;
 }
 
 interface ToastContextValue {
@@ -35,6 +42,7 @@ function iconFor(type?: string): { icon: IoniconName; tone: 'primary' | 'danger'
 export function NotificationToastProvider({ children }: { children: React.ReactNode }) {
   const { colors, spacing, font, weight, radius } = useTheme();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [toast, setToast] = useState<ToastData | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-16)).current;
@@ -68,6 +76,23 @@ export function NotificationToastProvider({ children }: { children: React.ReactN
     [opacity, translateY, dismiss]
   );
 
+  const handlePress = useCallback(() => {
+    if (!toast) {
+      dismiss();
+      return;
+    }
+    const payload = {
+      type: toast.type || '',
+      metadata: toast.metadata,
+      relatedId: toast.relatedId,
+    };
+    dismiss();
+    void markAllReadAndClearBadge(queryClient, markAllNotificationsRead);
+    if (!navigateFromNotification(router, payload)) {
+      router.push('/(app)/notifications');
+    }
+  }, [toast, dismiss, queryClient]);
+
   const meta = toast ? iconFor(toast.type) : null;
 
   return (
@@ -87,7 +112,7 @@ export function NotificationToastProvider({ children }: { children: React.ReactN
             },
           ]}
         >
-          <Pressable onPress={dismiss} style={styles.inner}>
+          <Pressable onPress={handlePress} style={styles.inner}>
             <View style={[styles.iconWrap, { backgroundColor: `${colors[meta.tone]}22` }]}>
               <Ionicons name={meta.icon} size={20} color={colors[meta.tone]} />
             </View>
@@ -105,7 +130,7 @@ export function NotificationToastProvider({ children }: { children: React.ReactN
                 {toast.message}
               </Text>
             </View>
-            <Ionicons name="close" size={16} color={colors.textMuted} style={{ marginLeft: 4 }} />
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} style={{ marginLeft: 4 }} />
           </Pressable>
         </Animated.View>
       ) : null}
