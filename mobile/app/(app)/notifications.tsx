@@ -156,13 +156,14 @@ export default function NotificationsScreen() {
                   fontSize: font.tiny,
                   color: colors.textMuted,
                   textAlign: 'center',
-                  marginBottom: spacing.sm,
+                  marginBottom: spacing.xs,
                 }}
               >
                 Swipe left or right to dismiss
               </Text>
             ) : null
           }
+          ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
           ListEmptyComponent={
             <Card>
               <EmptyState icon="notifications-off-outline" title="No notifications" subtitle="You're all caught up." />
@@ -180,11 +181,10 @@ export default function NotificationsScreen() {
                 <Pressable
                   onPress={() => handleItemPress(item)}
                   disabled={!navigable && !unread}
-                  style={{ marginBottom: spacing.sm }}
                 >
                   <Card
                     accent={unread ? colors[meta.tone] : colors.border}
-                    style={{ backgroundColor: unread ? colors.primaryMuted : colors.surface }}
+                    style={{ backgroundColor: unread ? colors.primaryMuted : colors.surface, paddingVertical: spacing.sm }}
                   >
                     <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                       <Ionicons name={meta.icon} size={22} color={colors[meta.tone]} style={{ marginTop: 2 }} />
@@ -196,14 +196,16 @@ export default function NotificationsScreen() {
                           {unread ? <View style={[styles.dot, { backgroundColor: colors.primary }]} /> : null}
                         </View>
                         <Text style={{ fontSize: font.small, color: colors.textMuted, marginTop: 2 }}>{item.message}</Text>
-                        <Text style={{ fontSize: font.tiny, color: colors.textMuted, marginTop: 4 }}>
-                          {new Date(item.createdAt).toLocaleString()}
-                        </Text>
-                        {navigable ? (
-                          <Text style={{ fontSize: font.tiny, color: colors.primary, marginTop: 4, fontWeight: weight.semibold }}>
-                            Tap to view LPO
+                        <View style={styles.footerRow}>
+                          <Text style={{ flex: 1, fontSize: font.tiny, color: colors.textMuted, marginRight: spacing.sm }}>
+                            {new Date(item.createdAt).toLocaleString()}
                           </Text>
-                        ) : null}
+                          {navigable ? (
+                            <Text style={{ fontSize: font.tiny, color: colors.primary, fontWeight: weight.semibold }}>
+                              Tap to view LPO
+                            </Text>
+                          ) : null}
+                        </View>
                       </View>
                     </View>
                   </Card>
@@ -223,5 +225,6 @@ const styles = StyleSheet.create({
   clearBtn: { paddingHorizontal: 12, height: 44, alignItems: 'center', justifyContent: 'center' },
   htitle: { flex: 1, fontSize: 20, fontWeight: '800', marginLeft: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   dot: { width: 8, height: 8, borderRadius: 4 },
 });
