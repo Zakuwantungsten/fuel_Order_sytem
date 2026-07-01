@@ -1391,6 +1391,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
         autoDownloadLPOPdf: config.journeyConfig?.autoDownloadLPOPdf ?? true,
         fuelAutomation: { ...DEFAULT_FUEL_AUTOMATION, ...(config.journeyConfig?.fuelAutomation || {}) },
         cashLpoLookbackDays: config.journeyConfig?.cashLpoLookbackDays ?? 40,
+        lpoTruckLookupMonths: config.journeyConfig?.lpoTruckLookupMonths ?? 4,
         searchConfig: {
           doMonths: config.journeyConfig?.searchConfig?.doMonths ?? 4,
           doMaxResults: config.journeyConfig?.searchConfig?.doMaxResults ?? 6,
@@ -1412,7 +1413,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
  */
 export const updateJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { startColumns, superManagerStations, superManagerNotifyCustomZambia, managerLpoLookbackDays, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation, cashLpoLookbackDays, searchConfig } = req.body;
+    const { startColumns, superManagerStations, superManagerNotifyCustomZambia, managerLpoLookbackDays, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation, cashLpoLookbackDays, lpoTruckLookupMonths, searchConfig } = req.body;
 
     const hasStartColumns = startColumns !== undefined;
     const hasSmStations = superManagerStations !== undefined;
@@ -1422,9 +1423,10 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
     const hasAutoDownloadLPO = autoDownloadLPOPdf !== undefined;
     const hasFuelAutomation = fuelAutomation !== undefined;
     const hasCashLpoLookbackDays = cashLpoLookbackDays !== undefined;
+    const hasLpoTruckLookupMonths = lpoTruckLookupMonths !== undefined;
     const hasSearchConfig = searchConfig !== undefined;
 
-    if (!hasStartColumns && !hasSmStations && !hasSmNotifyCustomZambia && !hasManagerLookback && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation && !hasCashLpoLookbackDays && !hasSearchConfig) {
+    if (!hasStartColumns && !hasSmStations && !hasSmNotifyCustomZambia && !hasManagerLookback && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation && !hasCashLpoLookbackDays && !hasLpoTruckLookupMonths && !hasSearchConfig) {
       throw new ApiError(400, 'Provide at least one field to update');
     }
 
@@ -1486,6 +1488,13 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       }
     }
 
+    if (hasLpoTruckLookupMonths) {
+      const parsed = Number(lpoTruckLookupMonths);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 24) {
+        throw new ApiError(400, 'lpoTruckLookupMonths must be an integer between 1 and 24');
+      }
+    }
+
     if (hasSearchConfig) {
       if (typeof searchConfig !== 'object' || searchConfig === null || Array.isArray(searchConfig)) {
         throw new ApiError(400, 'searchConfig must be an object');
@@ -1534,6 +1543,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         ...(hasFuelAutomation ? fuelAutomation : {}),
       },
       cashLpoLookbackDays: hasCashLpoLookbackDays ? Number(cashLpoLookbackDays) : (existing.cashLpoLookbackDays ?? 40),
+      lpoTruckLookupMonths: hasLpoTruckLookupMonths ? Number(lpoTruckLookupMonths) : (existing.lpoTruckLookupMonths ?? 4),
       searchConfig: {
         doMonths: hasSearchConfig && searchConfig.doMonths !== undefined ? Number(searchConfig.doMonths) : (existing.searchConfig?.doMonths ?? 4),
         doMaxResults: hasSearchConfig && searchConfig.doMaxResults !== undefined ? Number(searchConfig.doMaxResults) : (existing.searchConfig?.doMaxResults ?? 6),
@@ -1570,6 +1580,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       detailParts.push(`fuelAutomation {${changed}}`);
     }
     if (hasCashLpoLookbackDays) detailParts.push(`cashLpoLookbackDays=${nextJourneyConfig.cashLpoLookbackDays}`);
+    if (hasLpoTruckLookupMonths) detailParts.push(`lpoTruckLookupMonths=${nextJourneyConfig.lpoTruckLookupMonths}`);
     if (hasSearchConfig) {
       const changed = Object.keys(searchConfig).map((k) => `${k}=${searchConfig[k]}`).join(', ');
       detailParts.push(`searchConfig {${changed}}`);
@@ -1605,6 +1616,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         autoDownloadLPOPdf: nextJourneyConfig.autoDownloadLPOPdf,
         fuelAutomation: nextJourneyConfig.fuelAutomation,
         cashLpoLookbackDays: nextJourneyConfig.cashLpoLookbackDays,
+        lpoTruckLookupMonths: nextJourneyConfig.lpoTruckLookupMonths,
         searchConfig: nextJourneyConfig.searchConfig,
       },
     });

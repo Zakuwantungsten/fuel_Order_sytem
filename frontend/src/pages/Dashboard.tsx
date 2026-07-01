@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, LabelList, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
-import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useAuth } from '../contexts/AuthContext';
@@ -161,19 +160,6 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   const [searching, setSearching] = useState(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [searchConfig, setSearchConfig] = useState({
-    doMonths: 4,
-    doMaxResults: 6,
-    lpoMonths: 1,
-    lpoMaxResults: 50,
-    fuelMaxResults: 3,
-  });
-
-  const { data: journeyConfig } = useJourneyConfig();
-  useEffect(() => {
-    if (journeyConfig?.searchConfig) setSearchConfig((prev) => ({ ...prev, ...journeyConfig.searchConfig }));
-  }, [journeyConfig]);
-
   // Persist search state to sessionStorage whenever it changes
   useEffect(() => {
     try { sessionStorage.setItem('dashboard_search_query', searchQuery); } catch {}
@@ -208,29 +194,11 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     setSearching(true);
     
     try {
-      // Format a Date as a local "YYYY-MM-DD" string. Using toISOString() here
-      // would convert to UTC and, for timezones ahead of UTC (e.g. EAT/UTC+3),
-      // shift the day backward in the early hours — dropping today's records
-      // from the date-windowed search even though they exist.
-      const toLocalDateStr = (d: Date) =>
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-      // Calculate date restrictions from config
-      const doFromDate = new Date();
-      doFromDate.setMonth(doFromDate.getMonth() - searchConfig.doMonths);
-
-      const lpoFromDate = new Date();
-      lpoFromDate.setMonth(lpoFromDate.getMonth() - searchConfig.lpoMonths);
-
-      const today = new Date();
-
-      // Search all three types in parallel using configurable limits
+      // Limits and date windows are enforced server-side when dashboardSearch=true
       const [dosResponse, lposResponse, fuelsResponse] = await Promise.all([
         deliveryOrdersAPI.getAll({
           search: query,
-          dateFrom: toLocalDateStr(doFromDate),
-          dateTo: toLocalDateStr(today),
-          limit: searchConfig.doMaxResults,
+          dashboardSearch: true,
           sortBy: 'date',
           sortOrder: 'desc'
         }).catch((err) => {
@@ -240,9 +208,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
 
         lposAPI.getAll({
           search: query,
-          dateFrom: toLocalDateStr(lpoFromDate),
-          dateTo: toLocalDateStr(today),
-          limit: searchConfig.lpoMaxResults
+          dashboardSearch: true,
         }).catch((err) => {
           console.error('LPO search error:', err);
           return { data: [] };
@@ -250,7 +216,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
 
         fuelRecordsAPI.getAll({
           search: query,
-          limit: searchConfig.fuelMaxResults,
+          dashboardSearch: true,
           sortBy: 'date',
           sortOrder: 'desc'
         }).catch((err) => {

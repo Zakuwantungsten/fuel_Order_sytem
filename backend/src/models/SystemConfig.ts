@@ -87,8 +87,11 @@ export interface IJourneyConfig {
   autoDownloadLPOPdf?: boolean;
   // Per-operation fuel-record automation switches (see IFuelAutomationConfig).
   fuelAutomation?: IFuelAutomationConfig;
-  // How many days back to search for existing LPOs when creating a CASH LPO (default 40).
+  // How many days back to search for existing LPOs at the same fuel checkpoint (default 40).
+  // DB field name kept as cashLpoLookbackDays for backward compatibility.
   cashLpoLookbackDays?: number;
+  // How many months back the LPO form searches fuel records when a truck number is entered (default 4).
+  lpoTruckLookupMonths?: number;
   // Dashboard unified-search configuration.
   searchConfig?: {
     doMonths?: number;       // months back to search DOs (default 4)
@@ -387,6 +390,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         doCancelCascade: { type: Boolean, default: true },
       },
       cashLpoLookbackDays: { type: Number, default: 40, min: 1, max: 365 },
+      lpoTruckLookupMonths: { type: Number, default: 4, min: 1, max: 24 },
       searchConfig: {
         doMonths:      { type: Number, default: 4,  min: 1, max: 24 },
         doMaxResults:  { type: Number, default: 6,  min: 1, max: 100 },

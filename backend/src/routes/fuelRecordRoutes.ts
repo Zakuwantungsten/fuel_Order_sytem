@@ -18,6 +18,7 @@ router.get('/available-periods', asyncHandler(fuelRecordController.getAvailableP
 router.get('/available-routes', asyncHandler(fuelRecordController.getAvailableRoutes));
 router.get('/', commonValidation.pagination, validate, asyncHandler(fuelRecordController.getAllFuelRecords));
 router.get('/monthly-summary', asyncHandler(fuelRecordController.getMonthlyFuelSummary));
+router.get('/lpo-truck-lookup/:truckNo', asyncHandler(fuelRecordController.getFuelRecordsForLpoTruckLookup));
 router.get('/truck/:truckNo', asyncHandler(fuelRecordController.getFuelRecordsByTruck));
 router.get('/duplicate-dos', authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'boss'), asyncHandler(fuelRecordController.getDuplicateDONumbers));
 router.get('/do/:doNumber', asyncHandler(fuelRecordController.getFuelRecordByGoingDO));

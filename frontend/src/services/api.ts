@@ -753,7 +753,7 @@ export const lpoDocumentsAPI = {
   // Check if a truck already has an active allocation at a specific station
   // Returns duplicate info - used to prevent accidentally creating duplicate fuel orders
   // If liters is provided and differs from existing allocation, it's allowed (top-up scenario)
-  checkDuplicateAllocation: async (truckNo: string, station: string, excludeLpoId?: string, liters?: number, doNo?: string): Promise<{
+  checkDuplicateAllocation: async (truckNo: string, station: string, excludeLpoId?: string, liters?: number, doNo?: string, journeyDirection?: 'going' | 'returning'): Promise<{
     hasDuplicate: boolean;
     existingLpos: Array<{
       id: string;
@@ -770,7 +770,8 @@ export const lpoDocumentsAPI = {
     const params: any = { truckNo, station };
     if (excludeLpoId) params.excludeLpoId = excludeLpoId;
     if (liters !== undefined) params.liters = liters;
-    if (doNo) params.doNo = doNo; // Add DO number to filter by journey
+    if (doNo) params.doNo = doNo;
+    if (journeyDirection) params.journeyDirection = journeyDirection;
     const response = await apiClient.get('/lpo-documents/check-duplicate', { params });
     return response.data.data || { hasDuplicate: false, existingLpos: [], allowOverride: true, isDifferentAmount: false };
   },
@@ -1038,6 +1039,18 @@ export const fuelRecordsAPI = {
     }
   },
   
+  getForLpoTruckLookup: async (truckNo: string): Promise<{
+    data: FuelRecord[];
+    meta: { lookupMonths: number; dateFrom: string };
+  }> => {
+    const encoded = encodeURIComponent(truckNo.trim());
+    const response = await apiClient.get(`/fuel-records/lpo-truck-lookup/${encoded}`);
+    return {
+      data: response.data.data || [],
+      meta: response.data.meta || { lookupMonths: 4, dateFrom: '' },
+    };
+  },
+
   create: async (data: Partial<FuelRecord>): Promise<FuelRecord> => {
     const response = await apiClient.post('/fuel-records', data);
     return response.data.data;
@@ -1652,8 +1665,10 @@ export interface JourneyConfig {
   autoDownloadLPOPdf?: boolean;
   // Per-operation fuel-record automation switches
   fuelAutomation?: FuelAutomationConfig;
-  // How many days back to search for existing LPOs when creating a CASH LPO (default 40)
+  // How many days back to search for existing LPOs at the same fuel checkpoint (default 40)
   cashLpoLookbackDays?: number;
+  // How many months back the LPO form searches fuel records when entering a truck (default 4)
+  lpoTruckLookupMonths?: number;
   // Dashboard unified-search configuration
   searchConfig?: {
     doMonths?: number;       // months back for DO search (default 4)
@@ -2331,9 +2346,14 @@ export const configAPI = {
     return response.data.data;
   },
 
-  // Update the CASH LPO lookback window (partial journey-config update)
+  // Update the LPO prior-order lookback window (partial journey-config update)
   updateCashLpoLookbackDays: async (cashLpoLookbackDays: number): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', { cashLpoLookbackDays });
+    return response.data.data;
+  },
+
+  updateLpoTruckLookupMonths: async (lpoTruckLookupMonths: number): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { lpoTruckLookupMonths });
     return response.data.data;
   },
 

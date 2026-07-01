@@ -13,7 +13,7 @@ import { attachLocks } from '../services/lockService';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { emitDataChange } from '../services/websocket';
 import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
-import { getFuelAutomationFlags } from '../services/journeyService';
+import { getFuelAutomationFlags, resolveDashboardSearchLimits } from '../services/journeyService';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import unifiedExportService from '../services/unifiedExportService';
 import ExcelJS from 'exceljs';
@@ -664,8 +664,16 @@ export const getAvailablePeriods = async (req: AuthRequest, res: Response): Prom
  */
 export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { page, limit, sort, order } = getPaginationParams(req.query);
+    let { page, limit, sort, order } = getPaginationParams(req.query);
+    const dashboardLimits = await resolveDashboardSearchLimits('do', req.query);
+    if (dashboardLimits) {
+      page = dashboardLimits.page;
+      limit = dashboardLimits.limit;
+    }
+
     const { dateFrom, dateTo, clientName, truckNo, importOrExport, destination, doType, search, status } = req.query;
+    const effectiveDateFrom = dashboardLimits?.dateFrom ?? dateFrom;
+    const effectiveDateTo = dashboardLimits?.dateTo ?? dateTo;
 
     // Build filter
     const filter: any = { isDeleted: false };
@@ -688,10 +696,10 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
       filter.doType = doType;
     }
 
-    if (dateFrom || dateTo) {
+    if (effectiveDateFrom || effectiveDateTo) {
       filter.date = {};
-      if (dateFrom) filter.date.$gte = dateFrom;
-      if (dateTo) filter.date.$lte = dateTo;
+      if (effectiveDateFrom) filter.date.$gte = effectiveDateFrom;
+      if (effectiveDateTo) filter.date.$lte = effectiveDateTo;
     }
 
     // Unified search parameter - searches across multiple fields
@@ -745,7 +753,7 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
     // archive actually contains matching rows (a cheap indexed count) —
     // otherwise the normal indexed skip/limit query handles the date range.
     let includeArchived = false;
-    if (dateFrom || dateTo) {
+    if (effectiveDateFrom || effectiveDateTo) {
       try {
         const archivedCount = await ArchivedDeliveryOrder.countDocuments({
           ...filter,
@@ -761,8 +769,8 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
 
     if (includeArchived) {
       // Use unified export service to get both active and archived data
-      const startDate = dateFrom ? new Date(dateFrom as string) : undefined;
-      const endDate = dateTo ? new Date(dateTo as string) : undefined;
+      const startDate = effectiveDateFrom ? new Date(effectiveDateFrom as string) : undefined;
+      const endDate = effectiveDateTo ? new Date(effectiveDateTo as string) : undefined;
       
       const allOrders = await unifiedExportService.getAllDeliveryOrders({
         startDate,

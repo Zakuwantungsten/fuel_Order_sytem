@@ -12,7 +12,7 @@ import unifiedExportService from '../services/unifiedExportService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
 import { acquireLock as acquireLockRecord, releaseLock as releaseLockRecord, getDisplayName } from '../services/lockService';
-import { checkAndPromoteStartedJourney, getFuelAutomationFlags, getManagerAccessConfig, buildCustomZambiaLpoFilter, buildSuperManagerStationOrClauses } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getFuelAutomationFlags, getManagerAccessConfig, buildCustomZambiaLpoFilter, buildSuperManagerStationOrClauses, resolveDashboardSearchLimits } from '../services/journeyService';
 import { formatDONumber, parseDONumber } from '../utils/doNumberFormatter';
 import {
   createLPOCreatedNotification,
@@ -67,9 +67,9 @@ async function getStationToFuelFieldMapping() {
 }
 
 /**
- * Get the configured CASH LPO lookback window in days (defaults to 40 if not set).
+ * LPO prior-order lookback (days). Stored as cashLpoLookbackDays in DB for backward compatibility.
  */
-async function getCashLpoLookbackDays(): Promise<number> {
+async function getLpoPriorOrderLookbackDays(): Promise<number> {
   try {
     const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false }).lean();
     const days = (cfg as any)?.journeyConfig?.cashLpoLookbackDays;
@@ -77,6 +77,123 @@ async function getCashLpoLookbackDays(): Promise<number> {
   } catch {
     return 40;
   }
+}
+
+function normalizeTruckNo(truckNo: string): string {
+  return truckNo.replace(/\s+/g, '').toUpperCase();
+}
+
+function buildTruckRegex(truckNoNormalized: string): RegExp {
+  return new RegExp(
+    `^T?${truckNoNormalized.replace(/^T/, '')}$`.replace(/(\d+)([A-Z]+)/, '$1\\s*$2'),
+    'i'
+  );
+}
+
+function resolveFuelRecordFieldFromStationDirection(
+  stationMapping: Record<string, { going?: string; returning?: string }>,
+  stationName: string,
+  journeyDirection: 'going' | 'returning'
+): string | null {
+  const key = Object.keys(stationMapping).find(
+    (k) => k.toUpperCase() === stationName.toUpperCase().trim()
+  );
+  if (!key) return null;
+  const cfg = stationMapping[key];
+  return journeyDirection === 'returning' ? (cfg.returning || null) : (cfg.going || null);
+}
+
+function resolveFuelRecordFieldFromCancellationPoint(cancellationPoint: string): string | null {
+  return CANCELLATION_POINT_TO_FUEL_FIELD[cancellationPoint] || null;
+}
+
+function resolveFuelRecordFieldForEntry(
+  stationMapping: Record<string, { going?: string; returning?: string }>,
+  lpoStation: string,
+  entry: { journeyDirection?: string }
+): string | null {
+  const direction: 'going' | 'returning' =
+    entry.journeyDirection === 'returning' ? 'returning' : 'going';
+  return resolveFuelRecordFieldFromStationDirection(stationMapping, lpoStation, direction);
+}
+
+interface PriorOrderMatch {
+  id: unknown;
+  lpoNo: string;
+  date: string;
+  station: string;
+  entries: any[];
+}
+
+/**
+ * Find active LPO entries for truck (+ DO) that fill the same fuel-record checkpoint column.
+ */
+async function findPriorOrdersAtCheckpoint(options: {
+  truckNo: string;
+  fuelRecordField: string;
+  doNo?: string;
+  lookbackDays?: number;
+  excludeLpoId?: string;
+  excludeCashLpos?: boolean;
+}): Promise<PriorOrderMatch[]> {
+  const { truckNo, fuelRecordField, doNo, excludeLpoId, excludeCashLpos = false } = options;
+  const lookbackDays = options.lookbackDays ?? (await getLpoPriorOrderLookbackDays());
+
+  const truckNoNormalized = normalizeTruckNo(truckNo);
+  const dateLimitForLPO = new Date();
+  dateLimitForLPO.setDate(dateLimitForLPO.getDate() - lookbackDays);
+  const dateLimitString = dateLimitForLPO.toISOString().split('T')[0];
+
+  const query: any = {
+    isDeleted: false,
+    'entries.truckNo': { $regex: buildTruckRegex(truckNoNormalized) },
+    'entries.isCancelled': { $ne: true },
+    date: { $gte: dateLimitString },
+  };
+
+  if (excludeCashLpos) {
+    query.station = { $ne: 'CASH' };
+  }
+
+  if (excludeLpoId) {
+    query._id = { $ne: excludeLpoId };
+  }
+
+  const checkDoNo = doNo?.toUpperCase().trim();
+  if (checkDoNo && checkDoNo !== 'NIL') {
+    query['entries.doNo'] = doNo;
+  }
+
+  const lpos = await LPOSummary.find(query).lean();
+  const stationMapping = await getStationToFuelFieldMapping();
+  const matchingLpos: PriorOrderMatch[] = [];
+
+  for (const lpo of lpos) {
+    const matchingEntries = lpo.entries.filter((e: any) => {
+      const entryTruckNormalized = normalizeTruckNo(e.truckNo || '');
+      if (entryTruckNormalized !== truckNoNormalized || e.isCancelled) return false;
+
+      if (checkDoNo && checkDoNo !== 'NIL') {
+        const entryDoNormalized = (e.doNo || 'NIL').replace(/\s+/g, '').toUpperCase();
+        if (entryDoNormalized !== checkDoNo) return false;
+      }
+
+      const entryField = resolveFuelRecordFieldForEntry(stationMapping, lpo.station, e);
+      return entryField === fuelRecordField;
+    });
+
+    if (matchingEntries.length > 0) {
+      matchingLpos.push({
+        id: lpo._id,
+        lpoNo: lpo.lpoNo,
+        date: lpo.date,
+        station: lpo.station,
+        entries: matchingEntries,
+      });
+    }
+  }
+
+  return matchingLpos;
 }
 
 
@@ -2035,7 +2152,7 @@ export const getAvailableYears = async (req: AuthRequest, res: Response): Promis
  */
 export const checkDuplicateAllocation = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { truckNo, station, excludeLpoId, liters, doNo } = req.query;
+    const { truckNo, station, excludeLpoId, liters, doNo, journeyDirection } = req.query;
 
     if (!truckNo || !station) {
       throw new ApiError(400, 'Truck number and station are required');
@@ -2043,9 +2160,11 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
 
     const stationUpper = (station as string).toUpperCase().trim();
     const newLiters = liters ? Number(liters) : null;
-    const checkDoNo = (doNo as string)?.toUpperCase().trim(); // DO number to check for same journey
-    
-    // CASH is always allowed - no duplicate check needed
+    const checkDoNo = (doNo as string)?.toUpperCase().trim();
+    const direction: 'going' | 'returning' =
+      journeyDirection === 'returning' ? 'returning' : 'going';
+
+    // CASH uses find-at-checkpoint for prior-order discovery — skip duplicate check here
     if (stationUpper === 'CASH') {
       res.status(200).json({
         success: true,
@@ -2060,54 +2179,34 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
       return;
     }
 
-    // Normalize truck number for case-insensitive matching
-    const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
+    const stationMapping = await getStationToFuelFieldMapping();
+    const fuelRecordField = resolveFuelRecordFieldFromStationDirection(
+      stationMapping,
+      station as string,
+      direction
+    );
 
-    // Calculate date limit using configurable lookback window (default 40 days)
-    const lookbackDays = await getCashLpoLookbackDays();
-    const dateLimitForLPO = new Date();
-    dateLimitForLPO.setDate(dateLimitForLPO.getDate() - lookbackDays);
-    const dateLimitString = dateLimitForLPO.toISOString().split('T')[0]; // YYYY-MM-DD format
-
-    // Build query to find LPOs at this station with this truck's active entries
-    // Use regex for case-insensitive truck matching (T849 EKS, T849 EKs, t849eks all match)
-    // Only search LPOs from the configured lookback window to improve performance
-    const query: any = {
-      isDeleted: false,
-      station: { $regex: new RegExp(`^${stationUpper}$`, 'i') },
-      'entries.truckNo': { $regex: new RegExp(`^T?${truckNoNormalized.replace(/^T/, '')}$`.replace(/(\d+)([A-Z]+)/, '$1\\s*$2'), 'i') },
-      'entries.isCancelled': { $ne: true },
-      date: { $gte: dateLimitString } // Only search last 40 days
-    };
-
-    // Exclude current LPO if editing
-    if (excludeLpoId) {
-      query._id = { $ne: excludeLpoId };
+    if (!fuelRecordField) {
+      res.status(200).json({
+        success: true,
+        message: 'Station has no checkpoint configured — prior-order check skipped',
+        data: {
+          hasDuplicate: false,
+          existingLpos: [],
+          allowOverride: true,
+          isDifferentAmount: false,
+          isNilDo: !checkDoNo || checkDoNo === 'NIL',
+        },
+      });
+      return;
     }
 
-    const lpos = await LPOSummary.find(query).lean();
-
-    // Filter to get only the matching active entries for this truck (case-insensitive)
-    // AND with the same DO number if provided (same journey check)
-    const matchingLpos = lpos.map(lpo => ({
-      id: lpo._id,
-      lpoNo: lpo.lpoNo,
-      date: lpo.date,
-      station: lpo.station,
-      entries: lpo.entries.filter((e: any) => {
-        const entryTruckNormalized = (e.truckNo || '').replace(/\s+/g, '').toUpperCase();
-        const isSameTruck = entryTruckNormalized === truckNoNormalized && !e.isCancelled;
-        
-        // If DO number is provided, only flag as duplicate if it's the SAME journey (same DO)
-        if (checkDoNo && checkDoNo !== 'NIL') {
-          const entryDoNormalized = (e.doNo || 'NIL').replace(/\s+/g, '').toUpperCase();
-          return isSameTruck && entryDoNormalized === checkDoNo;
-        }
-        
-        // If no DO provided or DO is NIL, check truck only (legacy behavior)
-        return isSameTruck;
-      })
-    })).filter(lpo => lpo.entries.length > 0);
+    const matchingLpos = await findPriorOrdersAtCheckpoint({
+      truckNo: truckNo as string,
+      fuelRecordField,
+      doNo: doNo as string | undefined,
+      excludeLpoId: excludeLpoId as string | undefined,
+    });
 
     const hasDuplicate = matchingLpos.length > 0;
     
@@ -2129,7 +2228,7 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
       message: hasDuplicate 
         ? isDifferentAmount
           ? `Truck ${truckNo} has existing allocation (${existingLiters.join(', ')}L) - different amount allowed`
-          : `Truck ${truckNo} already has same allocation (${existingLiters.join(', ')}L) at ${station}` 
+          : `Truck ${truckNo} already has same allocation (${existingLiters.join(', ')}L) at checkpoint ${fuelRecordField}`
         : 'No duplicate allocation found',
       data: {
         hasDuplicate,
@@ -2146,71 +2245,50 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
 };
 
 /**
- * Find LPOs at a specific checkpoint/station that have a particular truck
- * Used for auto-cancellation when creating CASH LPOs
- * Now filters by DO number to only match current journey
+ * Find LPOs at a fuel-record checkpoint for a truck (same column, any station).
+ * Used for CASH auto-cancellation/amend and checkpoint-based prior-order discovery.
  */
 export const findLPOsAtCheckpoint = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { truckNo, station, cancellationPoint, doNo } = req.query;
+    const { truckNo, cancellationPoint, doNo, journeyDirection } = req.query;
 
     if (!truckNo) {
       throw new ApiError(400, 'Truck number is required');
     }
 
-    // Normalize truck number for case-insensitive matching
-    const truckNoNormalized = (truckNo as string).replace(/\s+/g, '').toUpperCase();
-
-    // Calculate date limit using configurable lookback window (default 40 days)
-    const lookbackDays = await getCashLpoLookbackDays();
-    const dateLimitForLPO = new Date();
-    dateLimitForLPO.setDate(dateLimitForLPO.getDate() - lookbackDays);
-    const dateLimitString = dateLimitForLPO.toISOString().split('T')[0]; // YYYY-MM-DD format
-
-    // Find LPOs where this truck has an active (non-cancelled) entry
-    // Use regex for case-insensitive truck matching (T849 EKS, T849 EKs, t849eks all match)
-    // Only search LPOs within the configured lookback window to improve performance
-    const query: any = {
-      isDeleted: false,
-      'entries.truckNo': { $regex: new RegExp(`^T?${truckNoNormalized.replace(/^T/, '')}$`.replace(/(\d+)([A-Z]+)/, '$1\\s*$2'), 'i') },
-      'entries.isCancelled': { $ne: true },
-      date: { $gte: dateLimitString }, // Only search within the lookback window
-      station: { $ne: 'CASH' } // Exclude CASH LPOs from cancellation
-    };
-
-    // CRITICAL: Filter by DO number if provided - ensures we only match current journey
-    if (doNo) {
-      query['entries.doNo'] = doNo as string;
+    let fuelRecordField: string | null = null;
+    if (cancellationPoint) {
+      fuelRecordField = resolveFuelRecordFieldFromCancellationPoint(cancellationPoint as string);
+    } else if (req.query.station) {
+      const stationMapping = await getStationToFuelFieldMapping();
+      const direction: 'going' | 'returning' =
+        journeyDirection === 'returning' ? 'returning' : 'going';
+      fuelRecordField = resolveFuelRecordFieldFromStationDirection(
+        stationMapping,
+        req.query.station as string,
+        direction
+      );
     }
 
-    // If station is provided, filter by station
-    if (station) {
-      query.station = station;
+    if (!fuelRecordField) {
+      throw new ApiError(400, 'cancellationPoint or station+journeyDirection is required to resolve checkpoint');
     }
 
-    const lpos = await LPOSummary.find(query).lean();
+    const matches = await findPriorOrdersAtCheckpoint({
+      truckNo: truckNo as string,
+      fuelRecordField,
+      doNo: doNo as string | undefined,
+      excludeCashLpos: true,
+    });
 
-    // Filter entries to only include matching truck entries that are not cancelled (case-insensitive)
-    // Also filter by DO number if provided
-    const matchingLpos = lpos.map(lpo => ({
-      ...lpo,
-      id: lpo._id?.toString(), // Normalise so frontend can key by `lpo.id`
-      entries: lpo.entries.filter((e: any) => {
-        const entryTruckNormalized = (e.truckNo || '').replace(/\s+/g, '').toUpperCase();
-        const truckMatches = entryTruckNormalized === truckNoNormalized && !e.isCancelled;
-
-        // If DO number is provided, also check if entry matches the DO
-        if (doNo && truckMatches) {
-          return e.doNo === doNo;
-        }
-
-        return truckMatches;
-      })
-    })).filter(lpo => lpo.entries.length > 0);
+    const matchingLpos = matches.map((m) => ({
+      ...m,
+      id: m.id?.toString?.() ?? m.id,
+    }));
 
     res.status(200).json({
       success: true,
-      message: `Found ${matchingLpos.length} LPOs with truck ${truckNo}${doNo ? ` for DO ${doNo}` : ''}`,
+      message: `Found ${matchingLpos.length} LPOs with truck ${truckNo} at checkpoint ${fuelRecordField}${doNo ? ` for DO ${doNo}` : ''}`,
       data: matchingLpos,
     });
   } catch (error: any) {
@@ -3380,8 +3458,16 @@ function applyManagerStationScope(
 
 export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { page, limit } = getPaginationParams(req.query);
+    let { page, limit } = getPaginationParams(req.query);
+    const dashboardLimits = await resolveDashboardSearchLimits('lpo', req.query);
+    if (dashboardLimits) {
+      page = dashboardLimits.page;
+      limit = dashboardLimits.limit;
+    }
+
     const { dateFrom, dateTo, lpoNo, truckNo, station, stations, customZambiaOnly, search, status, isRefer, isDriverAccount, sort } = req.query;
+    const effectiveDateFrom = dashboardLimits?.dateFrom ?? dateFrom;
+    const effectiveDateTo = dashboardLimits?.dateTo ?? dateTo;
 
     const docMatch: any = { isDeleted: false };
     const scopeEarly = await resolveManagerScope(req.user);
@@ -3406,10 +3492,10 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
         }
       }
     }
-    if (dateFrom || dateTo) {
+    if (effectiveDateFrom || effectiveDateTo) {
       docMatch.date = {};
-      if (dateFrom) docMatch.date.$gte = (dateFrom as string).substring(0, 10);
-      if (dateTo) docMatch.date.$lte = (dateTo as string).substring(0, 10);
+      if (effectiveDateFrom) docMatch.date.$gte = (effectiveDateFrom as string).substring(0, 10);
+      if (effectiveDateTo) docMatch.date.$lte = (effectiveDateTo as string).substring(0, 10);
     }
 
     // ── Server-side access enforcement for manager-tier roles ──────────────

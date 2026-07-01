@@ -102,6 +102,27 @@ export function buildSuperManagerStationOrClauses(
 let _managerAccessCache: ManagerAccessConfig | null = null;
 let _managerAccessCacheUpdatedAt = 0;
 
+export interface DashboardSearchConfig {
+  doMonths: number;
+  doMaxResults: number;
+  lpoMonths: number;
+  lpoMaxResults: number;
+  fuelMaxResults: number;
+}
+
+const DEFAULT_DASHBOARD_SEARCH_CONFIG: DashboardSearchConfig = {
+  doMonths: 4,
+  doMaxResults: 6,
+  lpoMonths: 1,
+  lpoMaxResults: 50,
+  fuelMaxResults: 3,
+};
+
+let _dashboardSearchCache: DashboardSearchConfig | null = null;
+let _dashboardSearchCacheUpdatedAt = 0;
+let _lpoTruckLookupMonthsCache: number | null = null;
+let _lpoTruckLookupMonthsCacheUpdatedAt = 0;
+
 /** Drop the cache so the next read reflects a freshly-saved config. */
 export function invalidateJourneyConfigCache(): void {
   _startColumnsCache = null;
@@ -110,6 +131,116 @@ export function invalidateJourneyConfigCache(): void {
   _fuelAutomationCacheUpdatedAt = 0;
   _managerAccessCache = null;
   _managerAccessCacheUpdatedAt = 0;
+  _dashboardSearchCache = null;
+  _dashboardSearchCacheUpdatedAt = 0;
+  _lpoTruckLookupMonthsCache = null;
+  _lpoTruckLookupMonthsCacheUpdatedAt = 0;
+}
+
+/** Format a Date as local YYYY-MM-DD (avoids UTC day-shift in EAT etc.). */
+export function toLocalDateString(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** First day of the oldest calendar month in an LPO truck lookup window. */
+export function computeLpoTruckLookupDateFrom(months: number): string {
+  const safeMonths = Number.isFinite(months) && months > 0 ? Math.floor(months) : 4;
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - (safeMonths - 1), 1);
+  return toLocalDateString(start);
+}
+
+/** Date floor N calendar months before today (dashboard DO/LPO search). */
+export function dashboardMonthFloorDate(months: number): string {
+  const safeMonths = Number.isFinite(months) && months > 0 ? Math.floor(months) : 1;
+  const d = new Date();
+  d.setMonth(d.getMonth() - safeMonths);
+  return toLocalDateString(d);
+}
+
+export async function getDashboardSearchConfig(): Promise<DashboardSearchConfig> {
+  const now = Date.now();
+  if (_dashboardSearchCache && now - _dashboardSearchCacheUpdatedAt < CACHE_TTL_MS) {
+    return _dashboardSearchCache;
+  }
+  try {
+    const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false })
+      .select('journeyConfig.searchConfig')
+      .lean();
+    const sc = (cfg as any)?.journeyConfig?.searchConfig || {};
+    const merged: DashboardSearchConfig = {
+      doMonths: sc.doMonths ?? DEFAULT_DASHBOARD_SEARCH_CONFIG.doMonths,
+      doMaxResults: sc.doMaxResults ?? DEFAULT_DASHBOARD_SEARCH_CONFIG.doMaxResults,
+      lpoMonths: sc.lpoMonths ?? DEFAULT_DASHBOARD_SEARCH_CONFIG.lpoMonths,
+      lpoMaxResults: sc.lpoMaxResults ?? DEFAULT_DASHBOARD_SEARCH_CONFIG.lpoMaxResults,
+      fuelMaxResults: sc.fuelMaxResults ?? DEFAULT_DASHBOARD_SEARCH_CONFIG.fuelMaxResults,
+    };
+    _dashboardSearchCache = merged;
+    _dashboardSearchCacheUpdatedAt = now;
+    return merged;
+  } catch (error: any) {
+    logger.error(`Failed to load dashboard search config, using defaults: ${error.message}`);
+    return { ...DEFAULT_DASHBOARD_SEARCH_CONFIG };
+  }
+}
+
+export async function getLpoTruckLookupMonths(): Promise<number> {
+  const now = Date.now();
+  if (_lpoTruckLookupMonthsCache != null && now - _lpoTruckLookupMonthsCacheUpdatedAt < CACHE_TTL_MS) {
+    return _lpoTruckLookupMonthsCache;
+  }
+  try {
+    const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false })
+      .select('journeyConfig.lpoTruckLookupMonths')
+      .lean();
+    const raw = Number((cfg as any)?.journeyConfig?.lpoTruckLookupMonths);
+    const months = Number.isInteger(raw) && raw >= 1 && raw <= 24 ? raw : 4;
+    _lpoTruckLookupMonthsCache = months;
+    _lpoTruckLookupMonthsCacheUpdatedAt = now;
+    return months;
+  } catch (error: any) {
+    logger.error(`Failed to load lpoTruckLookupMonths, using default 4: ${error.message}`);
+    return 4;
+  }
+}
+
+export type DashboardSearchKind = 'do' | 'lpo' | 'fuel';
+
+/**
+ * When dashboardSearch=true with a search term, enforce Journey Config limits server-side.
+ * Returns null when the request is not a dashboard unified search.
+ */
+export async function resolveDashboardSearchLimits(
+  kind: DashboardSearchKind,
+  query: { search?: unknown; dashboardSearch?: unknown; dateFrom?: unknown; dateTo?: unknown; limit?: unknown }
+): Promise<{ dateFrom?: string; dateTo?: string; limit: number; page: number } | null> {
+  if (query.dashboardSearch !== 'true' && query.dashboardSearch !== true) return null;
+  if (!query.search || String(query.search).trim() === '') return null;
+
+  const cfg = await getDashboardSearchConfig();
+  const today = toLocalDateString(new Date());
+
+  if (kind === 'do') {
+    return {
+      dateFrom: dashboardMonthFloorDate(cfg.doMonths),
+      dateTo: today,
+      limit: cfg.doMaxResults,
+      page: 1,
+    };
+  }
+  if (kind === 'lpo') {
+    return {
+      dateFrom: dashboardMonthFloorDate(cfg.lpoMonths),
+      dateTo: today,
+      limit: cfg.lpoMaxResults,
+      page: 1,
+    };
+  }
+  return {
+    dateTo: today,
+    limit: cfg.fuelMaxResults,
+    page: 1,
+  };
 }
 
 /**

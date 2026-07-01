@@ -10,7 +10,6 @@ import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import {
   getAvailableCancellationPoints,
   getCancellationPointDisplayName,
-  CANCELLATION_POINT_TO_FUEL_FIELD,
   FUEL_RECORD_COLUMNS
 } from '../services/cancellationService';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
@@ -403,6 +402,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const autoDownloadLPOPdf = journeyConfig?.autoDownloadLPOPdf ?? true;
 
   const lpoCreateDeductOff = journeyConfig?.fuelAutomation?.lpoCreateDeduct === false;
+  const lpoTruckLookupMonths = journeyConfig?.lpoTruckLookupMonths ?? 4;
 
   // Creation lock: only one user may use the new-LPO form at a time. Acquire a
   // global 'lpo_create' resource lock while the form is open (creating only),
@@ -921,28 +921,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const trucksWithoutLPOsSet = new Set<string>();
       const newSelectedLPOs = new Map<string, Set<string>>();
 
-      // Determine whether an LPO's station fills the same fuel record column as the
-      // selected checkpoint. This uses the station's declared fuelRecordFieldGoing /
-      // fuelRecordFieldReturning from the DB — no hardcoded name lists anywhere.
-      // For stations not found in the DB (custom / ad-hoc names), the LPO is included
-      // so the user can still see and manually decide to cancel it.
-      const doesLpoMatchCheckpoint = (lpoStation: string, cp: CancellationPoint): boolean => {
-        const checkpointFuelField = CANCELLATION_POINT_TO_FUEL_FIELD[cp];
-        if (!checkpointFuelField) return false;
-        const isReturn = cp.includes('RETURN') || cp.includes('RETURNING');
-        const stationConfig = availableStations.find(
-          s => s.stationName.toUpperCase() === lpoStation.toUpperCase().trim()
-        );
-        if (stationConfig) {
-          const stationField = isReturn
-            ? stationConfig.fuelRecordFieldReturning
-            : stationConfig.fuelRecordFieldGoing;
-          return stationField === checkpointFuelField;
-        }
-        // Station not in DB (custom/unlisted) — include it so the user can decide
-        return true;
-      };
-
+      // Backend filters by fuel-record checkpoint (cancellationPoint); station name is not the match key.
       const entries = formData.entries ?? [];
       try {
         for (const entry of entries) {
@@ -950,7 +929,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           if (entry.truckNo && entry.truckNo.length >= 4 && entry.doNo && entry.doNo !== 'NIL') {
             const truckLPOs: { lpos: LPOSummary[], direction: string, doNo: string }[] = [];
 
-            // Check going direction if enabled
             if (hasGoingCheckpoint) {
               const goingLpos = await lpoDocumentsAPI.findAtCheckpoint(
                 entry.truckNo,
@@ -959,18 +937,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 goingCheckpoint
               );
               if (cancelled) break;
-              const filteredGoingLpos = goingLpos.filter(
-                lpo => doesLpoMatchCheckpoint(lpo.station, goingCheckpoint)
-              );
-              if (filteredGoingLpos.length > 0) {
-                truckLPOs.push({ lpos: filteredGoingLpos, direction: 'Going', doNo: entry.doNo });
+              if (goingLpos.length > 0) {
+                truckLPOs.push({ lpos: goingLpos, direction: 'Going', doNo: entry.doNo });
                 if (!newSelectedLPOs.has(entry.truckNo)) {
                   newSelectedLPOs.set(entry.truckNo, new Set());
                 }
               }
             }
 
-            // Check returning direction if enabled
             if (hasReturningCheckpoint) {
               const returningLpos = await lpoDocumentsAPI.findAtCheckpoint(
                 entry.truckNo,
@@ -979,12 +953,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 returningCheckpoint
               );
               if (cancelled) break;
-              const filteredReturningLpos = returningLpos.filter(
-                lpo => doesLpoMatchCheckpoint(lpo.station, returningCheckpoint)
-              );
-
-              if (filteredReturningLpos.length > 0) {
-                truckLPOs.push({ lpos: filteredReturningLpos, direction: 'Returning', doNo: entry.doNo });
+              if (returningLpos.length > 0) {
+                truckLPOs.push({ lpos: returningLpos, direction: 'Returning', doNo: entry.doNo });
                 if (!newSelectedLPOs.has(entry.truckNo)) {
                   newSelectedLPOs.set(entry.truckNo, new Set());
                 }
@@ -1025,7 +995,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => `${e?.truckNo || ''}-${e?.doNo || ''}`).join(','), availableStations]);
+  }, [formData.station, goingEnabled, returningEnabled, goingCheckpoint, returningCheckpoint, formData.entries?.map(e => `${e?.truckNo || ''}-${e?.doNo || ''}`).join(',')]);
 
   // Check for duplicate allocations when station or entries change (for non-CASH stations)
   useEffect(() => {
@@ -1040,14 +1010,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const warnings = new Map<string, { lpoNo: string; date: string; liters: number; isDifferentAmount: boolean; newLiters: number; isNilDo: boolean }>();
 
       try {
-        for (const entry of formData.entries) {
+        const entries = formData.entries ?? [];
+        for (let rowIdx = 0; rowIdx < entries.length; rowIdx++) {
+          const entry = entries[rowIdx];
           if (entry.truckNo && entry.truckNo.length >= 4) {
+            const direction = entryAutoFillData[rowIdx]?.direction || 'going';
             const result = await lpoDocumentsAPI.checkDuplicateAllocation(
-              entry.truckNo, 
+              entry.truckNo,
               formData.station,
               initialData?.id?.toString(),
-              entry.liters, // Pass the new liters amount to check
-              entry.doNo // Pass the DO number to check for same journey
+              entry.liters,
+              entry.doNo,
+              direction
             );
             
             if (result.hasDuplicate && result.existingLpos.length > 0) {
@@ -1075,7 +1049,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     // Debounce the check to avoid too many API calls
     const timeoutId = setTimeout(checkDuplicates, 500);
     return () => clearTimeout(timeoutId);
-  }, [formData.station, formData.entries?.map(e => e ? `${e.truckNo}:${e.liters}` : '').join(','), initialData?.id]);
+  }, [formData.station, formData.entries, entryAutoFillData, initialData?.id]);
 
   // Load initial data when editing an existing LPO
   useEffect(() => {
@@ -1143,9 +1117,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
 
     try {
-      // Fetch all fuel records for this truck
-      const response = await fuelRecordsAPI.getAll({ truckNo: truckNo.trim(), limit: 10000 });
-      const fuelRecords = response.data;
+      const { data: fuelRecords, meta } = await fuelRecordsAPI.getForLpoTruckLookup(truckNo.trim());
+      const lookupMonths = meta.lookupMonths ?? lpoTruckLookupMonths;
       
       // Debug: Log response structure to identify data flow issues
       console.log(`[LPO Truck Lookup] Truck: ${truckNo}, Records fetched: ${fuelRecords?.length || 0}`);
@@ -1206,12 +1179,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         };
       }
 
-      // Get current date and calculate month boundaries (4 months for better searching)
+      // Month boundaries for journey search (server already filtered by dateFrom; month loop picks priority)
       const now = new Date();
-      const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-      const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      const monthStarts: Date[] = [];
+      for (let i = 0; i < lookupMonths; i++) {
+        monthStarts.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
+      }
+
+      const monthLabel = (offset: number): string => {
+        if (offset === 0) return 'current';
+        if (offset === 1) return 'previous';
+        return `${offset} months ago`;
+      };
 
       // Helper to check if a date is within a specific month.
       // Uses nextMonthStart instead of monthEnd (last-day midnight) to avoid UTC vs local
@@ -1273,95 +1252,44 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         new Date(b.date).getTime() - new Date(a.date).getTime()
       );
 
-      // Search for active fuel record: current month → previous month → two months ago → three months ago
-      // Priority: ACTIVE status first, then QUEUED if no active exists
+      // Search for active fuel record month-by-month (most recent months first)
       let activeRecord: FuelRecord | null = null;
       let queuedRecord: FuelRecord | null = null;
       let searchMonth = 'current';
 
       // Helper to check if a record is ACTIVE (not queued, not completed)
       const isActiveRecord = (r: FuelRecord): boolean => {
-        // If has journeyStatus, use it (prioritize active over queued)
         if (r.journeyStatus === 'active') {
-          return true; // Active journey
+          return true;
         }
         if (r.journeyStatus === 'queued' || r.journeyStatus === 'completed') {
-          return false; // Skip queued and completed
+          return false;
         }
-        // Fallback for records without journeyStatus (backwards compatibility)
         if (r.balance !== 0) {
-          return true; // Non-zero balance (including negative) = active
+          return true;
         }
-        // If balance is 0, check if journey is truly complete based on return checkpoints
         return !isJourneyComplete(r);
       };
 
-      // Helper to check if a record is QUEUED
-      const isQueuedRecord = (r: FuelRecord): boolean => {
-        return r.journeyStatus === 'queued';
-      };
+      const isQueuedRecord = (r: FuelRecord): boolean => r.journeyStatus === 'queued';
 
-      // STEP 1: Search for ACTIVE records across all months (highest priority)
-      // First, try to find an ACTIVE record in current month
-      activeRecord = sortedRecords.find((r: FuelRecord) => 
-        isInMonth(r.date, currentMonth) && isActiveRecord(r)
-      ) || null;
-
-      if (!activeRecord) {
-        // Try previous month
-        searchMonth = 'previous';
-        activeRecord = sortedRecords.find((r: FuelRecord) => 
-          isInMonth(r.date, previousMonth) && isActiveRecord(r)
+      for (let i = 0; i < monthStarts.length && !activeRecord; i++) {
+        searchMonth = monthLabel(i);
+        activeRecord = sortedRecords.find((r: FuelRecord) =>
+          isInMonth(r.date, monthStarts[i]) && isActiveRecord(r)
         ) || null;
       }
 
-      if (!activeRecord) {
-        // Try two months ago
-        searchMonth = 'two months ago';
-        activeRecord = sortedRecords.find((r: FuelRecord) => 
-          isInMonth(r.date, twoMonthsAgo) && isActiveRecord(r)
-        ) || null;
-      }
-
-      if (!activeRecord) {
-        // Try three months ago (4 months total search window)
-        searchMonth = 'three months ago';
-        activeRecord = sortedRecords.find((r: FuelRecord) => 
-          isInMonth(r.date, threeMonthsAgo) && isActiveRecord(r)
-        ) || null;
-      }
-
-      // STEP 2: If no ACTIVE record, search for QUEUED records (fallback)
       if (!activeRecord) {
         console.log('[LPO Truck Lookup] No active journey found, searching for queued journeys...');
-        searchMonth = 'current';
-        queuedRecord = sortedRecords.find((r: FuelRecord) => 
-          isInMonth(r.date, currentMonth) && isQueuedRecord(r)
-        ) || null;
-
-        if (!queuedRecord) {
-          searchMonth = 'previous';
-          queuedRecord = sortedRecords.find((r: FuelRecord) => 
-            isInMonth(r.date, previousMonth) && isQueuedRecord(r)
-          ) || null;
-        }
-
-        if (!queuedRecord) {
-          searchMonth = 'two months ago';
-          queuedRecord = sortedRecords.find((r: FuelRecord) => 
-            isInMonth(r.date, twoMonthsAgo) && isQueuedRecord(r)
-          ) || null;
-        }
-
-        if (!queuedRecord) {
-          searchMonth = 'three months ago';
-          queuedRecord = sortedRecords.find((r: FuelRecord) => 
-            isInMonth(r.date, threeMonthsAgo) && isQueuedRecord(r)
+        for (let i = 0; i < monthStarts.length && !queuedRecord; i++) {
+          searchMonth = monthLabel(i);
+          queuedRecord = sortedRecords.find((r: FuelRecord) =>
+            isInMonth(r.date, monthStarts[i]) && isQueuedRecord(r)
           ) || null;
         }
       }
 
-      // Use queued record if no active record found
       const selectedRecord = activeRecord || queuedRecord;
 
       // If still no active or queued record, check if we have any record at all
@@ -1390,16 +1318,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           };
         }
 
-        // No active or queued record found in last 4 months
-        console.log('[LPO Truck Lookup] No active/queued journeys in last 4 months');
+        console.log(`[LPO Truck Lookup] No active/queued journeys in last ${lookupMonths} months`);
         return {
           fuelRecord: null,
           goingDo: 'NIL',
           returnDo: 'NIL',
           destination: 'NIL',
-          goingDestination: 'NIL',  // Added: original going destination
+          goingDestination: 'NIL',
           balance: 0,
-          message: '⚠️ No active journey found in last 4 months. You can still add fuel manually.',
+          message: `⚠️ No active journey found in last ${lookupMonths} months. You can still add fuel manually.`,
           success: false,
           warningType: 'no_active_record' as const
         };
@@ -1465,7 +1392,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         success: false
       };
     }
-  }, []);
+  }, [lpoTruckLookupMonths]);
 
   /**
    * Fetch journey data by DO number — sourced from the fuel record table

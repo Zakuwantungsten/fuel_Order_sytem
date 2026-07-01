@@ -10,7 +10,7 @@ import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
-import { checkAndPromoteStartedJourney } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, resolveDashboardSearchLimits } from '../services/journeyService';
 
 /**
  * Get available periods (year-month pairs) for the period picker dropdown.
@@ -171,7 +171,13 @@ export const getAvailableRoutes = async (req: AuthRequest, res: Response): Promi
  */
 export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { page, limit, sort, order } = getPaginationParams(req.query);
+    let { page, limit, sort, order } = getPaginationParams(req.query);
+    const dashboardLimits = await resolveDashboardSearchLimits('fuel', req.query);
+    if (dashboardLimits) {
+      page = dashboardLimits.page;
+      limit = dashboardLimits.limit;
+    }
+
     const { dateFrom, dateTo, truckNo, from, to, month, year, search, excludeCancelled, status } = req.query;
 
     // Build filter
@@ -189,10 +195,12 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       filter.isCancelled = true;
     }
 
-    if (dateFrom || dateTo) {
+    if (dateFrom || dateTo || dashboardLimits) {
       filter.date = {};
-      if (dateFrom) filter.date.$gte = dateFrom;
-      if (dateTo) filter.date.$lte = dateTo;
+      const effFrom = dashboardLimits?.dateFrom ?? dateFrom;
+      const effTo = dashboardLimits?.dateTo ?? dateTo;
+      if (effFrom) filter.date.$gte = effFrom;
+      if (effTo) filter.date.$lte = effTo;
     }
 
     // Multi-field search - searches truckNo, goingDo, and returnDo.
@@ -317,6 +325,53 @@ export const getFuelRecordById = async (req: AuthRequest, res: Response): Promis
       success: true,
       message: 'Fuel record retrieved successfully',
       data: fuelRecord,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Fuel records for LPO form truck lookup — date window enforced server-side from journey config.
+ */
+export const getFuelRecordsForLpoTruckLookup = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckNo } = req.params;
+
+    const sanitizedTruckNo = sanitizeRegexInput(truckNo);
+    if (!sanitizedTruckNo) {
+      throw new ApiError(400, 'Invalid truck number format');
+    }
+
+    const lookupMonths = await getLpoTruckLookupMonths();
+    const dateFrom = computeLpoTruckLookupDateFrom(lookupMonths);
+
+    const filter: any = {
+      truckNo: { $regex: sanitizedTruckNo, $options: 'i' },
+      isDeleted: false,
+      isCancelled: { $ne: true },
+      date: { $gte: dateFrom },
+    };
+
+    if (req.user?.role === 'driver') {
+      filter.truckNo = req.user.username;
+    }
+
+    const fuelRecords = await FuelRecord.find(filter)
+      .sort({ date: -1 })
+      .limit(500)
+      .lean();
+
+    const transformedRecords = fuelRecords.map((record: any) => ({
+      ...record,
+      id: record._id,
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: 'Fuel records retrieved successfully',
+      data: transformedRecords,
+      meta: { lookupMonths, dateFrom },
     });
   } catch (error: any) {
     throw error;
