@@ -673,6 +673,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setNoStationRate(0);
     setNoStationDefaultLiters(0);
     setHasDraft(false);
+    setIsForwardingMode(false);
+    setForwardedFromInfo(null);
     // Clear local storage if requested
     if (clearStorage) {
       clearFormStorage();
@@ -4791,7 +4793,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               )}
 
               {/* Create & Forward Button - Show for NEW LPOs with entries */}
-              {!initialData && formData.entries && formData.entries.length > 0 && formData.station && formData.lpoNo && !isForwardingMode && (
+              {!initialData && formData.entries && formData.entries.length > 0 && formData.station && formData.lpoNo && (
                 <button
                   type="button"
                   onClick={handleCreateAndForward}
