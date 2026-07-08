@@ -56,6 +56,22 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [isFetchingSheet, setIsFetchingSheet] = useState(false);
   const [showCancelAllModal, setShowCancelAllModal] = useState(false);
   const [isCancellingAll, setIsCancellingAll] = useState(false);
+  // Cancel-All manual checkpoint state (when lpoCancelRevert automation is OFF).
+  // Directions are resolved per active regular entry, then a checkpoint is chosen
+  // once per direction (going / returning) that is present on the LPO.
+  const [cancelAllDetecting, setCancelAllDetecting] = useState(false);
+  const [cancelAllMeta, setCancelAllMeta] = useState<Record<string, 'going' | 'returning' | null>>({});
+  const [cancelAllRevertGoing, setCancelAllRevertGoing] = useState('');
+  const [cancelAllRevertReturning, setCancelAllRevertReturning] = useState('');
+  // Restore (uncancel) manual checkpoint state — used when lpoCancelRevert is OFF
+  // and the restored entry is a real fuel-record entry (must re-deduct fuel).
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restoringEntryIndex, setRestoringEntryIndex] = useState<number | null>(null);
+  const [restoreDetecting, setRestoreDetecting] = useState(false);
+  const [restoreDirection, setRestoreDirection] = useState<'going' | 'returning' | null>(null);
+  const [restoreManualField, setRestoreManualField] = useState('');
+  const [restoreFuelRecordId, setRestoreFuelRecordId] = useState<string | number | null>(null);
+  const [showRestoreInspect, setShowRestoreInspect] = useState(false);
   const [entrySearch, setEntrySearch] = useState('');
   const [fuelAutomation, setFuelAutomation] = useState<FuelAutomationConfig | null>(null);
   const [highlightedTruckNo, setHighlightedTruckNo] = useState<string | null>(null);
@@ -605,8 +621,49 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }
   };
 
-  // Handle uncancelling an entry (restore it)
-  const handleUncancelEntry = async (index: number) => {
+  // Is this entry a real fuel-record entry (not DA/REF/NIL)? Only these re-deduct
+  // fuel on restore and therefore need a manual checkpoint when automation is OFF.
+  const isRegularFuelEntry = (entry: any): boolean => {
+    const doUp = (entry?.doNo || '').toUpperCase().trim();
+    return !entry?.isDriverAccount && !entry?.isRefer &&
+      doUp !== 'NIL' && doUp !== 'REF' && doUp !== 'DA' && doUp !== '' && doUp !== 'N/A';
+  };
+
+  // Entry point for the Restore button. When lpoCancelRevert automation is OFF and
+  // the entry backs a fuel record, prompt for the re-deduct checkpoint; otherwise
+  // restore immediately (automation ON, or DA/REF/NIL entries have no fuel record).
+  const openRestoreEntry = async (index: number) => {
+    const entry = editedSheet.entries[index];
+    if (fuelAutomation?.lpoCancelRevert !== false || !isRegularFuelEntry(entry)) {
+      await handleUncancelEntry(index);
+      return;
+    }
+
+    setRestoringEntryIndex(index);
+    setRestoreDirection(null);
+    setRestoreManualField('');
+    setRestoreFuelRecordId(null);
+    setRestoreDetecting(true);
+    setShowRestoreModal(true);
+    try {
+      const res = await fuelRecordsAPI.getByDoNumber(entry.doNo);
+      if (res) {
+        setRestoreDirection(res.direction);
+        const fr: any = res.fuelRecord;
+        setRestoreFuelRecordId(fr?.id ?? fr?._id ?? null);
+      } else {
+        setRestoreDirection('going');
+      }
+    } catch {
+      setRestoreDirection('going');
+    } finally {
+      setRestoreDetecting(false);
+    }
+  };
+
+  // Handle uncancelling an entry (restore it). When manualField is supplied
+  // (automation OFF), it is sent so the backend re-deducts from that column.
+  const handleUncancelEntry = async (index: number, manualField?: string) => {
     if (isSaving) return;
     setIsSaving(true);
 
@@ -640,16 +697,25 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         .filter(e => !e.isCancelled)
         .reduce((sum, e) => sum + e.amount, 0);
 
-      const updatedSheet = {
+      const updatedSheet: any = {
         ...editedSheet,
         entries: updatedEntries,
         total: newTotal
       };
+      // Manual checkpoint override (automation OFF) — backend re-deducts the chosen column.
+      if (manualField) {
+        updatedSheet.manualCheckpoints = {
+          [`${originalEntry.doNo}-${originalEntry.truckNo}`]: manualField,
+        };
+      }
 
       // Save to backend
       const savedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, updatedSheet);
       onUpdate(savedSheet);
       setEditedSheet(savedSheet);
+
+      setShowRestoreModal(false);
+      setRestoringEntryIndex(null);
 
       await releaseLockIfNeeded();
       toast.success('Entry restored successfully! Fuel record has been updated.');
@@ -662,11 +728,84 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }
   };
 
+  // Confirm restore from the manual-checkpoint modal.
+  const handleConfirmRestore = async () => {
+    if (restoringEntryIndex === null) return;
+    if (!restoreManualField) {
+      toast.error('Please select the checkpoint to re-deduct the fuel from.');
+      return;
+    }
+    await handleUncancelEntry(restoringEntryIndex, restoreManualField);
+  };
+
+  // Active regular entries (real fuel record) — the only ones whose fuel is reverted.
+  const cancelAllRegularEntries = useMemo(
+    () => editedSheet.entries.filter(e => {
+      const doUp = (e.doNo || '').toUpperCase().trim();
+      return !e.isCancelled && !e.isDriverAccount && !(e as any).isRefer &&
+        doUp !== 'NIL' && doUp !== 'REF' && doUp !== 'DA' && doUp !== '' && doUp !== 'N/A';
+    }),
+    [editedSheet.entries]
+  );
+
+  // Whether the operator must pick revert checkpoints for Cancel-All (automation OFF).
+  const cancelAllNeedsManual = fuelAutomation?.lpoCancelRevert === false && cancelAllRegularEntries.length > 0;
+  const cancelAllHasGoing = Object.values(cancelAllMeta).some(d => d === 'going');
+  const cancelAllHasReturning = Object.values(cancelAllMeta).some(d => d === 'returning');
+  const cancelAllManualReady =
+    (!cancelAllHasGoing || !!cancelAllRevertGoing) && (!cancelAllHasReturning || !!cancelAllRevertReturning);
+
+  // When the Cancel-All modal opens with automation OFF, resolve each regular
+  // truck's direction so we know whether to show going / returning dropdowns.
+  useEffect(() => {
+    if (!showCancelAllModal || fuelAutomation?.lpoCancelRevert !== false) return;
+    let cancelled = false;
+    setCancelAllDetecting(true);
+    setCancelAllMeta({});
+    setCancelAllRevertGoing('');
+    setCancelAllRevertReturning('');
+    (async () => {
+      const meta: Record<string, 'going' | 'returning' | null> = {};
+      await Promise.all(cancelAllRegularEntries.map(async (e) => {
+        const key = `${e.doNo}-${e.truckNo}`;
+        try {
+          const res = await fuelRecordsAPI.getByDoNumber(e.doNo);
+          meta[key] = res ? res.direction : null;
+        } catch {
+          meta[key] = null;
+        }
+      }));
+      if (!cancelled) {
+        setCancelAllMeta(meta);
+        setCancelAllDetecting(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCancelAllModal, fuelAutomation?.lpoCancelRevert]);
+
   // Handle cancelling ALL active entries in the LPO
   const handleCancelAll = async () => {
+    // When automation is OFF, require a checkpoint for each present direction and
+    // build the per-truck manual checkpoint map for the backend.
+    let manualCheckpoints: Record<string, string> | undefined;
+    if (cancelAllNeedsManual) {
+      if (!cancelAllManualReady) {
+        toast.error('Please select the checkpoint(s) to revert the fuel from.');
+        return;
+      }
+      manualCheckpoints = {};
+      for (const e of cancelAllRegularEntries) {
+        const key = `${e.doNo}-${e.truckNo}`;
+        const dir = cancelAllMeta[key];
+        const field = dir === 'returning' ? cancelAllRevertReturning : dir === 'going' ? cancelAllRevertGoing : '';
+        if (field) manualCheckpoints[key] = field;
+      }
+    }
+
     setIsCancellingAll(true);
     try {
-      await lpoDocumentsAPI.cancelAll(editedSheet.id as string, 'Bulk LPO cancellation');
+      await lpoDocumentsAPI.cancelAll(editedSheet.id as string, 'Bulk LPO cancellation', manualCheckpoints);
       setShowCancelAllModal(false);
       // Refresh sheet from server to get updated state
       await refreshSheet();
@@ -1355,7 +1494,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                       {/* Actions */}
                       <div className="flex gap-[9px] mt-[13px]">
                         {isCancelled ? (
-                          <button onClick={() => handleUncancelEntry(originalIndex)} disabled={isSaving} className="flex-1 flex items-center justify-center gap-[7px] h-[42px] rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-[13px] font-bold hover:bg-green-100 dark:hover:bg-green-900/30 disabled:opacity-50">
+                          <button onClick={() => openRestoreEntry(originalIndex)} disabled={isSaving} className="flex-1 flex items-center justify-center gap-[7px] h-[42px] rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-[13px] font-bold hover:bg-green-100 dark:hover:bg-green-900/30 disabled:opacity-50">
                             <RotateCcw className="w-[15px] h-[15px]" />Restore Entry
                           </button>
                         ) : (
@@ -1554,7 +1693,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         <>
                           <span className="text-xs text-red-600 font-medium mr-1">CANCELLED</span>
                           <button
-                            onClick={() => handleUncancelEntry(originalIndex)}
+                            onClick={() => openRestoreEntry(originalIndex)}
                             className="p-1 text-green-600 hover:text-green-800"
                             title="Restore Entry"
                           >
@@ -1945,6 +2084,67 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   </>
                 );
               })()}
+
+              {/* Automation OFF — operator picks the revert checkpoint per direction */}
+              {cancelAllNeedsManual && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg space-y-3">
+                  <p className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Automation OFF — choose the checkpoint(s) to revert.</strong>{' '}
+                      Fuel will be reverted from the column you pick for each direction present on this LPO.
+                    </span>
+                  </p>
+
+                  {cancelAllDetecting ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Resolving truck directions…
+                    </p>
+                  ) : (
+                    <>
+                      {cancelAllHasGoing && (
+                        <div>
+                          <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase mb-1">
+                            Going revert checkpoint
+                          </label>
+                          <select
+                            value={cancelAllRevertGoing}
+                            onChange={(e) => setCancelAllRevertGoing(e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-amber-300 dark:border-amber-700 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          >
+                            <option value="">Select column…</option>
+                            {FUEL_RECORD_COLUMNS.going.map((c) => (
+                              <option key={c.field} value={c.field}>{c.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      {cancelAllHasReturning && (
+                        <div>
+                          <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase mb-1">
+                            Returning revert checkpoint
+                          </label>
+                          <select
+                            value={cancelAllRevertReturning}
+                            onChange={(e) => setCancelAllRevertReturning(e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-amber-300 dark:border-amber-700 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          >
+                            <option value="">Select column…</option>
+                            {FUEL_RECORD_COLUMNS.return.map((c) => (
+                              <option key={c.field} value={c.field}>{c.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      {!cancelAllHasGoing && !cancelAllHasReturning && (
+                        <p className="text-xs text-amber-700 dark:text-amber-300">
+                          Could not resolve a fuel-record direction for any truck. Cancelling will mark rows cancelled without reverting fuel.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t dark:border-gray-700">
@@ -1956,8 +2156,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
               </button>
               <button
                 onClick={handleCancelAll}
-                disabled={isCancellingAll}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50"
+                disabled={isCancellingAll || cancelAllDetecting || (cancelAllNeedsManual && (cancelAllHasGoing || cancelAllHasReturning) && !cancelAllManualReady)}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isCancellingAll ? 'Cancelling...' : 'Cancel Entire LPO'}
               </button>
@@ -1985,6 +2185,95 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           onClose={() => setShowCancelInspect(false)}
           fuelRecordId={detectedFuelRecordId}
           truckNumber={cancellingEntryIndex !== null ? editedSheet.entries[cancellingEntryIndex]?.truckNo : undefined}
+        />
+      )}
+
+      {/* Restore manual checkpoint modal (lpoCancelRevert OFF + regular entry) */}
+      {showRestoreModal && restoringEntryIndex !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-green-700 dark:text-green-400 flex items-center gap-2">
+                <RotateCcw className="w-5 h-5" /> Restore Entry
+              </h3>
+              <button
+                onClick={() => { setShowRestoreModal(false); setRestoringEntryIndex(null); }}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-300">
+                Restoring <strong>{editedSheet.entries[restoringEntryIndex].truckNo}</strong>
+                {' '}({editedSheet.entries[restoringEntryIndex].doNo} — {editedSheet.entries[restoringEntryIndex].liters}L)
+              </div>
+
+              {restoreDetecting ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Resolving fuel record direction…
+                </p>
+              ) : (
+                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg space-y-2">
+                  <p className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Automation OFF — choose the checkpoint to re-deduct.</strong>{' '}
+                      Direction is <strong>{restoreDirection === 'returning' ? 'returning' : 'going'}</strong>. The {editedSheet.entries[restoringEntryIndex].liters}L will be re-deducted from the column you pick.
+                    </span>
+                  </p>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase mb-1">Re-deduct checkpoint</label>
+                      <select
+                        value={restoreManualField}
+                        onChange={(e) => setRestoreManualField(e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border border-amber-300 dark:border-amber-700 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      >
+                        <option value="">Select column…</option>
+                        {(restoreDirection === 'returning' ? FUEL_RECORD_COLUMNS.return : FUEL_RECORD_COLUMNS.going).map((c) => (
+                          <option key={c.field} value={c.field}>{c.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {restoreFuelRecordId != null && (
+                      <button
+                        onClick={() => setShowRestoreInspect(true)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      >
+                        <Search className="w-3.5 h-3.5" /> Inspect
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <button
+                onClick={() => { setShowRestoreModal(false); setRestoringEntryIndex(null); }}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRestore}
+                disabled={restoreDetecting || isSaving || !restoreManualField}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? 'Processing...' : 'Confirm Restore'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inspect fuel record from the restore modal */}
+      {showRestoreInspect && restoreFuelRecordId != null && (
+        <FuelRecordInspectModal
+          isOpen={showRestoreInspect}
+          onClose={() => setShowRestoreInspect(false)}
+          fuelRecordId={restoreFuelRecordId}
+          truckNumber={restoringEntryIndex !== null ? editedSheet.entries[restoringEntryIndex]?.truckNo : undefined}
         />
       )}
 

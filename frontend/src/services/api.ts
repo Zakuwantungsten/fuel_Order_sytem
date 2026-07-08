@@ -882,9 +882,15 @@ export const lpoDocumentsAPI = {
     return response.data.data;
   },
 
-  // Cancel ALL active entries in an LPO at once
-  cancelAll: async (id: string, reason?: string): Promise<{ lpoNo: string; results: any[] }> => {
-    const response = await apiClient.post(`/lpo-documents/${id}/cancel-all`, { reason });
+  // Cancel ALL active entries in an LPO at once.
+  // When lpoCancelRevert automation is OFF, manualCheckpoints maps
+  // `${doNo}-${truckNo}` -> the fuel column to revert that truck from.
+  cancelAll: async (
+    id: string,
+    reason?: string,
+    manualCheckpoints?: Record<string, string>
+  ): Promise<{ lpoNo: string; results: any[] }> => {
+    const response = await apiClient.post(`/lpo-documents/${id}/cancel-all`, { reason, manualCheckpoints });
     return response.data.data;
   },
 

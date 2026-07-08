@@ -2535,9 +2535,20 @@ export const amendTruckInLPO = async (req: AuthRequest, res: Response): Promise<
  */
 export const cancelAllEntriesInLPO = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { reason } = req.body;
+  const { reason, manualCheckpoints } = req.body;
   const username = req.user?.username || 'system';
   const displayName = await getDisplayName(username);
+
+  // When lpoCancelRevert automation is OFF, the operator must pick which fuel
+  // column to revert each regular truck from. Those picks arrive keyed by
+  // `${doNo}-${truckNo}`; we validate them against the known checkpoint fields.
+  const fuelFlags = await getFuelAutomationFlags();
+  const rawManualCheckpoints = (manualCheckpoints || {}) as Record<string, string>;
+  const manualFieldFor = (e: any): string | undefined => {
+    const f = rawManualCheckpoints[`${e.doNo}-${e.truckNo}`];
+    return f && FUEL_CHECKPOINT_FIELDS.has(f) ? f : undefined;
+  };
+
   await withLpoLock(id, username, displayName, async () => {
 
     const lpo = await LPOSummary.findOne({ _id: id, isDeleted: false });
@@ -2564,22 +2575,31 @@ export const cancelAllEntriesInLPO = async (req: AuthRequest, res: Response): Pr
 
       if (!isNilOrSpecial && entry.truckNo && entry.doNo) {
         // Regular entry — revert fuel record
-        try {
-          await updateFuelRecordForLPOEntry(
-            entry.doNo,
-            -entry.liters,
-            lpo.station,
-            entry.truckNo,
-            entry.cancellationPoint,
-            entry.isCustomStation ? {
-              isCustomStation: entry.isCustomStation,
-              customGoingCheckpoint: entry.customGoingCheckpoint,
-              customReturnCheckpoint: entry.customReturnCheckpoint,
-            } : undefined
-          );
-          results.push({ truckNo: entry.truckNo, reverted: true });
-        } catch (err) {
-          results.push({ truckNo: entry.truckNo, reverted: false, error: String(err) });
+        const manualField = manualFieldFor(entry);
+        if (!fuelFlags.lpoCancelRevert && !manualField) {
+          // Automation off and no checkpoint chosen — cancel the row but leave
+          // the fuel record untouched (operator did not pick a column).
+          results.push({ truckNo: entry.truckNo, reverted: false, reason: 'Automation OFF - no checkpoint selected' });
+        } else {
+          try {
+            await updateFuelRecordForLPOEntry(
+              entry.doNo,
+              -entry.liters,
+              lpo.station,
+              entry.truckNo,
+              fuelFlags.lpoCancelRevert ? entry.cancellationPoint : undefined,
+              entry.isCustomStation ? {
+                isCustomStation: entry.isCustomStation,
+                customGoingCheckpoint: entry.customGoingCheckpoint,
+                customReturnCheckpoint: entry.customReturnCheckpoint,
+              } : undefined,
+              undefined,
+              fuelFlags.lpoCancelRevert ? undefined : { explicitField: manualField }
+            );
+            results.push({ truckNo: entry.truckNo, reverted: true });
+          } catch (err) {
+            results.push({ truckNo: entry.truckNo, reverted: false, error: String(err) });
+          }
         }
       } else {
         const entryKind = isDriverAccount ? 'DA' : isRefer ? 'REF' : 'NIL DO';
