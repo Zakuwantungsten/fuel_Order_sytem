@@ -242,6 +242,20 @@ apiClient.interceptors.response.use(
   }
 );
 
+// A candidate going fuel record an EXPORT DO can be linked to (manual link flow).
+export interface ExportLinkCandidate {
+  fuelRecordId: string;
+  date: string;
+  goingDo: string;
+  journeyStatus?: string;
+  goingFrom: string;
+  goingTo: string;
+  totalLts: number;
+  extra: number;
+  balance: number;
+  fuelRecord: FuelRecord;
+}
+
 // Delivery Orders API
 export const deliveryOrdersAPI = {
   getAll: async (filters?: any): Promise<{ data: DeliveryOrder[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
@@ -345,6 +359,40 @@ export const deliveryOrdersAPI = {
     };
   }> => {
     const response = await apiClient.post(`/delivery-orders/${id}/relink-to-fuel-record`);
+    return response.data;
+  },
+
+  // Preview candidate going fuel records an EXPORT DO can be linked to (dry run).
+  // Used for the manual "Link" flow when doExportUpdate automation is off.
+  previewExportLink: async (id: string | number): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      deliveryOrder: DeliveryOrder;
+      alreadyLinked: boolean;
+      alreadyLinkedRecord: FuelRecord | null;
+      candidates: ExportLinkCandidate[];
+      exportRouteLiters: number;
+      routeMatched: boolean;
+    };
+  }> => {
+    const response = await apiClient.get(`/delivery-orders/${id}/link-candidates`);
+    return response.data;
+  },
+
+  // Link an EXPORT DO to a specific, user-chosen fuel record.
+  confirmExportLink: async (id: string | number, fuelRecordId: string): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      deliveryOrder: DeliveryOrder;
+      fuelRecord: FuelRecord | null;
+      wasAlreadyLinked?: boolean;
+      previousGoingJourney?: { from: string; to: string };
+      fuelUpdates?: { originalTotalLts: number; exportRouteLiters: number; newTotalLts: number } | null;
+    };
+  }> => {
+    const response = await apiClient.post(`/delivery-orders/${id}/confirm-export-link`, { fuelRecordId });
     return response.data;
   },
 

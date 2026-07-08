@@ -273,15 +273,6 @@ export default function FuelRecordDetailsModal({
                       )}
                     </div>
 
-                    {journeyInfo?.hasDestinationChanged && (
-                      <div className="flex items-start gap-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                        <p className="text-xs text-amber-700 dark:text-amber-400">
-                          Original destination <strong>{journeyInfo.goingJourney.to}</strong> preserved for fuel calculations.
-                        </p>
-                      </div>
-                    )}
-
                     {journeyInfo?.goingJourney.deliveryOrder?.loadingPoint && (
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                         <MapPin className="w-3.5 h-3.5 shrink-0" />

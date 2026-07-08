@@ -6,7 +6,7 @@ import { RouteConfig } from '../models/RouteConfig';
 import { ArchivedDeliveryOrder } from '../models/ArchivedData';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex, normalizeTruckNo } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
@@ -976,6 +976,31 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
 
     // Attach live edit-lock info so the "Editing: …" badge shows on load.
     await attachLocks('delivery_orders', deliveryOrders);
+
+    // Annotate EXPORT DOs with whether they already have a linked fuel record
+    // (a fuel record whose returnDo == this DO number). Lets the DO list show a
+    // Link button / status only for unlinked EXPORT DOs without an extra call per row.
+    try {
+      const exportDoNumbers = (deliveryOrders as any[])
+        .filter((o) => o.importOrExport === 'EXPORT' && o.doType === 'DO' && o.doNumber)
+        .map((o) => o.doNumber);
+      if (exportDoNumbers.length > 0) {
+        const linkedRecords = await FuelRecord.find({
+          returnDo: { $in: exportDoNumbers },
+          isDeleted: false,
+        })
+          .select('returnDo')
+          .lean();
+        const linkedSet = new Set(linkedRecords.map((r: any) => r.returnDo));
+        for (const o of deliveryOrders as any[]) {
+          if (o.importOrExport === 'EXPORT' && o.doType === 'DO') {
+            o.isLinkedToFuelRecord = linkedSet.has(o.doNumber);
+          }
+        }
+      }
+    } catch (linkErr: any) {
+      logger.warn(`Export link-status annotation failed: ${linkErr.message}`);
+    }
 
     const response = createPaginatedResponse(deliveryOrders, page, limit, total);
 
@@ -4264,6 +4289,224 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
       },
     });
     emitDataChange('fuel_records', 'update');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+// ── Manual EXPORT-DO linking (preview + confirm) ────────────────────────────
+// Used when the `doExportUpdate` automation is turned off (e.g. imported data
+// that isn't structured like system-generated records). Mirrors the DAR/Tanga
+// yard "link to fuel record" UX: the user previews the going record(s) found for
+// the truck, chooses one, and links — reusing the same buildReturnUpdate logic
+// as the automatic path so the going leg is preserved (originalGoing* snapshot).
+
+/**
+ * Find candidate going fuel records for an EXPORT DO's truck.
+ * Unlike the auto path (relinkExportDOToFuelRecord / applyExportFuelUpdates), this
+ * does NOT require journeyStatus 'active' — imported records land as 'completed'.
+ * We match any non-cancelled, non-deleted record for the truck that does not yet
+ * have a return DO. Truck matching is whitespace/hyphen-tolerant so imports like
+ * "T790-EEU" still match "T790 EEU". Most-recent first, capped at 50.
+ */
+const findExportLinkCandidates = async (truckNo: string): Promise<any[]> => {
+  const normalized = normalizeTruckNo(truckNo);
+  if (!normalized) return [];
+  const m = normalized.match(/^(T?\d+)([A-Z]+)$/);
+  const pattern = m ? `^${m[1]}[\\s-]*${m[2]}$` : `^${normalized}$`;
+  return FuelRecord.find({
+    truckNo: { $regex: new RegExp(pattern, 'i') },
+    isDeleted: false,
+    isCancelled: { $ne: true },
+    $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
+  })
+    .sort({ date: -1 })
+    .limit(50)
+    .lean();
+};
+
+/**
+ * Preview the going fuel record(s) an EXPORT DO can be linked to, so the UI can
+ * show a list view and let the user choose + inspect before committing. Dry run —
+ * performs no writes.
+ */
+export const previewExportLinkCandidates = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const deliveryOrder = await DeliveryOrder.findOne({ _id: id, isDeleted: false });
+    if (!deliveryOrder) {
+      throw new ApiError(404, 'Delivery order not found');
+    }
+    if (deliveryOrder.importOrExport !== 'EXPORT') {
+      throw new ApiError(400, 'Only EXPORT (return) DOs can be linked to fuel records');
+    }
+    if (deliveryOrder.doType === 'SDO') {
+      throw new ApiError(400, 'SDO orders do not have fuel records');
+    }
+
+    // Already linked? Surface the existing record so the UI can show status.
+    const existingLink = await FuelRecord.findOne({
+      returnDo: deliveryOrder.doNumber,
+      isDeleted: false,
+    }).lean();
+
+    // Export route liters that would be added on link (same for every candidate).
+    const { routes } = await loadFuelConfig();
+    const routeMatch = matchExportRouteLiters(
+      routes,
+      deliveryOrder.loadingPoint || '',
+      deliveryOrder.destination || ''
+    );
+    const exportRouteLiters = routeMatch.matched ? routeMatch.liters : 0;
+
+    const rawCandidates = existingLink ? [] : await findExportLinkCandidates(deliveryOrder.truckNo);
+    const candidates = rawCandidates.map((fr: any) => ({
+      fuelRecordId: String(fr._id),
+      date: fr.date,
+      goingDo: fr.goingDo,
+      journeyStatus: fr.journeyStatus,
+      // Going leg (prefer the preserved snapshot, though it should be empty here
+      // since these records have no return DO yet).
+      goingFrom: fr.originalGoingFrom || fr.from,
+      goingTo: fr.originalGoingTo || fr.to,
+      totalLts: fr.totalLts ?? 0,
+      extra: fr.extra ?? 0,
+      balance: fr.balance ?? 0,
+      fuelRecord: fr,
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: existingLink
+        ? 'DO is already linked to a fuel record'
+        : `${candidates.length} candidate fuel record(s) found for truck ${deliveryOrder.truckNo}`,
+      data: {
+        deliveryOrder,
+        alreadyLinked: !!existingLink,
+        alreadyLinkedRecord: existingLink || null,
+        candidates,
+        exportRouteLiters,
+        routeMatched: routeMatch.matched,
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Link an EXPORT DO to a specific, user-chosen fuel record. Reuses buildReturnUpdate
+ * so the going leg is snapshotted into originalGoingFrom/To and the return leg + export
+ * route liters are applied exactly as the automatic path does.
+ */
+export const confirmExportLink = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { fuelRecordId } = req.body;
+    const username = req.user?.username || 'system';
+
+    if (!fuelRecordId) {
+      throw new ApiError(400, 'fuelRecordId is required');
+    }
+
+    const deliveryOrder = await DeliveryOrder.findOne({ _id: id, isDeleted: false });
+    if (!deliveryOrder) {
+      throw new ApiError(404, 'Delivery order not found');
+    }
+    if (deliveryOrder.importOrExport !== 'EXPORT') {
+      throw new ApiError(400, 'Only EXPORT (return) DOs can be linked to fuel records');
+    }
+    if (deliveryOrder.doType === 'SDO') {
+      throw new ApiError(400, 'SDO orders do not have fuel records');
+    }
+
+    // Guard against double-linking the DO to a second record.
+    const existingLink = await FuelRecord.findOne({
+      returnDo: deliveryOrder.doNumber,
+      isDeleted: false,
+    }).lean();
+    if (existingLink) {
+      res.status(200).json({
+        success: true,
+        message: 'DO is already linked to a fuel record',
+        data: { deliveryOrder, fuelRecord: existingLink, wasAlreadyLinked: true },
+      });
+      return;
+    }
+
+    const fuelRecord = await FuelRecord.findOne({
+      _id: fuelRecordId,
+      isDeleted: false,
+      isCancelled: { $ne: true },
+    });
+    if (!fuelRecord) {
+      throw new ApiError(404, 'Selected fuel record not found or is cancelled');
+    }
+    if (fuelRecord.returnDo && String(fuelRecord.returnDo).trim() !== '') {
+      throw new ApiError(400, `Selected fuel record already has a return DO (${fuelRecord.returnDo})`);
+    }
+
+    // Compute export route liters and build the return update (preserves going leg).
+    const { routes } = await loadFuelConfig();
+    const routeMatch = matchExportRouteLiters(
+      routes,
+      deliveryOrder.loadingPoint || '',
+      deliveryOrder.destination || ''
+    );
+    const exportRouteLiters = routeMatch.matched ? routeMatch.liters : 0;
+    if (!routeMatch.matched) {
+      logger.warn(
+        `EXPORT route not found for ${deliveryOrder.loadingPoint} → ${deliveryOrder.destination}. Linking without adding liters.`
+      );
+    }
+
+    const { update, info } = buildReturnUpdate(
+      fuelRecord.toObject(),
+      deliveryOrder as unknown as DeliveryOrderLike,
+      exportRouteLiters
+    );
+
+    const updatedFuelRecord = await FuelRecord.findByIdAndUpdate(fuelRecord._id, update, { new: true });
+
+    // Resolve any pending unlinked-DO notification for this DO.
+    try {
+      const { resolveUnlinkedDONotification } = await import('./notificationController');
+      await resolveUnlinkedDONotification(id, username);
+    } catch (notifErr: any) {
+      logger.warn(`Failed to resolve unlinked-DO notification for ${id}: ${notifErr?.message}`);
+    }
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username,
+      action: 'UPDATE',
+      resourceType: 'FuelRecord',
+      resourceId: String(fuelRecord._id),
+      details: `EXPORT DO ${deliveryOrder.doNumber} (truck: ${deliveryOrder.truckNo}) manually linked to fuel record ${fuelRecord._id} by ${username}${routeMatch.matched ? `, added ${exportRouteLiters}L from export route (${info.originalTotalLiters}L → ${info.newTotalLiters}L)` : ' (no export route matched — liters unchanged)'}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    }).catch((err: any) => logger.warn(`Failed to write audit for manual export link (DO ${deliveryOrder.doNumber}): ${err?.message}`));
+
+    logger.info(
+      `Manually linked EXPORT DO ${deliveryOrder.doNumber} to fuel record ${fuelRecord._id} by ${username}${routeMatch.matched ? `, added ${exportRouteLiters}L` : ''}`
+    );
+
+    emitDataChange('fuel_records', 'update');
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully linked DO-${deliveryOrder.doNumber} to fuel record for truck ${deliveryOrder.truckNo}${routeMatch.matched ? `. Added ${exportRouteLiters}L from export route (${info.originalTotalLiters}L → ${info.newTotalLiters}L)` : ''}`,
+      data: {
+        deliveryOrder,
+        fuelRecord: updatedFuelRecord,
+        wasAlreadyLinked: false,
+        previousGoingJourney: { from: update.originalGoingFrom, to: update.originalGoingTo },
+        fuelUpdates: routeMatch.matched
+          ? { originalTotalLts: info.originalTotalLiters, exportRouteLiters, newTotalLts: info.newTotalLiters }
+          : null,
+      },
+    });
   } catch (error: any) {
     throw error;
   }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar } from 'lucide-react';
+import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar, Link2 } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI, resourceLockAPI } from '../services/api';
 import DODetailModal from '../components/DODetailModal';
@@ -12,6 +12,7 @@ import MonthlySummary from '../components/MonthlySummary';
 import DOWorkbook from '../components/DOWorkbook';
 import CancelDOModal from '../components/CancelDOModal';
 import AmendedDOsModal from '../components/AmendedDOsModal';
+import ExportLinkModal from '../components/ExportLinkModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import Pagination from '../components/Pagination';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
@@ -48,7 +49,12 @@ interface DeliveryOrdersProps {
 
 const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const queryClient = useQueryClient();
-  const { isDark } = useAuth();
+  const { isDark, user: authUser } = useAuth();
+  // Manual EXPORT-DO → fuel-record linking is only exposed to admins + the fuel
+  // order maker (used when the doExportUpdate automation is off, e.g. imported data).
+  const canLinkExportDO = ['super_admin', 'admin', 'fuel_order_maker'].includes(
+    (authUser?.role || user?.role || '') as string
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = usePersistedState('do:searchTerm', '');
   const [filterType, setFilterType] = usePersistedState('do:filterType', 'ALL');
@@ -69,6 +75,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [cancellingOrder, setCancellingOrder] = useState<DeliveryOrder | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
+  const [linkingExportOrder, setLinkingExportOrder] = useState<DeliveryOrder | null>(null);
   const [conflictData, setConflictData] = useState<{ currentRecord: any; pendingData: any } | null>(null);
   const [activeTab, setActiveTab] = usePersistedState<'list' | 'summary' | 'workbook'>('do:activeTab', 'list');
   
@@ -1800,6 +1807,21 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                               <Ban className="w-4 h-4 mr-1" />
                               Cancel
                             </button>
+                            {canLinkExportDO &&
+                              order.importOrExport === 'EXPORT' &&
+                              order.doType === 'DO' &&
+                              !order.isLinkedToFuelRecord && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLinkingExportOrder(order);
+                                  }}
+                                  className="flex-1 px-3 py-2 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 inline-flex items-center justify-center"
+                                >
+                                  <Link2 className="w-4 h-4 mr-1" />
+                                  Link
+                                </button>
+                              )}
                           </>
                         )}
                         {order.isCancelled && order.cancellationReason && (
@@ -1939,6 +1961,21 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                                 >
                                   <Ban className="w-4 h-4" />
                                 </button>
+                                {canLinkExportDO &&
+                                  order.importOrExport === 'EXPORT' &&
+                                  order.doType === 'DO' &&
+                                  !order.isLinkedToFuelRecord && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setLinkingExportOrder(order);
+                                      }}
+                                      className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 ml-3"
+                                      title="Link to fuel record"
+                                    >
+                                      <Link2 className="w-4 h-4" />
+                                    </button>
+                                  )}
                               </>
                             )}
                             {order.isCancelled && order.cancellationReason && (
@@ -2023,6 +2060,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       <AmendedDOsModal
         isOpen={isAmendedDOsModalOpen}
         onClose={() => setIsAmendedDOsModalOpen(false)}
+      />
+
+      {/* Manual EXPORT DO → fuel record linking */}
+      <ExportLinkModal
+        isOpen={!!linkingExportOrder}
+        order={linkingExportOrder}
+        onClose={() => setLinkingExportOrder(null)}
+        onLinked={() => {
+          refetchOrders();
+          queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+          queryClient.invalidateQueries({ queryKey: fuelRecordKeys.all });
+        }}
       />
 
       <ConflictModal

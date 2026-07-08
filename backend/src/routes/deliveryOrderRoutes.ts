@@ -110,6 +110,24 @@ router.post(
   asyncHandler(deliveryOrderController.relinkExportDOToFuelRecord)
 );
 
+// Manual EXPORT-DO linking (preview candidates + confirm link to a chosen record).
+// Restricted to admin roles + fuel_order_maker — used when doExportUpdate automation
+// is off (e.g. imported data). Preview is a dry run; confirm performs the link.
+router.get(
+  '/:id/link-candidates',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'fuel_order_maker'),
+  validate,
+  asyncHandler(deliveryOrderController.previewExportLinkCandidates)
+);
+router.post(
+  '/:id/confirm-export-link',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'fuel_order_maker'),
+  validate,
+  asyncHandler(deliveryOrderController.confirmExportLink)
+);
+
 // Create notification for unlinked EXPORT DO
 router.post(
   '/notify-unlinked-export',

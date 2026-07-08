@@ -56,6 +56,9 @@ export interface DeliveryOrder {
     lockedAt?: string;
     lockedUntil?: string;
   };
+  // Whether an EXPORT DO already has a linked fuel record (returnDo match).
+  // Server-annotated on the list endpoint; used to show the manual Link action.
+  isLinkedToFuelRecord?: boolean;
   // Transient fields for update requests
   reason?: string;
   clientUpdatedAt?: string;
