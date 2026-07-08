@@ -22,6 +22,7 @@ import tahmeedLogo from './assets/logo.png';
 import tahmeedLogoDark from './assets/Dec 2, 2025, 06_08_52 PM.png';
 import { LogOut, RefreshCw, Wrench, Clock, Shield } from 'lucide-react';
 import SystemBanner from './components/SystemBanner';
+import UpdateBanner from './components/UpdateBanner';
 
 // Shown to non-allowed users when the system is in maintenance mode
 function MaintenancePage({ message, onLogout }: { message: string; onLogout: () => void }) {
@@ -371,6 +372,7 @@ function App() {
           <AppContent />
         </Router>
       </AmendedDOsProvider>
+      <UpdateBanner />
       <ToastContainer
         position="bottom-right"
         autoClose={4000}

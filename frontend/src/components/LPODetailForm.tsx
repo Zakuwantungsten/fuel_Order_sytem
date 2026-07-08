@@ -3387,13 +3387,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   name="date"
                   value={formData.date}
                   onChange={handleHeaderChange}
+                  onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
                   required
-                  className="fld"
+                  className="fld cursor-pointer"
                 />
               </div>
 
               {/* Station */}
-              <div>
+              <div className="col-span-2 lg:col-span-1">
                 <label className="lbl">Station</label>
                 <div className="relative" ref={stationDropdownRef}>
                   <button

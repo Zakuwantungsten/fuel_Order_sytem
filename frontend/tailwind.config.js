@@ -30,9 +30,14 @@ export default {
           '0%': { transform: 'translateX(100%)' },
           '100%': { transform: 'translateX(0)' },
         },
+        'fade-in-up': {
+          '0%': { opacity: '0', transform: 'translate(-50%, 12px)' },
+          '100%': { opacity: '1', transform: 'translate(-50%, 0)' },
+        },
       },
       animation: {
         'slide-in-right': 'slide-in-right 0.25s ease-out',
+        'fade-in-up': 'fade-in-up 0.25s ease-out',
       },
     },
   },
