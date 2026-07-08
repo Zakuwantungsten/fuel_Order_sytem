@@ -2,8 +2,17 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
+  esbuild: {
+    // In production builds, treat these console methods as side-effect-free so
+    // esbuild drops them during minification. console.error / console.warn are
+    // intentionally kept so real errors still surface to error-tracking tools.
+    // Dev (command === 'serve') keeps every log for debugging.
+    pure: command === 'build'
+      ? ['console.log', 'console.debug', 'console.info', 'console.trace', 'console.dir', 'console.table']
+      : [],
+  },
   server: {
     port: 3000,
     proxy: {
@@ -38,4 +47,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
