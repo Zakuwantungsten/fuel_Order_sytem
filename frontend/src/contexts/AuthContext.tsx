@@ -24,6 +24,21 @@ const getUserThemeKey = (userId?: string | number): string => {
   return userId ? `fuel_order_theme_user_${userId}` : 'fuel_order_theme_default';
 };
 
+// Wipe all persisted filter/UI state (namespaced with "fuel-order:") so a fresh
+// login or logout starts from default tabs/filters instead of restoring the
+// previous session's sub-tab and filters. Session-restore paths (page reload /
+// remember-me refresh) intentionally do NOT call this, so persistence still
+// survives reloads within an active session.
+const clearPersistedUIState = (): void => {
+  try {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('fuel-order:'))
+      .forEach(k => localStorage.removeItem(k));
+  } catch {
+    // Storage access blocked (private mode / quota) — nothing to clear
+  }
+};
+
 // Initial state
 const getInitialTheme = (userId?: string | number): 'light' | 'dark' => {
   if (typeof window === 'undefined') return 'light';
@@ -359,6 +374,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }));
 
     sessionStorage.removeItem('fuel_order_active_tab');
+    // Fresh login → reset persisted sub-tab/filter state to defaults
+    clearPersistedUIState();
     dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
     dispatch({ type: 'SET_THEME', payload: userTheme });
   };
@@ -437,6 +454,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Clear active tab on login to force role default tab
       sessionStorage.removeItem('fuel_order_active_tab');
+      // Fresh login → reset persisted sub-tab/filter state to defaults
+      clearPersistedUIState();
 
       dispatch({ type: 'AUTH_SUCCESS', payload: authUser });
       
@@ -499,9 +518,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     localStorage.removeItem('fuel_order_remember_me');
 
     // Clear all persisted filter/UI state so next login starts fresh
-    Object.keys(localStorage)
-      .filter(k => k.startsWith('fuel-order:'))
-      .forEach(k => localStorage.removeItem(k));
+    clearPersistedUIState();
 
     // Reset to default theme for logged-out state
     const defaultTheme = getInitialTheme(); // No userId = uses default

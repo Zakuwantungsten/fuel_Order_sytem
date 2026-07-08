@@ -20,6 +20,7 @@ export const deliveryOrderKeys = {
   workbooks: (doType: string) => [...deliveryOrderKeys.all, 'workbooks', doType] as const,
   availableYears: (doType: string) => [...deliveryOrderKeys.all, 'years', doType] as const,
   availablePeriods: (filters: Record<string, unknown>) => [...deliveryOrderKeys.all, 'periods', filters] as const,
+  summaryAll: (filters: Record<string, unknown>) => [...deliveryOrderKeys.all, 'summaryAll', filters] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -84,6 +85,50 @@ export function useDeliveryOrdersList(filters: DeliveryOrderFilters, enabled = t
           totalPages: 1,
         },
       };
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// All delivery orders across every month (for the Monthly Summary tab)
+// ---------------------------------------------------------------------------
+// The Summary tab must aggregate over EVERY month with data (including
+// imported/historical DOs), not just the current-month page slice the List
+// view is showing. This hook pulls the full dataset (looping through pages so
+// nothing is silently truncated) with no date-range filter.
+export interface AllDeliveryOrderFilters {
+  search?: string;
+  importOrExport?: string;   // 'ALL' | 'IMPORT' | 'EXPORT'
+  doType?: 'DO' | 'SDO';     // undefined = all
+  status?: 'all' | 'active' | 'cancelled';
+}
+
+export function useAllDeliveryOrders(filters: AllDeliveryOrderFilters, enabled = true) {
+  const baseParams: Record<string, unknown> = { sort: 'date', order: 'desc' };
+  if (filters.search) baseParams.search = filters.search;
+  if (filters.importOrExport && filters.importOrExport !== 'ALL') baseParams.importOrExport = filters.importOrExport;
+  if (filters.doType) baseParams.doType = filters.doType;
+  if (filters.status && filters.status !== 'all') baseParams.status = filters.status;
+
+  return useQuery({
+    queryKey: deliveryOrderKeys.summaryAll(baseParams),
+    queryFn: async () => {
+      const limit = 5000; // backend caps limit at 5000
+      const all: DeliveryOrder[] = [];
+      let page = 1;
+      // Fetch page-by-page until we've collected every matching row.
+      for (;;) {
+        const response = await deliveryOrdersAPI.getAll({ ...baseParams, page, limit });
+        const cleaned = cleanDeliveryOrders(response.data);
+        all.push(...cleaned);
+        const total = response.pagination?.total ?? cleaned.length;
+        if (cleaned.length === 0 || all.length >= total) break;
+        page += 1;
+      }
+      return all;
     },
     enabled,
     staleTime: 5 * 60 * 1000,

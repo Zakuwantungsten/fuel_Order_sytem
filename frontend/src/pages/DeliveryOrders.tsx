@@ -29,6 +29,7 @@ import {
   deliveryOrderKeys,
   periodsToDateRange,
   useDeliveryOrdersList,
+  useAllDeliveryOrders,
   useDOWorkbooks,
   useDOAvailableYears,
   useDOAvailablePeriods,
@@ -104,6 +105,19 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     filterType,
     filterDoType === 'ALL' ? undefined : filterDoType,
     filterStatus,
+  );
+
+  // --- React Query: full dataset for the Summary tab (all months, not just
+  // the current-month page slice used by the List view). Only fetched while
+  // the Summary tab is active. ---
+  const { data: summaryOrders = [], isFetching: summaryFetching } = useAllDeliveryOrders(
+    {
+      search: searchTerm || undefined,
+      importOrExport: filterType,
+      doType: filterDoType === 'ALL' ? undefined : filterDoType,
+      status: filterStatus,
+    },
+    activeTab === 'summary',
   );
 
   // --- React Query: workbooks & available years ---
@@ -1729,6 +1743,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                               Active
                             </span>
                           )}
+                          {!order.isCancelled && (order.editHistory?.length ?? 0) > 0 && (
+                            <span
+                              className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded-full text-center"
+                              title={`Amended ${order.editHistory!.length} time(s)${order.lastEditedAt ? ` — last on ${order.lastEditedAt}` : ''}${order.lastEditedBy ? ` by ${order.lastEditedBy}` : ''}`}
+                            >
+                              AMENDED
+                            </span>
+                          )}
                           <EditLockBadge editLock={(order as any).editLock} />
                         </div>
                       </div>
@@ -1861,16 +1883,26 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             </span>
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
-                            {order.isCancelled ? (
-                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
-                                <Ban className="w-3 h-3 mr-1" />
-                                Cancelled
-                              </span>
-                            ) : (
-                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" style={{ background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }}>
-                                Active
-                              </span>
-                            )}
+                            <div className="flex flex-wrap items-center gap-1">
+                              {order.isCancelled ? (
+                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+                                  <Ban className="w-3 h-3 mr-1" />
+                                  Cancelled
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" style={{ background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }}>
+                                  Active
+                                </span>
+                              )}
+                              {!order.isCancelled && (order.editHistory?.length ?? 0) > 0 && (
+                                <span
+                                  className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded"
+                                  title={`Amended ${order.editHistory!.length} time(s)${order.lastEditedAt ? ` — last on ${order.lastEditedAt}` : ''}${order.lastEditedBy ? ` by ${order.lastEditedBy}` : ''}`}
+                                >
+                                  AMENDED
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className={`px-3 py-2 text-xs ${
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
@@ -1955,7 +1987,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           )}
         </>
       ) : activeTab === 'summary' ? (
-        <MonthlySummary orders={orders} doType={filterDoType} />
+        summaryFetching && summaryOrders.length === 0 ? (
+          <UnifiedTabLoader label="Loading summary..." />
+        ) : (
+          <MonthlySummary orders={summaryOrders} doType={filterDoType} />
+        )
       ) : null}
 
       {/* DO Detail Modal */}
