@@ -2,7 +2,7 @@
 
 **Status:** Planning · **Date:** 2026-06-02
 **Scope (v1):** Single Expo app for **Drivers, Managers/Super Manager, Yard attendants, Fuel attendants** — **read-only** first.
-**Backend:** Reuse the existing live API at `https://fuelordersytem-production.up.railway.app/api/v1` — **no backend rewrite required.**
+**Backend:** Reuse the existing live API at `https://tahfuelorder.dev/api/v1` — **no backend rewrite required.**
 
 ---
 
@@ -168,7 +168,7 @@ react-native-safe-area-context, react-native-screens
 ---
 
 ## 9. Testing strategy
-- **Dev:** Expo Go on a physical phone pointed at the **live Railway API** (real data, real roles).
+- **Dev:** Expo Go on a physical phone pointed at the **live API** (real data, real roles).
 - **Accounts:** use existing one-per-role test logins (1 driver truck#+PIN, 1 manager, 1 super_manager, 1 yard, 1 fuel attendant).
 - **Per milestone:** manual login + read smoke test for that role.
 - Push (M7) requires an EAS **development build** (free) — Expo Go can't receive remote push reliably.
@@ -177,6 +177,6 @@ react-native-safe-area-context, react-native-screens
 
 ## 10. Open questions for you
 1. Do you have a **test login per role** I can use against the live API (esp. a driver truck#+PIN)?
-2. Should the app point at the **live Railway backend** during development, or a separate staging/local backend?
+2. Should the app point at the **live backend** during development, or a separate staging/local backend?
 3. App identity: name shown on the phone ("Fuel Order"?), icon/splash — use existing `trailer.png` / horse icon, or new art?
 4. Confirm MFA/forced-password-change users can be deferred to the web portal for v1.

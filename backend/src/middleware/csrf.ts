@@ -11,7 +11,7 @@ import SecurityEventLogger from '../utils/securityEventLogger';
  *  - Tokens are HMAC-signed (timestamp.nonce.hmac) so the server can verify
  *    them by signature without relying on a matching cookie.
  *  - The signed token is returned in the response BODY of GET /csrf-token so
- *    cross-origin frontends (e.g. Firebase → Railway) can read and store it in
+ *    cross-origin frontends can read and store it in
  *    sessionStorage.
  *  - The XSRF-TOKEN cookie is still set (SameSite=None; Secure in prod) as a
  *    belt-and-suspenders measure for same-origin contexts.

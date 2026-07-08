@@ -3,7 +3,7 @@ import QRCode from 'react-qr-code';
 import { toast } from 'react-toastify';
 
 // Use the same base URL as api.ts so fetch() calls reach the backend in
-// both development (Vite proxy) and production (cross-origin Railway).
+// both development (Vite proxy) and production (nginx /api proxy).
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 /** Read the XSRF-TOKEN from sessionStorage (cross-origin safe) or cookie */
@@ -27,7 +27,7 @@ const jsonHeaders = (): Record<string, string> => {
 };
 
 /** Safely parse a fetch response as JSON. If the response is not JSON
- * (e.g. HTML from Firebase's SPA fallback when the API is unreachable),
+ * (e.g. HTML from the SPA fallback when the API is unreachable),
  * throw a user-friendly error instead of "Unexpected token '<'". */
 const safeJson = async (response: Response): Promise<any> => {
   const ct = response.headers.get('content-type') || '';

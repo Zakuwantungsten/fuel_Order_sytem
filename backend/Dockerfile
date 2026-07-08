@@ -35,7 +35,7 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-# Railway, Render, Fly, etc. inject PORT at runtime — default to 5000
+# Host platform injects PORT at runtime — default to 5000
 EXPOSE 5000
 
 # Health check (matches /api/health endpoint)

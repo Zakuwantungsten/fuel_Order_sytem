@@ -75,8 +75,8 @@ app.use(helmet({
   // ✅ SECURITY: HSTS — always on, not gated on NODE_ENV.
   //    max-age=31536000 (1 year) + includeSubDomains + preload meets the minimum
   //    requirements for HSTS preload list submission (RFC 6797 / hstspreload.org).
-  //    Railway and Firebase both terminate TLS before the app sees the request,
-  //    so this header is always served over HTTPS in production.
+  //    The TLS-terminating edge (Cloudflare) and nginx both sit in front of the
+  //    app, so this header is always served over HTTPS in production.
   hsts: {
     maxAge: 31536000,       // 1 year in seconds
     includeSubDomains: true,
@@ -113,8 +113,8 @@ app.use((req, res, next) => {
 });
 
 // Health check route registered EARLY — before HTTPS enforcement and all security
-// middleware so Railway's internal HTTP health probe (no x-forwarded-proto header)
-// is never blocked by the HTTPS-only or IP-filtering middleware.
+// middleware so the platform's internal HTTP health probe (no x-forwarded-proto
+// header) is never blocked by the HTTPS-only or IP-filtering middleware.
 app.get('/api/health', (_req, res) => {
   res.status(200).json({
     success: true,
@@ -240,8 +240,8 @@ app.use(
 
 // CSRF Protection - Apply to state-changing routes
 // GET requests to provide CSRF token to frontend
-// Return token in response body so cross-origin clients (e.g. Firebase-hosted
-// frontend talking to Railway backend) can read it without accessing cookies.
+// Return token in response body so cross-origin clients can read it without
+// accessing cookies.
 app.get(`${apiBasePath}/csrf-token`, provideCsrfToken, (_req, res) => {
   res.json({ success: true, csrfToken: res.locals.csrfToken });
 });
@@ -411,7 +411,7 @@ const startServer = async () => {
       }
     });
 
-    // Graceful shutdown — handles SIGTERM (Railway, Docker, K8s) and SIGINT (Ctrl+C)
+    // Graceful shutdown — handles SIGTERM (Docker, K8s, systemd) and SIGINT (Ctrl+C)
     let shuttingDown = false;
     const shutdown = async (signal: string) => {
       if (shuttingDown) return;          // prevent double-shutdown

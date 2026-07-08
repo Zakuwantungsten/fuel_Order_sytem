@@ -68,7 +68,7 @@ const logger = winston.createLogger({
   ],
 });
 
-// Always log to console so Railway/cloud platforms can capture logs
+// Always log to console so the host/container platform can capture logs
 logger.add(
   new winston.transports.Console({
     format: consoleFormat,

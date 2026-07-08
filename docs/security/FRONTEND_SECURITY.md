@@ -882,7 +882,7 @@ Environment-specific configuration prevents accidental cross-environment connect
 
 | Variable | Development | Production |
 |----------|-------------|-----------|
-| `VITE_API_BASE_URL` | `/api` (relative — Vite dev proxy) | `https://fuelordersytem-production.up.railway.app/api/v1` |
+| `VITE_API_BASE_URL` | `/api` (relative — Vite dev proxy) | `/api/v1` (relative — nginx proxies to backend) |
 
 **Development proxy** (`vite.config.ts`): The `/api` path is proxied to `http://localhost:5000/api` by Vite's dev server. This keeps requests same-origin in development, meaning cookies (including the HttpOnly refresh cookie) are sent automatically without CORS complexity.
 

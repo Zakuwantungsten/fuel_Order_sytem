@@ -274,7 +274,7 @@ const generateCsrfToken = (): string => {
 | `SameSite` | `strict` |
 | `MaxAge` | 2 hours |
 
-**Token distribution:** `GET /api/csrf-token` returns the token in the response body so cross-origin front-end clients (e.g., Firebase-hosted SPA calling Railway API) can obtain it without needing to read the cookie directly.
+**Token distribution:** `GET /api/csrf-token` returns the token in the response body so cross-origin front-end clients can obtain it without needing to read the cookie directly.
 
 All CSRF failures are logged via `SecurityEventLogger.logCSRFFailure()` with IP, method, path, and User-Agent.
 

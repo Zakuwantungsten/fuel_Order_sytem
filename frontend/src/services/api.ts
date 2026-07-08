@@ -33,13 +33,13 @@ const apiClient = axios.create({
 const CSRF_STORAGE_KEY = 'xsrf_token';
 
 // Function to get CSRF token
-// Cross-origin deployments (Firebase frontend + Railway backend) cannot read
+// Cross-origin deployments (frontend and API on different domains) cannot read
 // cookies set by a different domain, so we store the token from the response
 // body in sessionStorage and read it from there.
 export const getCsrfToken = (): string | null => {
   // Token is fetched from GET /csrf-token response body and stored here.
-  // Cross-origin (Firebase ↔ Railway) means document.cookie cannot read a
-  // cookie set by the backend domain; sessionStorage is the only viable path.
+  // Cross-origin means document.cookie cannot read a cookie set by the backend
+  // domain; sessionStorage is the only viable path.
   const stored = sessionStorage.getItem(CSRF_STORAGE_KEY);
   // Discard '[REDACTED]' placeholder that was stored when the backend was
   // incorrectly sanitizing the /csrf-token response body (now fixed). Keeping

@@ -3,7 +3,7 @@ import { ShieldCheck, Smartphone, Mail, MessageSquare, KeyRound, CheckCircle2, L
 import { toast } from 'react-toastify';
 
 // Use the same base URL as api.ts so fetch() calls reach the backend in
-// both development (Vite proxy) and production (cross-origin Railway).
+// both development (Vite proxy) and production (nginx /api proxy).
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 /** Read the XSRF-TOKEN from sessionStorage (cross-origin safe) or cookie */

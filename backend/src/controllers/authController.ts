@@ -25,7 +25,7 @@ function refreshCookieOptions(maxAgeDays: number): object {
   return {
     httpOnly: true,
     secure: isProd,
-    // SameSite=None is required for cross-origin requests (Firebase → Railway).
+    // SameSite=None is required for cross-origin requests (e.g. frontend and API on different subdomains).
     // The HttpOnly flag still prevents JS access, so XSS cannot steal the cookie.
     // CSRF is handled by the separate HMAC-signed X-XSRF-TOKEN header.
     sameSite: isProd ? 'none' : 'lax',
