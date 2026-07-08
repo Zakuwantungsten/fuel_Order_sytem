@@ -8,7 +8,7 @@ import { AuditLog } from '../models/AuditLog';
 import { FuelRecord } from '../models';
 import { FuelPriceHistory } from '../models/FuelPrice';
 import { emitDataChange } from '../services/websocket';
-import { autoResolveNotifications } from './notificationController';
+import { syncConfigNotifications } from './notificationController';
 import logger from '../utils/logger';
 
 /**
@@ -115,10 +115,9 @@ async function autoFillFuelRecordsForRoute(route: any, username: string): Promis
         pendingConfigReason: newPendingReason,
       });
 
-      // Auto-resolve notifications if fully unlocked
-      if (!newIsLocked) {
-        await autoResolveNotifications(record._id.toString(), username);
-      }
+      // Sync notifications: resolve if fully unlocked, otherwise downgrade the
+      // alert to the remaining issue (missing_extra_fuel).
+      await syncConfigNotifications(record._id.toString(), username);
 
       updatedCount++;
       logger.info(`Auto-filled totalLts=${newTotalLts}L for fuel record ${record._id} (truck ${record.truckNo}, DO ${record.goingDo}). Balance: ${newBalance}L. Still locked: ${newIsLocked}`);
@@ -195,10 +194,9 @@ export async function autoFillFuelRecordsForBatch(truckSuffix: string, extraLite
         pendingConfigReason: newPendingReason,
       });
 
-      // Auto-resolve notifications if fully unlocked
-      if (!newIsLocked) {
-        await autoResolveNotifications(record._id.toString(), username);
-      }
+      // Sync notifications: resolve if fully unlocked, otherwise downgrade the
+      // alert to the remaining issue (missing_total_liters).
+      await syncConfigNotifications(record._id.toString(), username);
 
       updatedCount++;
       logger.info(`Auto-filled extra=${newExtra}L for fuel record ${record._id} (truck ${record.truckNo}, DO ${record.goingDo}). Balance: ${newBalance}L. Still locked: ${newIsLocked}`);

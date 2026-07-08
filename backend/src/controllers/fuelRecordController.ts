@@ -5,7 +5,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput, buildFuzzyRegex } from '../utils';
 import { AuditService } from '../utils/auditService';
-import { createMissingConfigNotification, autoResolveNotifications } from './notificationController';
+import { createMissingConfigNotification, syncConfigNotifications } from './notificationController';
 import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
@@ -847,10 +847,14 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       req.ip
     );
 
-    // Auto-resolve notifications if record was unlocked
-    if (wasLocked && !fuelRecord.isLocked) {
-      await autoResolveNotifications(id, req.user?.username || 'admin');
-      logger.info(`Fuel record ${id} unlocked and notifications resolved`);
+    // Sync notifications with the record's new state. Runs whenever a locked
+    // record is edited so partial fixes downgrade the alert to the remaining
+    // issue, and full fixes resolve it.
+    if (wasLocked) {
+      await syncConfigNotifications(id, req.user?.username || 'admin');
+      if (!fuelRecord.isLocked) {
+        logger.info(`Fuel record ${id} unlocked and notifications resolved`);
+      }
     }
 
     // If this queued journey's start columns were just filled, the truck has begun

@@ -573,31 +573,53 @@ export const resolveUnlinkedDONotification = async (
 };
 
 /**
- * Auto-resolve notifications when fuel record is updated
+ * Sync missing-config notifications with the current state of a fuel record.
+ *
+ * This is the single source of truth for what happens to a config notification
+ * after some (or all) of its missing configuration is filled in:
+ *  - If the record is now complete (totalLts + extra both set) → resolve every
+ *    pending config notification for the record (both the creator and admin copy).
+ *  - If only PART of the config was fixed (e.g. the route was added but the truck
+ *    batch is still missing) → DOWNGRADE the notification in place so its type,
+ *    title, message and metadata reflect ONLY the remaining issue (e.g. a "both"
+ *    alert becomes a "missing_extra_fuel" alert). This is what makes the
+ *    notification "reduce to the issue still unsolved" instead of lingering with
+ *    stale text until everything is fixed.
+ *
+ * Because the route/batch auto-fill routines call this per affected record, any
+ * other DO/truck notifications that shared the same missing route or suffix are
+ * downgraded or resolved at the same time. Every path emits a notifications
+ * data-change event so connected clients refresh the bell live.
  */
-export const autoResolveNotifications = async (fuelRecordId: string, resolvedBy: string): Promise<void> => {
+export const syncConfigNotifications = async (fuelRecordId: string, resolvedBy: string): Promise<void> => {
   try {
-    // Find all pending notifications for this fuel record
+    const CONFIG_TYPES = ['both', 'missing_total_liters', 'missing_extra_fuel'];
+
+    // Find all pending config notifications for this fuel record
     const notifications = await Notification.find({
       relatedModel: 'FuelRecord',
       relatedId: fuelRecordId,
       status: 'pending',
       isDeleted: false,
+      type: { $in: CONFIG_TYPES },
     });
 
-    // Check if the fuel record is now complete
+    if (notifications.length === 0) return;
+
     const fuelRecord = await FuelRecord.findById(fuelRecordId);
     if (!fuelRecord) return;
 
-    const isComplete = fuelRecord.totalLts !== null && fuelRecord.extra !== null;
+    const missingTotal = fuelRecord.totalLts === null || fuelRecord.totalLts === undefined;
+    const missingExtra = fuelRecord.extra === null || fuelRecord.extra === undefined;
 
-    if (isComplete) {
-      // Resolve all notifications for this fuel record
+    // ── Fully configured → resolve every config notification for this record ──
+    if (!missingTotal && !missingExtra) {
       await Notification.updateMany(
         {
           relatedModel: 'FuelRecord',
           relatedId: fuelRecordId,
           status: 'pending',
+          type: { $in: CONFIG_TYPES },
         },
         {
           $set: {
@@ -609,13 +631,62 @@ export const autoResolveNotifications = async (fuelRecordId: string, resolvedBy:
         }
       );
 
-      logger.info(`Auto-resolved ${notifications.length} notifications for fuel record ${fuelRecordId}`);
+      logger.info(`Resolved ${notifications.length} config notification(s) for fuel record ${fuelRecordId}`);
+      emitDataChange('notifications', 'update');
+      return;
+    }
+
+    // ── Partially configured → downgrade to the remaining issue ──
+    const newType: 'both' | 'missing_total_liters' | 'missing_extra_fuel' =
+      missingTotal && missingExtra
+        ? 'both'
+        : missingTotal
+        ? 'missing_total_liters'
+        : 'missing_extra_fuel';
+
+    const newMissingFields = [
+      ...(missingTotal ? ['totalLiters'] : []),
+      ...(missingExtra ? ['extraFuel'] : []),
+    ];
+
+    let changed = 0;
+    for (const notif of notifications) {
+      if (notif.type === newType) continue; // already reflects the remaining issue
+
+      const meta: any = notif.metadata || {};
+      const metadata = {
+        doNumber: meta.doNumber || fuelRecord.goingDo,
+        truckNo: meta.truckNo || fuelRecord.truckNo,
+        destination: meta.destination || fuelRecord.to,
+        truckSuffix: meta.truckSuffix,
+      };
+
+      notif.type = newType;
+      notif.title =
+        newType === 'missing_extra_fuel'
+          ? `Add Truck Batch: ${metadata.truckSuffix || metadata.doNumber}`
+          : `New Configuration Needed: ${metadata.doNumber}`;
+      notif.message = buildConfigMessage(newType, metadata);
+      notif.metadata = { ...meta, missingFields: newMissingFields };
+      notif.markModified('metadata');
+      await notif.save();
+      changed++;
+    }
+
+    if (changed > 0) {
+      logger.info(`Downgraded ${changed} config notification(s) for fuel record ${fuelRecordId} → ${newType}`);
       emitDataChange('notifications', 'update');
     }
   } catch (error) {
-    logger.error('Failed to auto-resolve notifications:', error);
+    logger.error('Failed to sync config notifications:', error);
   }
 };
+
+/**
+ * Backward-compatible alias. Prefer syncConfigNotifications — this now also
+ * downgrades partially-fixed notifications, not just resolves complete ones.
+ */
+export const autoResolveNotifications = syncConfigNotifications;
 
 /**
  * Create notification when yard man records fuel (both linked and pending)
@@ -1218,6 +1289,7 @@ export default {
   createUnlinkedExportDONotification,
   resolveUnlinkedDONotification,
   autoResolveNotifications,
+  syncConfigNotifications,
   createYardFuelRecordedNotification,
   createTruckPendingLinkingNotification,
   createTruckEntryRejectedNotification,
