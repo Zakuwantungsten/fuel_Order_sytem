@@ -16,6 +16,17 @@ import {
   YardFuelDispense
 } from '../types';
 
+// Server-side aggregated DO summary metrics (see deliveryOrdersAPI.getSummaryAggregate)
+export interface DOSummaryAggregate {
+  totalOrders: number;
+  totalImport: number;
+  totalExport: number;
+  totalTonnage: number;
+  totalRevenue: number;
+  byClient: Record<string, { orders: number; tonnage: number; revenue: number }>;
+  byDestination: Record<string, number>;
+}
+
 // Use relative URL to leverage Vite proxy (/api/v1 -> http://localhost:5000/api/v1)
 // This makes requests same-origin, allowing cookies to work properly
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
@@ -252,6 +263,19 @@ export const deliveryOrdersAPI = {
   getAvailablePeriods: async (params?: { importOrExport?: string; doType?: string; status?: string }): Promise<Array<{ year: number; month: number }>> => {
     const response = await apiClient.get('/delivery-orders/available-periods', { params });
     return response.data || [];
+  },
+
+  // Server-side aggregated summary metrics for the DO Summary tab (totals +
+  // per-client + per-destination) over a filter/date-range. Spans active +
+  // archived collections; excludes cancelled/deleted.
+  getSummaryAggregate: async (params?: {
+    importOrExport?: string;
+    doType?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<DOSummaryAggregate> => {
+    const response = await apiClient.get('/delivery-orders/summary-aggregate', { params });
+    return response.data as DOSummaryAggregate;
   },
   
   getById: async (id: string | number): Promise<DeliveryOrder> => {

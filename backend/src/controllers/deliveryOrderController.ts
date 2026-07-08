@@ -706,6 +706,104 @@ export const getAvailablePeriods = async (req: AuthRequest, res: Response): Prom
 };
 
 /**
+ * Aggregate delivery-order summary metrics server-side for the DO Summary tab.
+ * Returns totals + per-client + per-destination breakdowns for the given
+ * filters/date-range, spanning BOTH the active and archived collections so
+ * historical (e.g. imported) months are included. Cancelled and soft-deleted
+ * orders are always excluded — the summary reflects live orders only.
+ */
+export const getDeliveryOrderSummaryAggregate = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { importOrExport, doType, dateFrom, dateTo } = req.query;
+
+    const match: any = { isDeleted: { $ne: true }, isCancelled: { $ne: true } };
+
+    // Restrict drivers to their own truck's records (least-privilege).
+    if (req.user?.role === 'driver') {
+      match.truckNo = req.user.username;
+    }
+    if (doType && (doType === 'DO' || doType === 'SDO')) {
+      match.doType = doType;
+    }
+    if (importOrExport && importOrExport !== 'ALL') {
+      match.importOrExport = importOrExport;
+    }
+    if (dateFrom || dateTo) {
+      match.date = {};
+      if (dateFrom) match.date.$gte = dateFrom;
+      if (dateTo) match.date.$lte = dateTo;
+    }
+
+    const revenueExpr = { $multiply: [{ $ifNull: ['$tonnages', 0] }, { $ifNull: ['$ratePerTon', 0] }] };
+
+    const pipeline: any[] = [
+      { $match: match },
+      // Merge archived DOs matching the same filter so old/imported months count.
+      { $unionWith: { coll: ArchivedDeliveryOrder.collection.name, pipeline: [{ $match: match }] } },
+      {
+        $facet: {
+          totals: [
+            {
+              $group: {
+                _id: null,
+                totalOrders: { $sum: 1 },
+                totalImport: { $sum: { $cond: [{ $eq: ['$importOrExport', 'IMPORT'] }, 1, 0] } },
+                totalExport: { $sum: { $cond: [{ $eq: ['$importOrExport', 'EXPORT'] }, 1, 0] } },
+                totalTonnage: { $sum: { $ifNull: ['$tonnages', 0] } },
+                totalRevenue: { $sum: revenueExpr },
+              },
+            },
+          ],
+          byClient: [
+            {
+              $group: {
+                _id: { $ifNull: ['$clientName', 'Unknown'] },
+                orders: { $sum: 1 },
+                tonnage: { $sum: { $ifNull: ['$tonnages', 0] } },
+                revenue: { $sum: revenueExpr },
+              },
+            },
+          ],
+          byDestination: [
+            {
+              $group: {
+                _id: { $ifNull: ['$destination', 'Unknown'] },
+                orders: { $sum: 1 },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const [result] = await DeliveryOrder.aggregate(pipeline);
+    const totalsRow = result?.totals?.[0] || {};
+
+    const byClient: Record<string, { orders: number; tonnage: number; revenue: number }> = {};
+    for (const c of result?.byClient || []) {
+      byClient[c._id] = { orders: c.orders, tonnage: c.tonnage, revenue: c.revenue };
+    }
+    const byDestination: Record<string, number> = {};
+    for (const d of result?.byDestination || []) {
+      byDestination[d._id] = d.orders;
+    }
+
+    res.json({
+      totalOrders: totalsRow.totalOrders || 0,
+      totalImport: totalsRow.totalImport || 0,
+      totalExport: totalsRow.totalExport || 0,
+      totalTonnage: totalsRow.totalTonnage || 0,
+      totalRevenue: totalsRow.totalRevenue || 0,
+      byClient,
+      byDestination,
+    });
+  } catch (error) {
+    logger.error('Error aggregating delivery order summary:', error);
+    throw new ApiError(500, 'Failed to aggregate delivery order summary');
+  }
+};
+
+/**
  * Get all delivery orders with pagination and filters
  */
 export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Promise<void> => {

@@ -1,13 +1,33 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Download, Calendar, Filter, Fuel, DollarSign, ChevronDown, Check } from 'lucide-react';
+import { Download, Calendar, Filter, Fuel, DollarSign, ChevronDown, Check, Loader2 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../types';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
+import {
+  useDOAvailablePeriods,
+  useDOSummaryAggregate,
+  useAllDeliveryOrders,
+  fetchAllDeliveryOrders,
+} from '../hooks/useDeliveryOrders';
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// "Jan-2026" -> { dateFrom: "2026-01-01", dateTo: "2026-01-31" }
+const monthYearToRange = (monthYear: string): { dateFrom: string; dateTo: string } | null => {
+  const [mon, yearStr] = monthYear.split('-');
+  const year = parseInt(yearStr, 10);
+  const monthIdx = MONTH_ABBR.indexOf(mon);
+  if (monthIdx < 0 || isNaN(year)) return null;
+  const mm = String(monthIdx + 1).padStart(2, '0');
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  return { dateFrom: `${year}-${mm}-01`, dateTo: `${year}-${mm}-${String(lastDay).padStart(2, '0')}` };
+};
 
 interface MonthlySummaryProps {
-  orders: DeliveryOrder[];
+  importOrExport?: string;        // 'ALL' | 'IMPORT' | 'EXPORT'
+  doType?: 'DO' | 'SDO' | 'ALL';  // Filter by order type
   fuelRecords?: FuelRecord[];
   lpoEntries?: LPOEntry[];
-  doType?: 'DO' | 'SDO' | 'ALL'; // Filter by order type
 }
 
 interface SummaryData {
@@ -32,13 +52,14 @@ interface GroupedOrders {
   [key: string]: DeliveryOrder[];
 }
 
-const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'DO' }: MonthlySummaryProps) => {
+const MonthlySummary = ({ importOrExport = 'ALL', doType = 'DO', fuelRecords = [], lpoEntries = [] }: MonthlySummaryProps) => {
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
   const [groupBy, setGroupBy] = useState<'none' | 'client' | 'destination'>('none');
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Dropdown states
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
@@ -49,6 +70,13 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
   const monthDropdownRef = useRef<HTMLDivElement>(null);
   const groupByDropdownRef = useRef<HTMLDivElement>(null);
   const yearDropdownRef = useRef<HTMLDivElement>(null);
+
+  const queryDoType = doType === 'ALL' ? undefined : doType;
+
+  // Available periods drive the month/year dropdowns. This is a cheap query
+  // that spans ALL months with data (including imported/historical DOs),
+  // independent of any loaded rows — so no month is ever missing.
+  const { data: availablePeriods = [] } = useDOAvailablePeriods(importOrExport, queryDoType, 'active');
 
   // Click-outside detection for dropdowns
   useEffect(() => {
@@ -87,233 +115,188 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
     };
   }, []);
 
-  // Filter orders by doType
-  const filteredOrders = useMemo(() => {
-    if (doType === 'ALL') return orders;
-    return orders.filter(o => o.doType === doType);
-  }, [orders, doType]);
-
+  // Build the month/year dropdown options from the available periods.
   useEffect(() => {
-    if (filteredOrders.length > 0) {
-      // Extract unique year-month combinations and years
-      const yearMonthSet = new Set<string>();
-      const yearSet = new Set<number>();
-      
-      filteredOrders.forEach(o => {
-        // Extract from date format like "13-Jan" or "2026-01-13"
-        let month = '';
-        let year = new Date().getFullYear();
-        
-        if (o.date.includes('-')) {
-          const parts = o.date.split('-');
-          if (parts.length === 3) {
-            // Format: YYYY-MM-DD
-            year = parseInt(parts[0], 10);
-            const monthNum = parseInt(parts[1], 10);
-            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            month = monthNames[monthNum - 1];
-          } else if (parts.length === 2) {
-            // Format: D-Mon (e.g., "13-Jan")
-            month = parts[1];
-            // Try to infer year from order.createdAt or assume current year
-            if ((o as any).createdAt) {
-              year = new Date((o as any).createdAt).getFullYear();
-            }
-          }
-        }
-        
-        if (month) {
-          yearMonthSet.add(`${month}-${year}`);
-          yearSet.add(year);
-        }
-      });
-      
-      const years = Array.from(yearSet).sort((a, b) => b - a); // Descending order
-      const allMonths = Array.from(yearMonthSet).sort((a, b) => {
-        const [monthA, yearA] = a.split('-');
-        const [monthB, yearB] = b.split('-');
-        const yearDiff = parseInt(yearB) - parseInt(yearA);
-        if (yearDiff !== 0) return yearDiff;
-        const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return monthOrder.indexOf(monthB) - monthOrder.indexOf(monthA);
-      });
-      
-      setAvailableYears(years);
-      setAvailableMonths(allMonths);
-      
-      // Initialize with current year if available
-      if (years.length > 0 && selectedYears.length === 0) {
-        const currentYear = new Date().getFullYear();
-        const defaultYear = years.includes(currentYear) ? currentYear : years[0];
-        setSelectedYears([defaultYear]);
-      }
-      
-      // Initialize with first month of selected year(s)
-      if (allMonths.length > 0 && selectedMonths.length === 0 && selectedYears.length > 0) {
-        const firstMonthOfSelectedYear = allMonths.find(m => 
-          selectedYears.some(y => m.endsWith(`-${y}`))
-        );
-        if (firstMonthOfSelectedYear) {
-          setSelectedMonths([firstMonthOfSelectedYear]);
-        }
-      }
-    }
-  }, [filteredOrders, selectedMonths.length, selectedYears.length]);
+    if (availablePeriods.length === 0) return;
 
-  const summary = useMemo(() => {
-    if (selectedMonths.length === 0 || filteredOrders.length === 0) return null;
-    
-    // Use first selected month for display
-    const displayMonth = selectedMonths[0];
+    const yearSet = new Set<number>();
+    const monthList: string[] = [];
+    availablePeriods.forEach(p => {
+      yearSet.add(p.year);
+      const abbr = MONTH_ABBR[p.month - 1];
+      if (abbr) monthList.push(`${abbr}-${p.year}`);
+    });
+
+    const years = Array.from(yearSet).sort((a, b) => b - a);
+    const allMonths = monthList.sort((a, b) => {
+      const [monthA, yearA] = a.split('-');
+      const [monthB, yearB] = b.split('-');
+      const yearDiff = parseInt(yearB) - parseInt(yearA);
+      if (yearDiff !== 0) return yearDiff;
+      return MONTH_ABBR.indexOf(monthB) - MONTH_ABBR.indexOf(monthA);
+    });
+
+    setAvailableYears(years);
+    setAvailableMonths(allMonths);
+
+    // Default to the current year if present, else the most recent year.
+    setSelectedYears(prev => {
+      if (prev.length > 0) return prev;
+      const currentYear = new Date().getFullYear();
+      return [years.includes(currentYear) ? currentYear : years[0]];
+    });
+  }, [availablePeriods]);
+
+  // Once a year is selected, default-select its first month.
+  useEffect(() => {
+    if (availableMonths.length === 0 || selectedMonths.length > 0 || selectedYears.length === 0) return;
+    const firstMonthOfSelectedYear = availableMonths.find(m => selectedYears.some(y => m.endsWith(`-${y}`)));
+    if (firstMonthOfSelectedYear) setSelectedMonths([firstMonthOfSelectedYear]);
+  }, [availableMonths, selectedMonths.length, selectedYears]);
+
+  // The metric cards + client/destination breakdowns are shown for the first
+  // selected month. Its date range drives the server-side aggregation.
+  const displayMonth = selectedMonths[0];
+  const displayRange = displayMonth ? monthYearToRange(displayMonth) : null;
+
+  const { data: aggregate, isFetching: aggFetching } = useDOSummaryAggregate(
+    {
+      importOrExport,
+      doType: queryDoType,
+      dateFrom: displayRange?.dateFrom,
+      dateTo: displayRange?.dateTo,
+    },
+    !!displayRange,
+  );
+
+  // Detailed-view rows are fetched only for the displayed month, and only when
+  // the Detailed view is actually open (keeps payloads bounded).
+  const { data: detailedOrders = [], isFetching: detailedFetching } = useAllDeliveryOrders(
+    {
+      importOrExport,
+      doType: queryDoType,
+      status: 'active',
+      dateFrom: displayRange?.dateFrom,
+      dateTo: displayRange?.dateTo,
+    },
+    viewMode === 'detailed' && !!displayRange,
+  );
+
+  const summary = useMemo<SummaryData | null>(() => {
+    if (!displayMonth || !aggregate) return null;
+
     const [month, year] = displayMonth.split('-');
-    
-    // Filter orders that match the display month-year
-    const matchesMonthYear = (orderDate: string) => {
-      if (orderDate.includes('-')) {
-        const parts = orderDate.split('-');
+
+    // Fuel metrics still come from the optional fuel/LPO props passed in.
+    const matchesMonthYear = (recordDate: string) => {
+      if (recordDate.includes('-')) {
+        const parts = recordDate.split('-');
         if (parts.length === 3) {
-          // YYYY-MM-DD format
           const orderYear = parseInt(parts[0], 10);
           const monthNum = parseInt(parts[1], 10);
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          const orderMonth = monthNames[monthNum - 1];
+          const orderMonth = MONTH_ABBR[monthNum - 1];
           return orderMonth === month && orderYear === parseInt(year);
         } else if (parts.length === 2) {
-          // D-Mon format - just match month for now
           return parts[1] === month;
         }
       }
       return false;
     };
-    
-    const monthOrders = filteredOrders.filter(o => matchesMonthYear(o.date) && !o.isCancelled);
-    
-    // Calculate fuel metrics for the month
+
     const monthFuelRecords = fuelRecords.filter(r => matchesMonthYear(r.date));
     const monthLpoEntries = lpoEntries.filter(l => matchesMonthYear(l.date));
-    
     const totalFuelConsumed = monthFuelRecords.reduce((sum, r) => sum + (r.totalLts || 0) + (r.extra || 0), 0);
     const totalFuelCost = monthLpoEntries.reduce((sum, l) => sum + (l.ltrs * l.pricePerLtr), 0);
-    const avgFuelPerOrder = monthOrders.length > 0 ? totalFuelConsumed / monthOrders.length : 0;
-    
-    const summaryData: SummaryData = {
+    const avgFuelPerOrder = aggregate.totalOrders > 0 ? totalFuelConsumed / aggregate.totalOrders : 0;
+
+    return {
       month: displayMonth,
-      totalOrders: monthOrders.length,
-      totalImport: monthOrders.filter(o => o.importOrExport === 'IMPORT').length,
-      totalExport: monthOrders.filter(o => o.importOrExport === 'EXPORT').length,
-      totalTonnage: monthOrders.reduce((sum, o) => sum + o.tonnages, 0),
-      totalRevenue: monthOrders.reduce((sum, o) => sum + (o.tonnages * o.ratePerTon), 0),
+      totalOrders: aggregate.totalOrders,
+      totalImport: aggregate.totalImport,
+      totalExport: aggregate.totalExport,
+      totalTonnage: aggregate.totalTonnage,
+      totalRevenue: aggregate.totalRevenue,
       totalFuelConsumed,
       totalFuelCost,
       avgFuelPerOrder,
-      byClient: {},
-      byDestination: {},
+      byClient: aggregate.byClient,
+      byDestination: aggregate.byDestination,
     };
+  }, [displayMonth, aggregate, fuelRecords, lpoEntries]);
 
-    // Group by client
-    monthOrders.forEach(order => {
-      if (!summaryData.byClient[order.clientName]) {
-        summaryData.byClient[order.clientName] = {
-          orders: 0,
-          tonnage: 0,
-          revenue: 0,
-        };
-      }
-      summaryData.byClient[order.clientName].orders += 1;
-      summaryData.byClient[order.clientName].tonnage += order.tonnages;
-      summaryData.byClient[order.clientName].revenue += (order.tonnages * order.ratePerTon);
-    });
-
-    // Group by destination
-    monthOrders.forEach(order => {
-      if (!summaryData.byDestination[order.destination]) {
-        summaryData.byDestination[order.destination] = 0;
-      }
-      summaryData.byDestination[order.destination] += 1;
-    });
-
-    return summaryData;
-  }, [selectedMonths, filteredOrders, fuelRecords, lpoEntries]);
-
-  const handleExportSummary = () => {
-    if (!summary || selectedMonths.length === 0) return;
+  const handleExportSummary = async () => {
+    if (selectedMonths.length === 0 || isExporting) return;
 
     const orderTypeLabel = doType === 'SDO' ? 'SDO' : doType === 'ALL' ? 'All_Orders' : 'DO';
-    
-    // Helper function to match orders with month-year
-    const matchesMonthYear = (orderDate: string, targetMonthYear: string) => {
-      const [targetMonth, targetYear] = targetMonthYear.split('-');
-      if (orderDate.includes('-')) {
-        const parts = orderDate.split('-');
-        if (parts.length === 3) {
-          const orderYear = parseInt(parts[0], 10);
-          const monthNum = parseInt(parts[1], 10);
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          const orderMonth = monthNames[monthNum - 1];
-          return orderMonth === targetMonth && orderYear === parseInt(targetYear);
-        } else if (parts.length === 2) {
-          return parts[1] === targetMonth;
-        }
-      }
-      return false;
-    };
-    
-    // Generate sheets for each selected month
-    const sheets = selectedMonths.map(monthYear => {
-      const monthOrders = filteredOrders.filter(o => matchesMonthYear(o.date, monthYear) && !o.isCancelled);
-      
-      const exportData = monthOrders.map((order, index) => ({
-        'S/N': index + 1,
-        'DATE': order.date,
-        'IMPORT OR EXPORT': order.importOrExport,
-        'D.O No.': order.doNumber,
-        'Invoice Nos': order.invoiceNos || '',
-        'CLIENT NAME': order.clientName,
-        'TRUCK No.': order.truckNo,
-        'TRAILER No.': order.trailerNo,
-        'CONTAINER No.': order.containerNo || 'LOOSE CARGO',
-        'BORDER ENTRY DRC': order.borderEntryDRC || '',
-        'LOADING POINT': order.loadingPoint || '',
-        'DESTINATION': order.destination,
-        'HAULIER': order.haulier || '',
-        'TONNAGES': order.tonnages,
-        'RATE PER TON': order.ratePerTon,
-        'RATE': order.tonnages * order.ratePerTon,
-      }));
+    setIsExporting(true);
+    try {
+      // Fetch the actual rows for each selected month on demand (bounded).
+      const sheets = await Promise.all(
+        selectedMonths.map(async monthYear => {
+          const range = monthYearToRange(monthYear);
+          // Include cancelled DOs too — they're rendered red + struck-through
+          // in the sheet (via the _isCancelled marker below).
+          const rows = range
+            ? await fetchAllDeliveryOrders({
+                importOrExport,
+                doType: queryDoType,
+                status: 'all',
+                dateFrom: range.dateFrom,
+                dateTo: range.dateTo,
+              })
+            : [];
 
-      return {
-        sheetName: monthYear,
-        data: exportData,
-      };
-    });
+          const exportData = rows.map((order, index) => ({
+            'S/N': index + 1,
+            'DATE': order.date,
+            'IMPORT OR EXPORT': order.importOrExport,
+            'D.O No.': order.doNumber,
+            'Invoice Nos': order.invoiceNos || '',
+            'CLIENT NAME': order.clientName,
+            'TRUCK No.': order.truckNo,
+            'TRAILER No.': order.trailerNo,
+            'CONTAINER No.': order.containerNo || 'LOOSE CARGO',
+            'BORDER ENTRY DRC': order.borderEntryDRC || '',
+            'LOADING POINT': order.loadingPoint || '',
+            'DESTINATION': order.destination,
+            'HAULIER': order.haulier || '',
+            'TONNAGES': order.tonnages,
+            'RATE PER TON': order.ratePerTon,
+            'RATE': order.tonnages * order.ratePerTon,
+            _isCancelled: !!order.isCancelled,
+          }));
 
-    const monthsLabel = selectedMonths.length === 1 
-      ? selectedMonths[0].replace('-', '_') 
-      : selectedMonths.length === availableMonths.filter(m => selectedYears.some(y => m.endsWith(`-${y}`))).length 
-        ? `All_Months_${selectedYears.join('_')}` 
-        : `${selectedMonths.length}_Months`;
+          return { sheetName: monthYear, data: exportData };
+        })
+      );
 
-    exportToXLSXMultiSheet(sheets, `${orderTypeLabel}_Summary_${monthsLabel}.xlsx`, {
-      headerColor: '4472C4',
-      addBorders: true,
-      centerAllCells: true,
-    });
-  };
+      const monthsLabel = selectedMonths.length === 1
+        ? selectedMonths[0].replace('-', '_')
+        : selectedMonths.length === availableMonths.filter(m => selectedYears.some(y => m.endsWith(`-${y}`))).length
+          ? `All_Months_${selectedYears.join('_')}`
+          : `${selectedMonths.length}_Months`;
 
-  const getMonthOrders = (): DeliveryOrder[] => {
-    if (selectedMonths.length === 0) return [];
-    return filteredOrders.filter(o => o.date.includes(selectedMonths[0]) && !o.isCancelled);
+      exportToXLSXMultiSheet(sheets, `${orderTypeLabel}_Summary_${monthsLabel}.xlsx`, {
+        headerColor: '4472C4',
+        addBorders: true,
+        centerAllCells: true,
+        strikethroughCancelledRows: true,
+      });
+    } catch {
+      toast.error('Failed to export summary. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const getGroupedOrders = (): GroupedOrders => {
-    const monthOrders = getMonthOrders();
-    
+    const monthOrders = detailedOrders.filter(o => !o.isCancelled);
+
     if (groupBy === 'none') {
       return { 'All Orders': monthOrders };
     }
-    
+
     const grouped: GroupedOrders = {};
-    
     monthOrders.forEach(order => {
       const key = groupBy === 'client' ? order.clientName : order.destination;
       if (!grouped[key]) {
@@ -321,14 +304,22 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
       }
       grouped[key].push(order);
     });
-    
+
     return grouped;
   };
+
+  if (availablePeriods.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        No delivery order data available
+      </div>
+    );
+  }
 
   if (!summary) {
     return (
       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-        Select a month to view summary
+        {aggFetching ? 'Loading summary...' : 'Select a month to view summary'}
       </div>
     );
   }
@@ -344,7 +335,7 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
             <Calendar className="w-6 h-6 text-primary-600 dark:text-primary-400" />
             <div className="flex items-center gap-2">
               <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                {doType === 'SDO' ? 'SDO' : doType === 'ALL' ? 'All Orders' : 'DO'} Summary - {summary.month} 2025
+                {doType === 'SDO' ? 'SDO' : doType === 'ALL' ? 'All Orders' : 'DO'} Summary - {summary.month}
               </h3>
               {doType !== 'ALL' && (
                 <span className={`px-2 py-0.5 text-xs font-semibold rounded ${doType === 'SDO' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'}`}>
@@ -568,10 +559,15 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
             {/* Export Button */}
             <button
               onClick={handleExportSummary}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              disabled={isExporting}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Export
+              {isExporting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" />
+              )}
+              {isExporting ? 'Exporting...' : 'Export'}
             </button>
           </div>
         </div>
@@ -697,7 +693,12 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
       {/* Detailed View - Excel-like Table */}
       {viewMode === 'detailed' && (
         <div className="space-y-4">
-          {Object.entries(groupedOrders).map(([groupName, groupOrders]) => (
+          {detailedFetching && detailedOrders.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">Loading orders...</div>
+          ) : detailedOrders.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">No orders for this month</div>
+          ) : (
+          Object.entries(groupedOrders).map(([groupName, groupOrders]) => (
             <div key={groupName} className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 overflow-hidden transition-colors">
               {groupBy !== 'none' && (
                 <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
@@ -824,7 +825,8 @@ const MonthlySummary = ({ orders, fuelRecords = [], lpoEntries = [], doType = 'D
                 </table>
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
       )}
     </div>

@@ -6,6 +6,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI } from '../services/api';
+import type { DOSummaryAggregate } from '../services/api';
 import type { DeliveryOrder } from '../types';
 import { cleanDeliveryOrders } from '../utils/dataCleanup';
 
@@ -21,6 +22,7 @@ export const deliveryOrderKeys = {
   availableYears: (doType: string) => [...deliveryOrderKeys.all, 'years', doType] as const,
   availablePeriods: (filters: Record<string, unknown>) => [...deliveryOrderKeys.all, 'periods', filters] as const,
   summaryAll: (filters: Record<string, unknown>) => [...deliveryOrderKeys.all, 'summaryAll', filters] as const,
+  summaryAggregate: (filters: Record<string, unknown>) => [...deliveryOrderKeys.all, 'summaryAggregate', filters] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -93,43 +95,84 @@ export function useDeliveryOrdersList(filters: DeliveryOrderFilters, enabled = t
 }
 
 // ---------------------------------------------------------------------------
-// All delivery orders across every month (for the Monthly Summary tab)
+// Bounded set of delivery-order rows (used by the Summary tab's Detailed view)
 // ---------------------------------------------------------------------------
-// The Summary tab must aggregate over EVERY month with data (including
-// imported/historical DOs), not just the current-month page slice the List
-// view is showing. This hook pulls the full dataset (looping through pages so
-// nothing is silently truncated) with no date-range filter.
+// Fetches every row matching the filter/date-range (looping through pages so
+// nothing is silently truncated). Scoped to a date range so it only ever pulls
+// the month(s) the user is actually looking at.
 export interface AllDeliveryOrderFilters {
   search?: string;
   importOrExport?: string;   // 'ALL' | 'IMPORT' | 'EXPORT'
   doType?: 'DO' | 'SDO';     // undefined = all
   status?: 'all' | 'active' | 'cancelled';
+  dateFrom?: string;
+  dateTo?: string;
 }
 
-export function useAllDeliveryOrders(filters: AllDeliveryOrderFilters, enabled = true) {
+/** Fetch every DO matching the given filters, paging through until complete. */
+export async function fetchAllDeliveryOrders(filters: AllDeliveryOrderFilters): Promise<DeliveryOrder[]> {
   const baseParams: Record<string, unknown> = { sort: 'date', order: 'desc' };
   if (filters.search) baseParams.search = filters.search;
   if (filters.importOrExport && filters.importOrExport !== 'ALL') baseParams.importOrExport = filters.importOrExport;
   if (filters.doType) baseParams.doType = filters.doType;
   if (filters.status && filters.status !== 'all') baseParams.status = filters.status;
+  if (filters.dateFrom) baseParams.dateFrom = filters.dateFrom;
+  if (filters.dateTo) baseParams.dateTo = filters.dateTo;
+
+  const limit = 5000; // backend caps limit at 5000
+  const all: DeliveryOrder[] = [];
+  let page = 1;
+  for (;;) {
+    const response = await deliveryOrdersAPI.getAll({ ...baseParams, page, limit });
+    const cleaned = cleanDeliveryOrders(response.data);
+    all.push(...cleaned);
+    const total = response.pagination?.total ?? cleaned.length;
+    if (cleaned.length === 0 || all.length >= total) break;
+    page += 1;
+  }
+  return all;
+}
+
+export function useAllDeliveryOrders(filters: AllDeliveryOrderFilters, enabled = true) {
+  const keyParams: Record<string, unknown> = {};
+  if (filters.search) keyParams.search = filters.search;
+  if (filters.importOrExport && filters.importOrExport !== 'ALL') keyParams.importOrExport = filters.importOrExport;
+  if (filters.doType) keyParams.doType = filters.doType;
+  if (filters.status && filters.status !== 'all') keyParams.status = filters.status;
+  if (filters.dateFrom) keyParams.dateFrom = filters.dateFrom;
+  if (filters.dateTo) keyParams.dateTo = filters.dateTo;
 
   return useQuery({
-    queryKey: deliveryOrderKeys.summaryAll(baseParams),
-    queryFn: async () => {
-      const limit = 5000; // backend caps limit at 5000
-      const all: DeliveryOrder[] = [];
-      let page = 1;
-      // Fetch page-by-page until we've collected every matching row.
-      for (;;) {
-        const response = await deliveryOrdersAPI.getAll({ ...baseParams, page, limit });
-        const cleaned = cleanDeliveryOrders(response.data);
-        all.push(...cleaned);
-        const total = response.pagination?.total ?? cleaned.length;
-        if (cleaned.length === 0 || all.length >= total) break;
-        page += 1;
-      }
-      return all;
-    },
+    queryKey: deliveryOrderKeys.summaryAll(keyParams),
+    queryFn: () => fetchAllDeliveryOrders(filters),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Server-side aggregated summary metrics (Summary tab metric cards)
+// ---------------------------------------------------------------------------
+// Returns just the computed totals/breakdowns for the given filter + date
+// range, so the metric cards never need to download raw rows.
+export interface SummaryAggregateFilters {
+  importOrExport?: string;
+  doType?: 'DO' | 'SDO';
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export function useDOSummaryAggregate(filters: SummaryAggregateFilters, enabled = true) {
+  const params: Record<string, string> = {};
+  if (filters.importOrExport && filters.importOrExport !== 'ALL') params.importOrExport = filters.importOrExport;
+  if (filters.doType) params.doType = filters.doType;
+  if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+  if (filters.dateTo) params.dateTo = filters.dateTo;
+
+  return useQuery<DOSummaryAggregate>({
+    queryKey: deliveryOrderKeys.summaryAggregate(params),
+    queryFn: () => deliveryOrdersAPI.getSummaryAggregate(params),
     enabled,
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,

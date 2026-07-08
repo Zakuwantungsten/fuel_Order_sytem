@@ -29,7 +29,6 @@ import {
   deliveryOrderKeys,
   periodsToDateRange,
   useDeliveryOrdersList,
-  useAllDeliveryOrders,
   useDOWorkbooks,
   useDOAvailableYears,
   useDOAvailablePeriods,
@@ -107,18 +106,6 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     filterStatus,
   );
 
-  // --- React Query: full dataset for the Summary tab (all months, not just
-  // the current-month page slice used by the List view). Only fetched while
-  // the Summary tab is active. ---
-  const { data: summaryOrders = [], isFetching: summaryFetching } = useAllDeliveryOrders(
-    {
-      search: searchTerm || undefined,
-      importOrExport: filterType,
-      doType: filterDoType === 'ALL' ? undefined : filterDoType,
-      status: filterStatus,
-    },
-    activeTab === 'summary',
-  );
 
   // --- React Query: workbooks & available years ---
   const { data: workbooks = [] } = useDOWorkbooks(filterDoType);
@@ -1987,11 +1974,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           )}
         </>
       ) : activeTab === 'summary' ? (
-        summaryFetching && summaryOrders.length === 0 ? (
-          <UnifiedTabLoader label="Loading summary..." />
-        ) : (
-          <MonthlySummary orders={summaryOrders} doType={filterDoType} />
-        )
+        <MonthlySummary importOrExport={filterType} doType={filterDoType} />
       ) : null}
 
       {/* DO Detail Modal */}
