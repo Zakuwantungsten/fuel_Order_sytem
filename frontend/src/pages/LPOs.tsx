@@ -230,13 +230,20 @@ const LPOs = () => {
     // Guard against stale placeholder data: enforce station filter client-side on
     // lpoEntries too, since placeholderData keeps the previous query's results
     // visible while a new station-filtered fetch is in flight.
+    // The main paginated flat list already includes refer entries, and
+    // useReferEntries fetches those same records separately. Drop refer entries
+    // here so each REF entry is rendered exactly once (from filteredReferEntries)
+    // instead of appearing twice.
+    const nonReferLpoEntries = lpoEntries.filter(e => !e.isRefer);
     const filteredLpoEntries = stationFilter
-      ? lpoEntries.filter(e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase())
-      : lpoEntries;
+      ? nonReferLpoEntries.filter(e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase())
+      : nonReferLpoEntries;
 
     return [...filteredLpoEntries, ...filteredDriverEntries, ...filteredReferEntries];
   }, [lpoEntries, driverEntries, referEntries, stationFilter, statusFilter, searchTerm, dateRange.dateFrom, dateRange.dateTo]);
-  const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length + referEntries.length;
+  // The backend flat-list total already counts refer entries, and we now render
+  // them from referEntries instead of the paginated list, so don't add them twice.
+  const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length;
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
   const loading = lpoQuery.isLoading;
   const isFetching = lpoQuery.isFetching;
@@ -1974,13 +1981,17 @@ const LPOs = () => {
                           {lpo.ltrs.toLocaleString()}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
-                          {(lpo.pricePerLtr ?? 0).toFixed(2)}
+                          {lpo.currency === 'USD'
+                            ? `$ ${(lpo.pricePerLtr ?? 0).toFixed(2)}`
+                            : `TZS ${(lpo.pricePerLtr ?? 0).toLocaleString()}`}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.destinations}
                         </td>
                         <td className="px-3 py-2 text-xs font-semibold text-gray-900 dark:text-gray-100">
-                          {(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}
+                          {lpo.currency === 'USD'
+                            ? `$ ${(lpo.ltrs * lpo.pricePerLtr).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : `TZS ${(lpo.ltrs * lpo.pricePerLtr).toLocaleString()}`}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
                           <div className="flex space-x-2 relative">
