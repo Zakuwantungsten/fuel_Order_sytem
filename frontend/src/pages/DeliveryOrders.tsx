@@ -1685,6 +1685,12 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           </p>
                         </div>
                         <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Loading Point:</span>
+                          <p className={`font-medium ${order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                            {order.loadingPoint}
+                          </p>
+                        </div>
+                        <div>
                           <span className="text-xs text-gray-500 dark:text-gray-400">Destination:</span>
                           <p className={`font-medium ${order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
                             {order.destination}
@@ -1746,6 +1752,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Status</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Client</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Truck</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Loading Point</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Dest.</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Tons / Rate</th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">Actions</th>
@@ -1811,6 +1818,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
                           }`}>
                             {order.truckNo}
+                          </td>
+                          <td className={`px-3 py-2 text-xs ${
+                            order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'
+                          }`}>
+                            {order.loadingPoint}
                           </td>
                           <td className={`px-3 py-2 text-xs ${
                             order.isCancelled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'

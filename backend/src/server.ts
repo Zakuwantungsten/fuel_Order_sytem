@@ -193,6 +193,7 @@ import { startBackupScheduler } from './jobs/backupScheduler';
 import './jobs/fuelPriceScheduler';
 import './jobs/securityEventRetention';
 import './jobs/securityScoreSnapshot';
+import './jobs/securityDigest'; // Rolls routine auto-blocks into a scheduled summary email
 import './jobs/fleetDailyCleanup';
 import './jobs/backupTrashCleanup'; // LE-3: purge soft-deleted backups after retention window
 import './jobs/disasterRecoveryDrill'; // Chaos: weekly automated backup-restore verification

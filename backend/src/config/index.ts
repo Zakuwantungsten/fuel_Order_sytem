@@ -90,6 +90,13 @@ export const config = {
   securityUaBlocking: process.env.SECURITY_UA_BLOCKING !== 'false',       // enabled by default
   securityIpGating: process.env.SECURITY_IP_GATING === 'true',           // disabled by default
   securityEventRetentionDays: parseInt(process.env.SECURITY_EVENT_RETENTION_DAYS || '90', 10),
+  // Security digest: rolls routine auto-blocks into a scheduled summary email
+  securityDigestEnabled: process.env.SECURITY_DIGEST_ENABLED !== 'false',    // enabled by default
+  securityDigestCron: process.env.SECURITY_DIGEST_CRON || '0 7 * * *',       // daily 07:00
+  securityDigestWindowMs: parseInt(process.env.SECURITY_DIGEST_WINDOW_MS || '86400000', 10), // 24h
+  // Coordinated-attack spike: N auto-blocks within the window → one critical alert
+  securityBlockSpikeThreshold: parseInt(process.env.SECURITY_BLOCK_SPIKE_THRESHOLD || '25', 10),
+  securityBlockSpikeWindowMs: parseInt(process.env.SECURITY_BLOCK_SPIKE_WINDOW_MS || '600000', 10), // 10 min
 
   // Redis — used for Socket.io adapter, caching, and session sharing
   redisUrl: process.env.REDIS_URL || '',

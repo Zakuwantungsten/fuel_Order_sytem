@@ -3,6 +3,8 @@ import { User, SystemConfig } from '../models';
 import logger from '../utils/logger';
 import { decryptData } from '../utils/cryptoUtils';
 import { isEncrypted } from '../utils/fieldEncryption';
+// Type-only import (erased at compile time — no runtime circular dependency)
+import type { SecurityDigest } from './securityAlertService';
 
 interface CriticalEmailOptions {
   subject: string;
@@ -245,6 +247,15 @@ class EmailService {
     try {
       const cfg = await SystemConfig.findOne({ configType: 'system_settings' });
       return cfg?.systemSettings?.notifications?.weeklyReport !== false;
+    } catch {
+      return true;
+    }
+  }
+
+  private async securityDigestEnabled(): Promise<boolean> {
+    try {
+      const cfg = await SystemConfig.findOne({ configType: 'system_settings' });
+      return cfg?.systemSettings?.notifications?.securityDigest !== false;
     } catch {
       return true;
     }
@@ -514,6 +525,52 @@ class EmailService {
       logger.info('Weekly summary email sent successfully');
     } catch (error) {
       logger.error('Failed to send weekly summary email:', error);
+    }
+  }
+
+  /**
+   * Send the aggregated security digest (auto-blocks + alerts) to super admins.
+   * Replaces per-block emails — routine blocks are rolled up here instead of
+   * paging on every event. Recipients = super_admins + optional security email.
+   */
+  async sendSecurityDigest(digest: SecurityDigest): Promise<void> {
+    if (!this.isConfigured) await this.reinitialize();
+    if (!this.isConfigured) {
+      logger.warn('Email service not configured — skipping security digest');
+      return;
+    }
+    if (!(await this.securityDigestEnabled())) {
+      logger.info('Security digest emails disabled by system settings — skipping');
+      return;
+    }
+
+    try {
+      const superAdmins = await User.find({
+        role: 'super_admin',
+        isActive: true,
+        isDeleted: false,
+      }).select('email');
+
+      if (superAdmins.length === 0) {
+        logger.warn('No super admin users found to send security digest');
+        return;
+      }
+
+      const extra = process.env.SECURITY_ALERT_EMAIL
+        ? [process.env.SECURITY_ALERT_EMAIL]
+        : [];
+      const recipients = [...superAdmins.map((a) => a.email), ...extra];
+
+      await this.dispatchMail({
+        from: `"${this.fromName} - Security" <${this.fromAddress}>`,
+        to: recipients,
+        subject: `🛡️ Security Digest (${digest.periodLabel}) — ${digest.totalBlocks} block(s), ${digest.criticalAlerts} critical`,
+        html: this.generateSecurityDigestEmail(digest),
+      });
+
+      logger.info(`Security digest email sent to ${recipients.length} recipient(s)`);
+    } catch (error) {
+      logger.error('Failed to send security digest email:', error);
     }
   }
 
@@ -968,6 +1025,97 @@ class EmailService {
         </div>
         <div style="padding:20px;background:#f9fafb">
           <p>Detailed weekly statistics would go here...</p>
+        </div>
+      </div>`;
+  }
+
+  private generateSecurityDigestEmail(d: SecurityDigest): string {
+    const reasonLabels: Record<string, string> = {
+      path_probe: 'Path probing',
+      auth_failure: 'Auth failures',
+      brute_force: 'Brute force',
+      rate_limit: 'Rate limiting',
+      suspicious_404: 'Suspicious 404s',
+      ua_blocked: 'Malicious user-agent',
+      honeypot: 'Honeypot hits',
+      manual: 'Manual block',
+      auto_escalation: 'Auto-escalation',
+    };
+    const fmt = (dt: Date) => new Date(dt).toLocaleString();
+    const headerColor = d.criticalAlerts > 0 ? '#dc2626' : (d.totalBlocks > 0 ? '#f97316' : '#10b981');
+
+    const reasonRows = d.byReason.length
+      ? d.byReason
+          .map(
+            (r) =>
+              `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${reasonLabels[r.reason] || r.reason}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:bold">${r.count}</td></tr>`,
+          )
+          .join('')
+      : `<tr><td colspan="2" style="padding:10px;color:#6b7280">No blocks in this period.</td></tr>`;
+
+    const ipRows = d.topIPs.length
+      ? d.topIPs
+          .map(
+            (ip) =>
+              `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:monospace">${ip.ip}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${reasonLabels[ip.reason] || ip.reason}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:bold">${ip.count}</td></tr>`,
+          )
+          .join('')
+      : `<tr><td colspan="3" style="padding:10px;color:#6b7280">—</td></tr>`;
+
+    const openRows = d.openCritical.length
+      ? d.openCritical
+          .map(
+            (a) =>
+              `<li style="margin-bottom:6px"><span style="font-weight:bold;color:${a.severity === 'critical' ? '#dc2626' : '#f97316'}">[${a.severity.toUpperCase()}]</span> ${a.title} <span style="color:#9ca3af;font-size:12px">— ${fmt(a.createdAt)}</span></li>`,
+          )
+          .join('')
+      : `<li style="color:#10b981">✅ No unresolved critical/high alerts — nothing needs your attention.</li>`;
+
+    return `
+      <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+        <div style="background:${headerColor};color:white;padding:20px;text-align:center">
+          <h1 style="margin:0;font-size:22px">🛡️ Security Digest</h1>
+          <p style="margin:6px 0 0;opacity:0.9">${d.periodLabel} — ${fmt(d.since)} → ${fmt(d.until)}</p>
+        </div>
+        <div style="padding:24px;background:#f9fafb">
+          <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+            <div style="flex:1;min-width:120px;background:white;padding:14px;border-radius:8px;text-align:center">
+              <div style="font-size:26px;font-weight:bold;color:#1f2937">${d.totalBlocks}</div>
+              <div style="color:#6b7280;font-size:13px">IPs blocked</div>
+            </div>
+            <div style="flex:1;min-width:120px;background:white;padding:14px;border-radius:8px;text-align:center">
+              <div style="font-size:26px;font-weight:bold;color:#1f2937">${d.uniqueIPs}</div>
+              <div style="color:#6b7280;font-size:13px">Unique IPs</div>
+            </div>
+            <div style="flex:1;min-width:120px;background:white;padding:14px;border-radius:8px;text-align:center">
+              <div style="font-size:26px;font-weight:bold;color:${d.criticalAlerts > 0 ? '#dc2626' : '#10b981'}">${d.criticalAlerts}</div>
+              <div style="color:#6b7280;font-size:13px">Critical alerts</div>
+            </div>
+          </div>
+
+          <div style="background:white;padding:16px;border-radius:8px;margin-bottom:16px">
+            <h3 style="margin:0 0 10px;color:#1f2937">Needs your attention</h3>
+            <ul style="margin:0;padding-left:18px;color:#1f2937;font-size:14px">${openRows}</ul>
+          </div>
+
+          <div style="background:white;padding:16px;border-radius:8px;margin-bottom:16px">
+            <h3 style="margin:0 0 10px;color:#1f2937">Blocks by reason</h3>
+            <table style="width:100%;border-collapse:collapse;font-size:14px">${reasonRows}</table>
+          </div>
+
+          <div style="background:white;padding:16px;border-radius:8px">
+            <h3 style="margin:0 0 10px;color:#1f2937">Top offending IPs</h3>
+            <table style="width:100%;border-collapse:collapse;font-size:14px">${ipRows}</table>
+          </div>
+
+          <p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:20px">
+            Routine auto-blocks are summarised here instead of individual emails.
+            You are only paged in real time for genuine attacks (brute force, account compromise, coordinated spikes).
+          </p>
+        </div>
+        <div style="background:#1f2937;color:white;padding:15px;text-align:center;font-size:12px">
+          <p style="margin:0">Fuel Order Management System — Security Digest</p>
+          <p style="margin:5px 0 0;color:#9ca3af">© ${new Date().getFullYear()} All rights reserved</p>
         </div>
       </div>`;
   }

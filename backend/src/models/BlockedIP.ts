@@ -42,7 +42,7 @@ const BlockedIPSchema = new Schema<IBlockedIP>(
     },
     reason: {
       type: String,
-      enum: ['path_probe', 'auth_failure', 'rate_limit', 'suspicious_404', 'ua_blocked', 'honeypot', 'manual', 'auto_escalation'],
+      enum: ['path_probe', 'auth_failure', 'brute_force', 'rate_limit', 'suspicious_404', 'ua_blocked', 'honeypot', 'manual', 'auto_escalation'],
       required: true,
     },
     blockedAt: {

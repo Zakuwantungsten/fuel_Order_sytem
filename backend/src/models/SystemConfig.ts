@@ -181,6 +181,7 @@ export interface ISystemSettings {
     criticalAlerts: boolean;
     dailySummary: boolean;
     weeklyReport: boolean;
+    securityDigest?: boolean; // Scheduled summary of auto-blocks & security alerts
     slowQueryThreshold: number; // ms
     storageWarningThreshold: number; // percentage
     loginNotifications: boolean; // Master switch for login-related notification emails
@@ -451,6 +452,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         criticalAlerts: { type: Boolean, default: true },
         dailySummary: { type: Boolean, default: false },
         weeklyReport: { type: Boolean, default: true },
+        securityDigest: { type: Boolean, default: true },
         slowQueryThreshold: { type: Number, default: 500 },
         storageWarningThreshold: { type: Number, default: 80 },
         loginNotifications: { type: Boolean, default: true },

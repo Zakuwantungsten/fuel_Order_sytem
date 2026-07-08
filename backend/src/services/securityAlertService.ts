@@ -25,6 +25,7 @@ import {
   ISecurityAlertDocument,
 } from '../models/SecurityAlert';
 import { SecurityIncident } from '../models/SecurityIncident';
+import { BlockedIP } from '../models/BlockedIP';
 
 /* ───────── Types ───────── */
 
@@ -39,6 +40,21 @@ export interface SecurityAlertInput {
   details?: Record<string, string | number | boolean>;
   url?: string;            // the requested path
   method?: string;
+}
+
+/** Aggregated security activity for the scheduled digest email. */
+export interface SecurityDigest {
+  periodLabel: string;                 // e.g. "last 24 hours"
+  since: Date;
+  until: Date;
+  totalBlocks: number;
+  uniqueIPs: number;
+  byReason: { reason: string; count: number }[];
+  topIPs: { ip: string; count: number; reason: string }[];
+  criticalAlerts: number;              // critical alerts raised in period
+  highAlerts: number;                  // high alerts raised in period
+  openCritical: { title: string; severity: string; createdAt: Date }[]; // unresolved, needs attention
+  hasActivity: boolean;                // false = nothing happened this period
 }
 
 /* ───────── Cooldown state ───────── */
@@ -62,6 +78,17 @@ export function _clearCooldowns(): void {
   _cooldowns.clear();
 }
 
+/* ───────── Block-spike state (coordinated-attack detection) ───────── */
+
+// Rolling timestamps (ms) of recent IP blocks, used to detect a surge of
+// auto-blocks that indicates a coordinated attack rather than routine scanning.
+let _recentBlockTimes: number[] = [];
+
+/** Exposed for testing */
+export function _clearBlockSpikeState(): void {
+  _recentBlockTimes = [];
+}
+
 /* ───────── Severity → email priority mapping ───────── */
 
 const SEVERITY_TO_PRIORITY: Record<AlertSeverity, 'critical' | 'high' | 'medium' | 'low'> = {
@@ -72,14 +99,21 @@ const SEVERITY_TO_PRIORITY: Record<AlertSeverity, 'critical' | 'high' | 'medium'
 };
 
 /**
- * Event types that warrant an email even at HIGH severity — these require a
- * human decision (account compromise, policy violation, first IP block, etc.).
+ * Event types that warrant a REAL-TIME email even at HIGH severity — these
+ * require a human decision (account compromise, policy violation, exfiltration).
  *
- * Everything else (path_probe, rate_limited, ua_blocked, suspicious_404) only
- * goes to DB + WebSocket + Slack. The block is already working; no action needed.
+ * Deliberately EXCLUDES routine auto-blocks (ip_blocked, path_probe,
+ * rate_limited, ua_blocked, suspicious_404): the block already contained the
+ * threat, so there is nothing for a human to do in the moment. Those go to
+ * DB + WebSocket dashboard + Slack, and are rolled up into the scheduled
+ * security digest (see jobs/securityDigest.ts). This mirrors how large SOCs
+ * suppress "the defense worked" signals and reserve paging for events that
+ * indicate a successful or escalating attack.
+ *
+ * A coordinated-attack SPIKE (many blocks in a short window) still escalates to
+ * a single real-time critical alert — see `checkBlockSpike()` below.
  */
 const HIGH_SEVERITY_EMAIL_EVENTS = new Set([
-  'ip_blocked',        // new IP auto-blocked — situational awareness
   'brute_force',       // targeted account attack
   'break_glass',       // emergency access used
   'impossible_travel', // account likely compromised
@@ -199,6 +233,117 @@ class SecurityAlertService {
         blockedBy: 'system',
       },
     });
+
+    // Coordinated-attack detection: a surge of blocks escalates to ONE
+    // aggregated real-time critical alert (not one email per IP).
+    await this.checkBlockSpike();
+  }
+
+  /**
+   * Detect a spike of auto-blocks within a short window (a likely coordinated
+   * attack) and raise a single aggregated critical alert. Routine, steady
+   * scanner traffic stays quiet (dashboard + digest only).
+   */
+  private async checkBlockSpike(): Promise<void> {
+    try {
+      const windowMs = (config as any).securityBlockSpikeWindowMs ?? 600_000;
+      const threshold = (config as any).securityBlockSpikeThreshold ?? 25;
+      if (!threshold || threshold <= 0) return;
+
+      const now = Date.now();
+      _recentBlockTimes.push(now);
+      // Prune outside the window
+      const cutoff = now - windowMs;
+      _recentBlockTimes = _recentBlockTimes.filter((t) => t >= cutoff);
+
+      if (_recentBlockTimes.length < threshold) return;
+
+      const windowMin = Math.round(windowMs / 60_000);
+      const count = _recentBlockTimes.length;
+
+      // send() applies the per-(ip+eventType) cooldown, so at most one spike
+      // email per cooldown period even if the surge continues.
+      await this.send({
+        eventType: 'block_spike',
+        severity: 'critical',
+        ip: 'multiple',
+        title: `Elevated attack volume: ${count} IPs blocked in ${windowMin} min`,
+        description:
+          `The auto-block system has blocked ${count} IP address(es) in the last ${windowMin} minute(s), ` +
+          `which exceeds the coordinated-attack threshold of ${threshold}. ` +
+          `Individual blocks are suppressed; review the security dashboard for details.`,
+        details: {
+          blocksInWindow: count,
+          windowMinutes: windowMin,
+          threshold,
+        },
+      });
+    } catch (err) {
+      logger.error('[SecurityAlert] Block-spike check failed:', err);
+    }
+  }
+
+  /**
+   * Aggregate security activity over a rolling window for the scheduled digest.
+   * Reads real data from BlockedIP + SecurityAlert.
+   */
+  async buildDigest(windowMs: number, periodLabel = 'last 24 hours'): Promise<SecurityDigest> {
+    const until = new Date();
+    const since = new Date(until.getTime() - windowMs);
+
+    const blocks = await BlockedIP.find({ blockedAt: { $gte: since } })
+      .select('ip reason blockedAt')
+      .lean();
+
+    const reasonMap = new Map<string, number>();
+    const ipMap = new Map<string, { count: number; reason: string }>();
+    for (const b of blocks) {
+      reasonMap.set(b.reason, (reasonMap.get(b.reason) || 0) + 1);
+      const cur = ipMap.get(b.ip);
+      ipMap.set(b.ip, { count: (cur?.count || 0) + 1, reason: b.reason });
+    }
+
+    const byReason = Array.from(reasonMap.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const topIPs = Array.from(ipMap.entries())
+      .map(([ip, v]) => ({ ip, count: v.count, reason: v.reason }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    const [criticalAlerts, highAlerts, openCriticalDocs] = await Promise.all([
+      SecurityAlert.countDocuments({ createdAt: { $gte: since }, severity: 'critical' }),
+      SecurityAlert.countDocuments({ createdAt: { $gte: since }, severity: 'high' }),
+      SecurityAlert.find({
+        severity: { $in: ['critical', 'high'] },
+        status: { $in: ['new', 'investigating'] },
+      })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select('title severity createdAt')
+        .lean(),
+    ]);
+
+    const openCritical = openCriticalDocs.map((a: any) => ({
+      title: a.title,
+      severity: a.severity,
+      createdAt: a.createdAt,
+    }));
+
+    return {
+      periodLabel,
+      since,
+      until,
+      totalBlocks: blocks.length,
+      uniqueIPs: ipMap.size,
+      byReason,
+      topIPs,
+      criticalAlerts,
+      highAlerts,
+      openCritical,
+      hasActivity: blocks.length > 0 || criticalAlerts > 0 || highAlerts > 0,
+    };
   }
 
   /** Alert on persistent path probing from the same IP */
