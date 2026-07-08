@@ -32,6 +32,12 @@ export default defineConfig(({ command }) => ({
     // proactively validate all chunks on every page load, which adds 9+ seconds when
     // a Vercel CDN node is slow. Disabled so lazy chunks only fetch when needed.
     modulePreload: false,
+    // xlsx-js-style is a single ~600 kB spreadsheet engine that cannot be split any
+    // further, and it's already loaded lazily (only via dynamic import() on an actual
+    // Excel export/import), so it never touches initial page load. Raise the warning
+    // threshold above it to keep the build clean — a genuinely oversized *eager* chunk
+    // would still trip this limit because every other chunk stays well under it.
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -39,7 +45,13 @@ export default defineConfig(({ command }) => ({
           'query-vendor': ['@tanstack/react-query'],
           'charts-vendor': ['recharts'],
           'maps-vendor': ['leaflet', 'react-leaflet'],
-          'excel-vendor': ['xlsx', 'xlsx-js-style', 'papaparse'],
+          // Heavy spreadsheet engine — kept on its own chunk so it only downloads
+          // when a user actually exports/imports Excel (all its imports are dynamic).
+          'excel-vendor': ['xlsx', 'xlsx-js-style'],
+          // papaparse is imported statically by csvParser, so keeping it out of
+          // excel-vendor prevents opening a CSV-capable page (FuelRecords /
+          // MonthlySummary) from eagerly pulling the ~600 kB spreadsheet chunk.
+          'csv-vendor': ['papaparse'],
           'pdf-vendor': ['jspdf', 'html2canvas'],
           'socket-vendor': ['socket.io-client'],
           'icons-vendor': ['lucide-react'],
