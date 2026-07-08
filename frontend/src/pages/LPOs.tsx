@@ -4,6 +4,9 @@ import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2, Truck } from 'lucide-react';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
+import { NewRecordsPill } from '../components/NewRecordsPill';
+import { countRelevantNewRecords } from '../utils/realtimeRelevance';
 import type { LPOEntry, LPOSummary as LPOSummaryType } from '../types';
 import { lpoDocumentsAPI, lpoWorkbookAPI, lposAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
@@ -584,15 +587,45 @@ const LPOs = () => {
     };
   }, []);
 
-  // Realtime sync. Remote LPO updates carry the full LPO payload, so the hook
-  // patches the affected row into the list in place — another user editing an
-  // LPO no longer forces everyone's table to refetch. Only create/delete change
-  // list membership, filter options and the workbook rollups.
+  // New-records pill for created LPOs relevant to the current list view.
+  const lpoPillResetKey = `${searchTerm}|${stationFilter}|${statusFilter}|${JSON.stringify(selectedPeriods)}|${currentPage}|${itemsPerPage}`;
+  const { pendingCount: pendingNewLPOs, addPending: addPendingLPOs, clearPending: clearPendingLPOs } = useNewRecordsPill(lpoPillResetKey);
+
+  const loadNewLPOs = () => {
+    clearPendingLPOs();
+    lpoQuery.refetch();
+  };
+
+  // Realtime sync. Remote LPO updates carry the full payload, so the hook patches
+  // the affected row in place. Creates are deferred (no auto-refetch): filter
+  // options + workbook rollups still refresh, and if a new LPO would land in the
+  // current filtered + paginated view we bump the pill instead of reloading.
   useRealtimeSync(['lpo_summaries'], (event) => {
-    if (event?.action === 'create' || event?.action === 'delete') {
-      queryClient.invalidateQueries({ queryKey: lpoKeys.availableFilters() });
-      queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
-    }
+    if (event?.action !== 'create' && event?.action !== 'delete') return;
+    queryClient.invalidateQueries({ queryKey: lpoKeys.availableFilters() });
+    queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
+    if (event?.action !== 'create') return;
+    const dr = periodsToDateRange(selectedPeriods);
+    const fromT = dr.dateFrom ? new Date(dr.dateFrom).getTime() : -Infinity;
+    const toT = dr.dateTo ? new Date(dr.dateTo).getTime() : Infinity;
+    const relevant = countRelevantNewRecords(
+      event,
+      { visibleRows: lpoEntries, sortField: 'createdAt', sortOrder: 'desc', page: currentPage, totalPages },
+      {
+        dateField: 'createdAt',
+        matchesFilters: (rec) => {
+          if (statusFilter === 'cancelled') return false; // new LPOs are active
+          if (stationFilter && String(rec?.station ?? '').trim().toUpperCase() !== stationFilter.trim().toUpperCase()) return false;
+          if (dr.dateFrom || dr.dateTo) {
+            const t = rec?.date ? new Date(rec.date).getTime() : NaN;
+            if (!Number.isNaN(t) && (t < fromT || t > toT)) return false;
+          }
+          return true;
+        },
+        matchesBulk: () => statusFilter !== 'cancelled',
+      },
+    );
+    addPendingLPOs(relevant);
   });
 
   const handleExportWorkbook = async (year: number) => {
@@ -889,6 +922,7 @@ const LPOs = () => {
       queryClient.invalidateQueries({ queryKey: lpoKeys.availableFilters() });
       queryClient.invalidateQueries({ queryKey: lpoKeys.availableYears() });
       queryClient.invalidateQueries({ queryKey: lpoKeys.referEntries() });
+      clearPendingLPOs(); // creator already sees the fresh list — no pill needed
 
       // Auto-download PDF for the created LPO (only if enabled in config)
       if (autoDownloadLPOPdf) {
@@ -1689,6 +1723,14 @@ const LPOs = () => {
           </button>
         </div>
       </div>
+
+      {/* New-records affordance — only when created LPOs relevant to the
+          current view are available, so the table isn't reloaded under the user. */}
+      {pendingNewLPOs > 0 && (
+        <div className="flex justify-center mb-2">
+          <NewRecordsPill count={pendingNewLPOs} onLoad={loadNewLPOs} label="LPO" />
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg transition-colors">

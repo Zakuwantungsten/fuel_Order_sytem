@@ -328,11 +328,27 @@ export const emitSecuritySettingsEvent = (settings: {
  * Used for real-time cache invalidation — when any user creates/updates/deletes
  * data, all other connected clients viewing that collection will silently re-fetch.
  */
+/**
+ * Compact scope descriptor for a *bulk* create (bulk DO create / Excel import).
+ * Lets connected clients decide whether any of the newly-created rows would land
+ * in their current filtered + paginated view — so they can show a precise
+ * "N new records — click to load" affordance instead of silently refetching.
+ */
+export interface BulkChangeMeta {
+  bulk: true;
+  count: number;
+  dateMin?: string;              // ISO date of earliest created row
+  dateMax?: string;              // ISO date of latest created row
+  importOrExport?: string[];     // distinct IMPORT/EXPORT values present
+  doType?: string[];             // distinct DO/SDO values present (delivery orders)
+}
+
 export const emitDataChange = (
   collection: string,
   action: 'create' | 'update' | 'delete' = 'update',
   changedDocument?: Record<string, any>,
-  station?: string
+  station?: string,
+  meta?: BulkChangeMeta
 ): void => {
   if (!io) return;
   io.emit('data_changed', {
@@ -340,6 +356,7 @@ export const emitDataChange = (
     action,
     timestamp: Date.now(),
     record: changedDocument ?? null,
+    meta: meta ?? null,
     station: station ?? changedDocument?.station ?? null,
     isCustomStation:
       changedDocument?.isCustomStation === true ||

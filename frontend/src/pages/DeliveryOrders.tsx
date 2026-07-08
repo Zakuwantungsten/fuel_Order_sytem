@@ -19,6 +19,9 @@ import { useTruckBatches } from '../hooks/useTruckBatches';
 import { useRoutes } from '../hooks/useRoutes';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useEditLockSync } from '../hooks/useEditLockSync';
+import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
+import { NewRecordsPill } from '../components/NewRecordsPill';
+import { countRelevantNewRecords } from '../utils/realtimeRelevance';
 import { useAuth } from '../contexts/AuthContext';
 import ConflictModal from '../components/ConflictModal';
 import EditLockBadge from '../components/EditLockBadge';
@@ -82,7 +85,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
   // --- React Query: server-side paginated orders ---
   const dateRange = periodsToDateRange(selectedPeriods);
-  const { data: ordersData, isLoading: loading, isFetching } = useDeliveryOrdersList({
+  const { data: ordersData, isLoading: loading, isFetching, refetch: refetchOrders } = useDeliveryOrdersList({
     page: currentPage,
     limit: itemsPerPage,
     search: searchTerm || undefined,
@@ -435,19 +438,61 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     }
   }, [searchParams, orders]);
 
-  // Real-time sync. Remote updates and cancellations (which are soft updates
-  // carrying the full DO payload) are patched into the list in place by the
-  // hook — so another user editing/cancelling a DO no longer forces everyone
-  // else's table to refetch. Only a brand-new DO changes list membership,
-  // available periods and the year workbook rollups, so we refresh those on
-  // 'create' only. ('delete' never happens — DOs are cancelled, not deleted.)
+  // New-records pill for created DOs relevant to the current list view.
+  const doPillResetKey = `${searchTerm}|${filterType}|${filterDoType}|${filterStatus}|${JSON.stringify(selectedPeriods)}|${currentPage}|${itemsPerPage}|${activeTab}`;
+  const { pendingCount: pendingNewDOs, addPending: addPendingDOs, clearPending: clearPendingDOs } = useNewRecordsPill(doPillResetKey);
+
+  const loadNewDOs = () => {
+    clearPendingDOs();
+    refetchOrders();
+  };
+
+  const doPeriodSet = useMemo(
+    () => new Set(selectedPeriods.map(p => `${p.year}-${String(p.month).padStart(2, '0')}`)),
+    [selectedPeriods],
+  );
+
+  // Real-time sync. Remote updates and cancellations (soft updates carrying the
+  // full DO payload) are patched into the list in place by the hook. Creates are
+  // deferred (no auto-refetch): if a new DO would land in the current filtered +
+  // paginated list view we bump the pill; the year-workbook rollups still refresh
+  // so the workbook tab stays correct. ('delete' never happens — DOs are cancelled.)
   useRealtimeSync('delivery_orders', (event) => {
-    if (event?.action === 'create') {
-      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('ALL') });
-      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('DO') });
-      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('SDO') });
-    }
-  });
+    if (event?.action !== 'create') return;
+    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('ALL') });
+    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('DO') });
+    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('SDO') });
+    if (activeTab !== 'list') return; // pill only applies to the list table
+    const relevant = countRelevantNewRecords(
+      event,
+      { visibleRows: orders, sortField: 'date', sortOrder: 'desc', page: currentPage, totalPages },
+      {
+        dateField: 'date',
+        matchesFilters: (rec) => {
+          if (filterStatus === 'cancelled') return false; // new DOs are active
+          if (filterType !== 'ALL' && rec?.importOrExport !== filterType) return false;
+          if (filterDoType !== 'ALL' && rec?.doType !== filterDoType) return false;
+          if (doPeriodSet.size > 0 && !doPeriodSet.has(String(rec?.date ?? '').slice(0, 7))) return false;
+          return true;
+        },
+        matchesBulk: (meta) => {
+          if (filterStatus === 'cancelled') return false;
+          if (filterType !== 'ALL' && !(meta.importOrExport ?? []).includes(filterType)) return false;
+          if (filterDoType !== 'ALL' && !(meta.doType ?? []).includes(filterDoType)) return false;
+          if (doPeriodSet.size > 0) {
+            const lo = meta.dateMin?.slice(0, 7);
+            const hi = meta.dateMax?.slice(0, 7);
+            if (lo && hi) {
+              const hit = [...doPeriodSet].some(ym => ym >= lo && ym <= hi);
+              if (!hit) return false;
+            }
+          }
+          return true;
+        },
+      },
+    );
+    addPendingDOs(relevant);
+  }, { id: 'rt-delivery-orders', deferCreates: true });
 
   // Live-update the "Editing: …" badge without refetching the list.
   useEditLockSync('delivery_orders');
@@ -811,6 +856,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
       // Also invalidate fuel records cache so FuelRecords page shows new/updated records
       queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+      clearPendingDOs(); // creator already sees the fresh list — no pill needed
       console.log('=== handleSaveOrder END - SUCCESS ===');
       return savedOrder;
     } catch (error: any) {
@@ -915,6 +961,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     await queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
     queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+    clearPendingDOs(); // creator already sees the fresh list — no pill needed
 
     // Show a summary only when something needs attention. The backend already
     // creates the notification-bell entry for failures/unlinked exports.
@@ -1604,6 +1651,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
               </button>
             </div>
           </div>
+
+          {/* New-records affordance — only when created DOs relevant to the
+              current view are available, so the table isn't refreshed under the user. */}
+          {pendingNewDOs > 0 && (
+            <div className="flex justify-center mb-2">
+              <NewRecordsPill count={pendingNewDOs} onLoad={loadNewDOs} label="order" />
+            </div>
+          )}
 
           {/* Table */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg overflow-hidden transition-colors">

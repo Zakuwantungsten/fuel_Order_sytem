@@ -10,12 +10,27 @@ import { journeyConfigKey } from './useJourneyConfig';
 import { fuelStationKeys } from './useFuelStations';
 import { cleanDeliveryOrder } from '../utils/dataCleanup';
 
+/**
+ * Compact scope descriptor for a *bulk* create (bulk DO create / Excel import).
+ * Mirrors the backend BulkChangeMeta. Lets a page decide whether any newly
+ * created rows would land in its current filtered + paginated view.
+ */
+export interface BulkChangeMeta {
+  bulk: true;
+  count: number;
+  dateMin?: string;
+  dateMax?: string;
+  importOrExport?: string[];
+  doType?: string[];
+}
+
 /** Shape of a real-time data-change event delivered over the WebSocket. */
 export interface DataChangeEvent {
   collection: string;
   action: 'create' | 'update' | 'delete' | string;
   timestamp: number;
   record?: any;
+  meta?: BulkChangeMeta | null;
 }
 
 /**
@@ -148,12 +163,18 @@ function scheduleInvalidate(
  *                     so consumers that manage their own local state can patch a
  *                     single record in place instead of refetching everything.
  *                     Existing zero-argument callbacks keep working unchanged.
- * @param id           Unique subscriber ID (auto-derived from collection names if omitted)
+ * @param options      Either a string subscriber id (legacy) or an options object:
+ *                     - id: unique subscriber id (auto-derived if omitted)
+ *                     - deferCreates: when true, a `create`/`delete` event does NOT
+ *                       refetch the active list. Instead all matching caches are
+ *                       marked stale (so navigating elsewhere loads fresh) and the
+ *                       event is handed to onRefresh, which is expected to surface a
+ *                       "click to load" affordance. `update` still patches in place.
  */
 export function useRealtimeSync(
   collections: string | string[],
   onRefresh: (event?: DataChangeEvent) => void,
-  id?: string
+  options?: string | { id?: string; deferCreates?: boolean }
 ) {
   const queryClient = useQueryClient();
   const refreshRef = useRef(onRefresh);
@@ -161,8 +182,11 @@ export function useRealtimeSync(
     refreshRef.current = onRefresh;
   });
 
+  const opts = typeof options === 'string' ? { id: options } : (options || {});
+  const deferCreates = opts.deferCreates === true;
+
   const cols = Array.isArray(collections) ? collections : [collections];
-  const subId = id || `rt-${cols.join('+')}`;
+  const subId = opts.id || `rt-${cols.join('+')}`;
 
   useEffect(() => {
     subscribeToDataChanges((event) => {
@@ -200,19 +224,34 @@ export function useRealtimeSync(
         // Only fall back to invalidation when a record wasn't on any cached page
         // (e.g. it lives on a different page or the payload was malformed).
         if (!allPatched && listKeys.length) {
-          listKeys.forEach(key => scheduleInvalidate(queryClient, key));
+          listKeys.forEach(key =>
+            deferCreates
+              ? queryClient.invalidateQueries({ queryKey: key as unknown[], refetchType: 'none' })
+              : scheduleInvalidate(queryClient, key)
+          );
         }
 
         refreshRef.current(event as DataChangeEvent);
         return;
       }
 
-      // create / delete — always invalidate so the list re-fetches (coalesced,
-      // so a bulk import's burst of events collapses into a single refetch).
+      // create / delete.
       if (keyFactory) {
-        keyFactory().forEach((key: ReadonlyArray<unknown>) =>
-          scheduleInvalidate(queryClient, key)
-        );
+        if (deferCreates) {
+          // Don't disturb the active table: mark every matching cache stale
+          // (so switching filter/page/month later loads fresh) but refetch
+          // nothing now. The page's onRefresh decides whether to show a
+          // "N new records — click to load" pill for the current view.
+          keyFactory().forEach((key: ReadonlyArray<unknown>) =>
+            queryClient.invalidateQueries({ queryKey: key as unknown[], refetchType: 'none' })
+          );
+        } else {
+          // Default: invalidate so the list re-fetches (coalesced, so a bulk
+          // import's burst of events collapses into a single refetch).
+          keyFactory().forEach((key: ReadonlyArray<unknown>) =>
+            scheduleInvalidate(queryClient, key)
+          );
+        }
       }
 
       // Seed detail cache for newly created records

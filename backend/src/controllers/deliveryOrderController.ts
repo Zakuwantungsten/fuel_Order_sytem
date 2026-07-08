@@ -11,7 +11,7 @@ import { AuditService } from '../utils/auditService';
 import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
-import { emitDataChange } from '../services/websocket';
+import { emitDataChange, BulkChangeMeta } from '../services/websocket';
 import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
 import { getFuelAutomationFlags, resolveDashboardSearchLimits } from '../services/journeyService';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
@@ -95,6 +95,32 @@ const getCompanyBranding = async (): Promise<CompanyBranding> => {
  * Falls back to a payload-less emit (which triggers a list refresh) only when
  * the record can't be loaded.
  */
+/**
+ * Build a compact bulk-change scope descriptor from a set of just-created rows,
+ * so clients can decide whether any of them land in the viewer's current
+ * filtered + paginated view (see BulkChangeMeta).
+ */
+const buildBulkMeta = (
+  rows: Array<{ date?: any; importOrExport?: string; doType?: string }>,
+): BulkChangeMeta | undefined => {
+  if (!rows.length) return undefined;
+  const times = rows
+    .map(r => new Date(r.date))
+    .filter(d => !isNaN(d.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const importOrExport = [...new Set(rows.map(r => r.importOrExport).filter(Boolean))] as string[];
+  const doType = [...new Set(rows.map(r => r.doType).filter(Boolean))] as string[];
+  return {
+    bulk: true,
+    count: rows.length,
+    dateMin: times.length ? iso(times[0]) : undefined,
+    dateMax: times.length ? iso(times[times.length - 1]) : undefined,
+    importOrExport: importOrExport.length ? importOrExport : undefined,
+    doType: doType.length ? doType : undefined,
+  };
+};
+
 const emitFuelRecordChange = async (fuelRecordId?: string): Promise<void> => {
   // No id means the DO edit/cancel didn't actually touch a fuel record
   // (e.g. a non-cascading field change, or automation disabled) — so there's
@@ -934,10 +960,10 @@ const applyImportFuelRecords = async (
   truckBatches: Record<string, any>,
   username: string,
   batchDestinationRules: Record<string, any> = {},
-): Promise<{ queuedCount: number; lockedNotifs: LockedFuelNotif[] }> => {
+): Promise<{ queuedCount: number; lockedNotifs: LockedFuelNotif[]; createdFuelDates: string[]; createdFuelIds: string[] }> => {
   let queuedCount = 0;
   const lockedNotifs: LockedFuelNotif[] = [];
-  if (importDOs.length === 0) return { queuedCount, lockedNotifs };
+  if (importDOs.length === 0) return { queuedCount, lockedNotifs, createdFuelDates: [], createdFuelIds: [] };
 
   const importTrucks = [...new Set(importDOs.map((o: any) => o.truckNo))];
   const [activeRecords, queuedRecords] = await Promise.all([
@@ -1022,7 +1048,16 @@ const applyImportFuelRecords = async (
     logger.warn('Yard-fuel auto-link step skipped:', e?.message || e);
   }
 
-  return { queuedCount, lockedNotifs };
+  const createdFuelDates = fuelRecordsToInsert
+    .map((r: any) => r.date)
+    .filter((d: any) => d != null)
+    .map((d: any) => String(d));
+  const createdFuelIds = fuelRecordsToInsert
+    .map((r: any) => r._id)
+    .filter((idv: any) => idv != null)
+    .map((idv: any) => String(idv));
+
+  return { queuedCount, lockedNotifs, createdFuelDates, createdFuelIds };
 };
 
 /**
@@ -1034,9 +1069,9 @@ const applyImportFuelRecords = async (
 const applyExportFuelUpdates = async (
   exportDOs: any[],
   routes: RouteLike[],
-): Promise<{ unlinkedExports: UnlinkedExportNotif[] }> => {
+): Promise<{ unlinkedExports: UnlinkedExportNotif[]; updatedFuelIds: string[] }> => {
   const unlinkedExports: UnlinkedExportNotif[] = [];
-  if (exportDOs.length === 0) return { unlinkedExports };
+  if (exportDOs.length === 0) return { unlinkedExports, updatedFuelIds: [] };
 
   const exportTrucks = [...new Set(exportDOs.map((o: any) => o.truckNo))];
   const goingRecords = await FuelRecord.find({
@@ -1076,7 +1111,7 @@ const applyExportFuelUpdates = async (
     }
   }
 
-  return { unlinkedExports };
+  return { unlinkedExports, updatedFuelIds: Array.from(usedRecordIds) };
 };
 
 /**
@@ -1124,6 +1159,9 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     const userRole = req.user?.role;
     const order = deliveryOrder.toObject() as any;
     let fuelAutomationSkipped: string | null = null;
+    // Fuel-record side-effect ids captured for a precise realtime broadcast.
+    let newFuelId: string | undefined;
+    let updatedFuelId: string | undefined;
 
     if (order.doType === 'DO' && (order.importOrExport === 'IMPORT' || order.importOrExport === 'EXPORT')) {
       const fuelFlags = await getFuelAutomationFlags();
@@ -1131,7 +1169,8 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         if (order.importOrExport === 'IMPORT') {
           if (fuelFlags.doImportCreate) {
             const { routes, truckBatches, batchDestinationRules: bdr } = await loadFuelConfig();
-            const { lockedNotifs } = await applyImportFuelRecords([order], routes, truckBatches, username, bdr);
+            const { lockedNotifs, createdFuelIds } = await applyImportFuelRecords([order], routes, truckBatches, username, bdr);
+            newFuelId = createdFuelIds[0];
             if (lockedNotifs.length > 0) {
               const { createMissingConfigNotification } = await import('./notificationController');
               for (const n of lockedNotifs) {
@@ -1145,7 +1184,8 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         } else {
           if (fuelFlags.doExportUpdate) {
             const { routes } = await loadFuelConfig();
-            const { unlinkedExports } = await applyExportFuelUpdates([order], routes);
+            const { unlinkedExports, updatedFuelIds } = await applyExportFuelUpdates([order], routes);
+            updatedFuelId = updatedFuelIds[0];
             if (unlinkedExports.length > 0) {
               const { createUnlinkedExportDONotification } = await import('./notificationController');
               for (const u of unlinkedExports) {
@@ -1195,7 +1235,16 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       data: deliveryOrder,
     });
     emitDataChange('delivery_orders', 'create', deliveryOrder.toObject());
-    emitDataChange('fuel_records', 'update');
+    // IMPORT created a new going fuel record → 'create' so viewers can offer to
+    // load it. EXPORT updated an existing record → patch it in place silently.
+    if (newFuelId) {
+      try {
+        const rec = await FuelRecord.findById(newFuelId).lean();
+        if (rec) emitDataChange('fuel_records', 'create', rec as Record<string, any>);
+      } catch { /* non-fatal */ }
+    } else if (updatedFuelId) {
+      await emitFuelRecordChange(updatedFuelId);
+    }
   } catch (error: any) {
     throw error;
   }
@@ -1343,12 +1392,18 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
   let queuedCount = 0;
   const lockedNotifs: LockedFuelNotif[] = [];
   const unlinkedExports: UnlinkedExportNotif[] = [];
+  // Fuel-record side-effects captured for the realtime broadcast: newly-created
+  // going records (drive the "new records" pill) and export-updated going
+  // records (patched in place on other clients).
+  let createdFuelDates: string[] = [];
+  let updatedFuelIds: string[] = [];
 
   // ── 5. IMPORT: build + insert going-journey fuel records (shared helper) ────
   if (importDOs.length > 0 && fuelFlags.doImportCreate) {
     const importResult = await applyImportFuelRecords(importDOs, routes, truckBatches, username, batchDestinationRules);
     queuedCount = importResult.queuedCount;
     lockedNotifs.push(...importResult.lockedNotifs);
+    createdFuelDates = importResult.createdFuelDates;
   } else if (importDOs.length > 0) {
     automationSkips.push(`doImportCreate (${importDOs.length} import DO${importDOs.length === 1 ? '' : 's'} — no fuel records created)`);
     logger.info(`[fuelAutomation] doImportCreate OFF — skipping fuel-record creation for ${importDOs.length} import DO(s)`);
@@ -1358,6 +1413,7 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
   if (exportDOs.length > 0 && fuelFlags.doExportUpdate) {
     const exportResult = await applyExportFuelUpdates(exportDOs, routes);
     unlinkedExports.push(...exportResult.unlinkedExports);
+    updatedFuelIds = exportResult.updatedFuelIds;
   } else if (exportDOs.length > 0) {
     automationSkips.push(`doExportUpdate (${exportDOs.length} export DO${exportDOs.length === 1 ? '' : 's'} — return leg not applied)`);
     logger.info(`[fuelAutomation] doExportUpdate OFF — skipping return-leg fuel update for ${exportDOs.length} export DO(s)`);
@@ -1414,8 +1470,24 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
     }).catch((err: any) => logger.warn(`Failed to write audit breadcrumb for skipped bulk DO automation: ${err?.message}`));
   }
 
-  emitDataChange('delivery_orders', 'create');
-  emitDataChange('fuel_records', 'update');
+  // New DOs → 'create' with scope meta so viewers can show a precise
+  // "N new records — click to load" affordance instead of a silent refetch.
+  emitDataChange('delivery_orders', 'create', undefined, undefined, buildBulkMeta(createdDOs));
+
+  // New going fuel records (import) → 'create' with date scope meta.
+  if (createdFuelDates.length > 0) {
+    emitDataChange('fuel_records', 'create', undefined, undefined, buildBulkMeta(createdFuelDates.map(date => ({ date }))));
+  }
+  // Export return-leg updates hit existing rows → patch them in place silently.
+  if (updatedFuelIds.length > 0) {
+    try {
+      const updatedFuel = await FuelRecord.find({ _id: { $in: updatedFuelIds } }).lean();
+      if (updatedFuel.length > 0) emitDataChange('fuel_records', 'update', updatedFuel as any);
+    } catch (err: any) {
+      logger.warn(`Failed to load export-updated fuel records for realtime patch: ${err?.message || err}`);
+      emitDataChange('fuel_records', 'update');
+    }
+  }
 
   logger.info(`Bulk DO creation by ${username}: ${createdDOs.length} created, ${queuedCount} queued, ${failedReasons.length} failed, ${unlinkedExports.length} unlinked exports`);
 

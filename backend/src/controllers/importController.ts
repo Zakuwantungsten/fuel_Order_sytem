@@ -20,7 +20,7 @@ import { AuthRequest } from '../middleware/auth';
 import logger from '../utils/logger';
 import { AuditService } from '../utils/auditService';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
-import { emitDataChange } from '../services/websocket';
+import { emitDataChange, BulkChangeMeta } from '../services/websocket';
 
 // Multer augments Express.Request with `file`; combine types for our handlers
 type ImportRequest = AuthRequest & { file?: Express.Multer.File };
@@ -1270,11 +1270,32 @@ export const importExcel = async (req: ImportRequest, res: Response): Promise<vo
       sheets: sheetResults,
     });
     if (!dryRun) {
-      emitDataChange('fuel_records', 'create');
-      emitDataChange('delivery_orders', 'create');
-      emitDataChange('lpo_summaries', 'create');
-      emitDataChange('tanga_lpo_documents', 'create');
-      emitDataChange('dar_lpo_documents', 'create');
+      // Sum inserts/updates per collection so each list can decide whether to
+      // show a "N new records — click to load" pill (inserts) or just quietly
+      // refresh in the background (update-only, e.g. re-imported rows).
+      const byType = sheetResults.reduce((acc, s) => {
+        acc[s.type] = acc[s.type] || { inserted: 0, updated: 0 };
+        acc[s.type].inserted += s.inserted;
+        acc[s.type].updated += s.updated;
+        return acc;
+      }, {} as Record<string, { inserted: number; updated: number }>);
+
+      const emitFor = (collection: string, type: SheetType) => {
+        const stats = byType[type];
+        if (!stats) return;
+        if (stats.inserted > 0) {
+          const meta: BulkChangeMeta = { bulk: true, count: stats.inserted };
+          emitDataChange(collection, 'create', undefined, undefined, meta);
+        } else if (stats.updated > 0) {
+          emitDataChange(collection, 'update');
+        }
+      };
+
+      emitFor('fuel_records', 'fuelRecord');
+      emitFor('delivery_orders', 'deliveryOrder');
+      emitFor('lpo_summaries', 'lpoEntry');
+      emitFor('tanga_lpo_documents', 'tangaYardLPO');
+      emitFor('dar_lpo_documents', 'darYardLPO');
     }
   } catch (err: unknown) {
     logger.error('[ImportCtrl] Import error:', err);

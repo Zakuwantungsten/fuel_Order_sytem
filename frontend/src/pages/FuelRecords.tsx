@@ -16,6 +16,9 @@ import { exportToXLSXMultiSheet } from '../utils/csvParser';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useEditLockSync } from '../hooks/useEditLockSync';
+import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
+import { NewRecordsPill } from '../components/NewRecordsPill';
+import { countRelevantNewRecords } from '../utils/realtimeRelevance';
 import ConflictModal from '../components/ConflictModal';
 import EditLockBadge from '../components/EditLockBadge';
 import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
@@ -204,7 +207,7 @@ const FuelRecords = () => {
   const routeFrom = routeFilter ? (routeTypeFilter === 'EXPORT' ? routeFilter.split('-')[0] : undefined) : undefined;
   const routeTo = routeFilter ? (routeTypeFilter === 'IMPORT' ? routeFilter.split('-')[1] : undefined) : undefined;
 
-  const { data: recordsData, isLoading: loading, isFetching } = useFuelRecordsList({
+  const { data: recordsData, isLoading: loading, isFetching, refetch: refetchRecords } = useFuelRecordsList({
     page: currentPage,
     limit: itemsPerPage,
     search: searchTerm || undefined,
@@ -543,11 +546,46 @@ const FuelRecords = () => {
     };
   }, []);
 
-  // Real-time sync for fuel records — the hook patches rows in-place for updates,
-  // so the callback only needs to handle extra cross-entity invalidations.
-  useRealtimeSync('fuel_records', () => {
+  // New-records pill: created fuel records relevant to the current view are
+  // surfaced as a click-to-load affordance instead of refreshing the table.
+  const pillResetKey = `${searchTerm}|${routeFilter}|${selectedMonth}|${routeTypeFilter}|${statusFilter}|${currentPage}|${itemsPerPage}`;
+  const { pendingCount, addPending, clearPending } = useNewRecordsPill(pillResetKey);
+
+  const loadNewRecords = () => {
+    clearPending();
+    refetchRecords();
+  };
+
+  // Real-time sync for fuel records. Updates are patched in place by the hook.
+  // Creates are deferred (no auto-refetch); if a new record would land in the
+  // current filtered + paginated view, we bump the pill instead.
+  useRealtimeSync('fuel_records', (event) => {
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
-  }, 'rt-fuel-records');
+    if (event?.action === 'create') {
+      const relevant = countRelevantNewRecords(
+        event,
+        { visibleRows: records, sortField: 'date', sortOrder: 'desc', page: currentPage, totalPages },
+        {
+          dateField: 'date',
+          matchesFilters: (rec) => {
+            if (statusFilter === 'cancelled') return false; // new records are active
+            if (selectedMonth) return String(rec?.date ?? '').slice(0, 7) === selectedMonth;
+            return true;
+          },
+          matchesBulk: (meta) => {
+            if (statusFilter === 'cancelled') return false;
+            if (selectedMonth) {
+              const lo = meta.dateMin?.slice(0, 7);
+              const hi = meta.dateMax?.slice(0, 7);
+              if (lo && hi) return selectedMonth >= lo && selectedMonth <= hi;
+            }
+            return true;
+          },
+        },
+      );
+      addPending(relevant);
+    }
+  }, { id: 'rt-fuel-records', deferCreates: true });
 
   // Live-update the "Editing: …" badge without refetching the list.
   useEditLockSync('fuel_records');
@@ -719,6 +757,7 @@ const FuelRecords = () => {
       } else {
         await fuelRecordsAPI.create(data);
         queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+        clearPending(); // don't nag the creator with a pill for their own record
         toast.success('Fuel record created successfully');
         setIsFormOpen(false);
         setSelectedRecord(undefined);
@@ -1268,6 +1307,15 @@ const FuelRecords = () => {
         </div>
         </div>
       </div>
+
+      {/* New-records affordance — appears only when created records relevant to
+          the current view are available, so the table is never refreshed out
+          from under the user. */}
+      {pendingCount > 0 && (
+        <div className="flex justify-center mb-2">
+          <NewRecordsPill count={pendingCount} onLoad={loadNewRecords} label="record" />
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg transition-colors">
