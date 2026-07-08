@@ -552,10 +552,12 @@ const FuelRecords = () => {
   // Live-update the "Editing: …" badge without refetching the list.
   useEditLockSync('fuel_records');
 
-  // Real-time sync for LPO changes — when an LPO is modified the fuel records
-  // list may reflect different linkage so we do a full list refresh here.
+  // Real-time sync for LPO changes. Any fuel record whose linkage actually
+  // changed is emitted separately as a `fuel_records` update carrying its full
+  // payload (see lpoSummaryController), and patched into the list in place by
+  // the hook above. So we no longer force a full fuel-records refetch here —
+  // that only distracted other users — and just refresh the light LPO dropdown.
   useRealtimeSync('lpo_summaries', () => {
-    queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
   }, 'rt-lpo-summaries');
 
@@ -1269,7 +1271,12 @@ const FuelRecords = () => {
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg transition-colors">
-        {loading || isFetching ? (
+        {/* Thin progress bar shown during a background refetch so the table
+            stays visible instead of being replaced by a full-screen loader. */}
+        {isFetching && !loading && (
+          <div className="h-0.5 w-full bg-blue-500/60 dark:bg-blue-400/60 animate-pulse" />
+        )}
+        {loading ? (
           <UnifiedTabLoader label="Loading fuel records..." />
         ) : totalItems === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
@@ -1500,7 +1507,7 @@ const FuelRecords = () => {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {loading || isFetching ? (
+              {loading ? (
                 <tr>
                   <td colSpan={27} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                     Loading data...

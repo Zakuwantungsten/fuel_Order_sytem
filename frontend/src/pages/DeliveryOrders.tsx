@@ -435,10 +435,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     }
   }, [searchParams, orders]);
 
-  // Invalidate React Query cache when WebSocket notifies of changes
-  useRealtimeSync('delivery_orders', () => {
-    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
-    queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
+  // Real-time sync. Remote updates and cancellations (which are soft updates
+  // carrying the full DO payload) are patched into the list in place by the
+  // hook — so another user editing/cancelling a DO no longer forces everyone
+  // else's table to refetch. Only a brand-new DO changes list membership,
+  // available periods and the year workbook rollups, so we refresh those on
+  // 'create' only. ('delete' never happens — DOs are cancelled, not deleted.)
+  useRealtimeSync('delivery_orders', (event) => {
+    if (event?.action === 'create') {
+      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('ALL') });
+      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('DO') });
+      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('SDO') });
+    }
   });
 
   // Live-update the "Editing: …" badge without refetching the list.

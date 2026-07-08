@@ -1665,7 +1665,9 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     data: { ...responseData, id: responseData._id },
   });
 
-  emitDataChange('lpo_summaries', 'update', undefined, lpoSummary.station);
+  // Send the full LPO payload so connected clients patch the row in place
+  // instead of refetching the whole list (keeps other users' work undisturbed).
+  emitDataChange('lpo_summaries', 'update', lpoSummary.toObject(), lpoSummary.station);
   emitDataChange('driver_accounts', 'update');
 
   for (const amended of entriesToUpdate) {

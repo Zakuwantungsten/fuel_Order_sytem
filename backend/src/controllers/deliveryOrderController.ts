@@ -90,6 +90,26 @@ const getCompanyBranding = async (): Promise<CompanyBranding> => {
 };
 
 /**
+ * Emit a `fuel_records` change carrying the affected record's full payload so
+ * connected clients patch that single row in place (no disruptive list refetch).
+ * Falls back to a payload-less emit (which triggers a list refresh) only when
+ * the record can't be loaded.
+ */
+const emitFuelRecordChange = async (fuelRecordId?: string): Promise<void> => {
+  // No id means the DO edit/cancel didn't actually touch a fuel record
+  // (e.g. a non-cascading field change, or automation disabled) — so there's
+  // nothing for Fuel Records viewers to update and we skip the emit entirely.
+  if (!fuelRecordId) return;
+  try {
+    const rec = await FuelRecord.findById(fuelRecordId).lean();
+    emitDataChange('fuel_records', 'update', (rec ?? undefined) as Record<string, any> | undefined);
+  } catch {
+    // Fall back to a payload-less notify so clients still converge via refetch.
+    emitDataChange('fuel_records', 'update');
+  }
+};
+
+/**
  * Helper: Cascade updates to related fuel records when DO is edited
  * Updates truck number, destination (to/from), loading point, and recalculates totalLts based on new route
  * If route is not found, sets totalLts to null, locks the record, and creates a notification for admin
@@ -1500,6 +1520,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     const cascadeResults: {
       fuelRecordUpdated: boolean;
       fuelRecordChanges: string[];
+      fuelRecordId?: string;
       fuelRecordLocked?: boolean;
       routeNotificationCreated?: boolean;
       lpoEntriesUpdated: number;
@@ -1536,6 +1557,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
             const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username, session);
             cascadeResults.fuelRecordUpdated = fuelResult.updated;
             cascadeResults.fuelRecordChanges = fuelResult.changes || [];
+            cascadeResults.fuelRecordId = fuelResult.fuelRecordId;
             cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
             if (fuelResult.routeNotificationCreated) {
               cascadeResults.fuelRecordLocked = true;
@@ -1604,7 +1626,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       cascadeResults,
     });
     emitDataChange('delivery_orders', 'update', deliveryOrder.toObject());
-    emitDataChange('fuel_records', 'update');
+    await emitFuelRecordChange(cascadeResults.fuelRecordId);
     emitDataChange('lpo_summaries', 'update');
   } catch (error: any) {
     throw error;
@@ -1742,8 +1764,8 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       data: deliveryOrder,
       cascadeResults,
     });
-    emitDataChange('delivery_orders', 'update');
-    emitDataChange('fuel_records', 'update');
+    emitDataChange('delivery_orders', 'update', deliveryOrder.toObject());
+    await emitFuelRecordChange(cascadeResults.fuelRecordId);
   } catch (error: any) {
     throw error;
   }

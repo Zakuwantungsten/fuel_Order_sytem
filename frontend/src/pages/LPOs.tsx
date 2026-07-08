@@ -584,11 +584,15 @@ const LPOs = () => {
     };
   }, []);
 
-  // Realtime sync — invalidate React Query cache instead of full refetch
-  useRealtimeSync(['lpo_summaries'], () => {
-    queryClient.invalidateQueries({ queryKey: lpoKeys.lists() });
-    queryClient.invalidateQueries({ queryKey: lpoKeys.availableFilters() });
-    queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
+  // Realtime sync. Remote LPO updates carry the full LPO payload, so the hook
+  // patches the affected row into the list in place — another user editing an
+  // LPO no longer forces everyone's table to refetch. Only create/delete change
+  // list membership, filter options and the workbook rollups.
+  useRealtimeSync(['lpo_summaries'], (event) => {
+    if (event?.action === 'create' || event?.action === 'delete') {
+      queryClient.invalidateQueries({ queryKey: lpoKeys.availableFilters() });
+      queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
+    }
   });
 
   const handleExportWorkbook = async (year: number) => {
