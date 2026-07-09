@@ -290,7 +290,16 @@ applyCsrfProtection(apiBasePath);
 applyCsrfProtection(legacyApiBasePath);
 
 // IP Allowlist / Blocklist filter (evaluated against active rules in DB)
-app.use(ipFilterMiddleware);
+// Only apply strict IP rules to admin surfaces. Mobile users and general app
+// traffic often come from changing carrier / CGNAT IPs, so a global allowlist
+// can accidentally lock out legitimate users during token refresh or login.
+const applyIpFilterProtection = (basePath: string) => {
+  app.use(`${basePath}/admin`, ipFilterMiddleware);
+  app.use(`${basePath}/system-admin`, ipFilterMiddleware);
+};
+
+applyIpFilterProtection(apiBasePath);
+applyIpFilterProtection(legacyApiBasePath);
 
 // API routes
 app.use(apiBasePath, routes);
