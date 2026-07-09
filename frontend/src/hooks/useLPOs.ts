@@ -57,7 +57,7 @@ export function useLPOList(filters: LPOFilters, enabled = true) {
   const queryParams: Record<string, unknown> = {
     page: filters.page,
     limit: filters.limit,
-    sort: filters.sort || 'createdAt',
+    sort: filters.sort || 'lpo_desc',
     order: filters.order || 'desc',
   };
   if (filters.search) queryParams.search = filters.search;
@@ -130,7 +130,7 @@ export function useReferEntries() {
     queryFn: async () => {
       // 5000 is the backend's hard cap (getPaginationParams). Requesting more is pointless;
       // if refer entries ever exceed this, interactive pagination is needed here.
-      const response = await lposAPI.getAll({ isRefer: 'true', limit: 5000 });
+      const response = await lposAPI.getAll({ isRefer: 'true', limit: 5000, sort: 'lpo_desc', order: 'desc' });
       const entries = Array.isArray(response.data) ? response.data : [];
       if (response.pagination && response.pagination.total > entries.length) {
         console.warn(`useReferEntries: ${response.pagination.total} refer entries exist but only ${entries.length} loaded — add pagination UI to view the rest.`);

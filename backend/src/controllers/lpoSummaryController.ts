@@ -3268,6 +3268,160 @@ const ENTRY_PROJECTION = {
   updatedAt: 1,
 };
 
+/** Numeric prefix of canonical LPO number (XXXX/YY → XXXX) for stable list ordering. */
+const LPO_SORT_NUM_EXPR = {
+  $convert: {
+    input: { $arrayElemAt: [{ $split: [{ $ifNull: ['$lpoNo', '0'] }, '/'] }, 0] },
+    to: 'int',
+    onError: 0,
+    onNull: 0,
+  },
+};
+
+const FLAT_ENTRY_PROJECTION = {
+  ...ENTRY_PROJECTION,
+  entryIdx: { $ifNull: ['$entryIdx', 0] },
+  lpoSortNum: LPO_SORT_NUM_EXPR,
+};
+
+const LEGACY_DA_FLAT_PROJECTION = {
+  _id: 0,
+  id: '$_id',
+  lpoId: null,
+  lpoNo: 1,
+  date: 1,
+  dieselAt: '$station',
+  doSdo: { $literal: 'NIL' },
+  truckNo: 1,
+  ltrs: '$liters',
+  pricePerLtr: '$rate',
+  destinations: { $literal: 'NIL' },
+  currency: { $literal: 'USD' },
+  isCancelled: { $ifNull: ['$isCancelled', false] },
+  cancelledAt: '$cancelledAt',
+  isDriverAccount: { $literal: true },
+  isRefer: { $literal: false },
+  paymentMode: { $literal: 'DRIVER_ACCOUNT' },
+  originalLtrs: null,
+  amendedAt: null,
+  referenceDo: '$originalDoNo',
+  createdAt: 1,
+  updatedAt: 1,
+  entryIdx: { $literal: 0 },
+  lpoSortNum: LPO_SORT_NUM_EXPR,
+};
+
+function resolveFlatEntrySort(sort?: string, order?: string): Record<string, 1 | -1> {
+  const raw = (sort as string) || 'lpo_desc';
+  const asc = order === 'asc';
+
+  switch (raw) {
+    case 'lpo_asc':
+    case 'oldest':
+      return { lpoSortNum: 1, entryIdx: 1 };
+    case 'liters_desc':
+      return { ltrs: -1, lpoSortNum: -1, entryIdx: 1 };
+    case 'liters_asc':
+      return { ltrs: 1, lpoSortNum: -1, entryIdx: 1 };
+    case 'lpo_desc':
+    case 'newest':
+    case 'createdAt':
+    default:
+      return asc ? { lpoSortNum: 1, entryIdx: 1 } : { lpoSortNum: -1, entryIdx: 1 };
+  }
+}
+
+function buildLegacyDriverAccountMatch(
+  req: AuthRequest,
+  opts: {
+    effectiveDateFrom?: string;
+    effectiveDateTo?: string;
+    station?: string;
+    stations?: string;
+    search?: string;
+    status?: string;
+    scope: Awaited<ReturnType<typeof resolveManagerScope>>;
+    hasSearch: boolean;
+  },
+): Record<string, unknown> | null {
+  const lpoCreatedGuard = { $or: [{ lpoCreated: { $ne: true } }, { lpoCreated: { $exists: false } }] };
+  const match: Record<string, unknown> = {
+    isDeleted: false,
+    $and: [lpoCreatedGuard],
+  };
+
+  if (opts.effectiveDateFrom || opts.effectiveDateTo) {
+    match.date = {};
+    if (opts.effectiveDateFrom) (match.date as any).$gte = opts.effectiveDateFrom.substring(0, 10);
+    if (opts.effectiveDateTo) (match.date as any).$lte = opts.effectiveDateTo.substring(0, 10);
+  }
+
+  if (opts.status === 'active') {
+    (match.$and as unknown[]).push({
+      $or: [{ isCancelled: false }, { isCancelled: { $exists: false } }],
+    });
+  } else if (opts.status === 'cancelled') {
+    match.isCancelled = true;
+  }
+
+  if (req.user?.role === 'driver') {
+    match.truckNo = req.user.username;
+  }
+
+  const managerTier = !!opts.scope;
+  if (!managerTier) {
+    if (opts.station && !opts.hasSearch) {
+      const s = sanitizeRegexInput(opts.station);
+      if (s) match.station = { $regex: `^${s}`, $options: 'i' };
+    }
+    if (opts.stations && !opts.station && !opts.hasSearch) {
+      const list = opts.stations
+        .split(',')
+        .map((x) => sanitizeRegexInput(x.trim()))
+        .filter(Boolean);
+      if (list.length > 0) {
+        (match.$and as unknown[]).push({
+          $or: list.map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } })),
+        });
+      }
+    }
+  }
+
+  if (opts.scope) {
+    applyManagerStationScope(match, opts.scope, {
+      station: opts.station,
+      stations: opts.stations,
+      hasSearch: opts.hasSearch,
+    });
+    if (opts.scope.dateFloor) {
+      match.date = match.date || {};
+      const existingFrom = (match.date as any).$gte as string | undefined;
+      (match.date as any).$gte =
+        existingFrom && existingFrom > opts.scope.dateFloor ? existingFrom : opts.scope.dateFloor;
+    }
+    if (!Array.isArray(match.$and)) {
+      match.$and = [lpoCreatedGuard];
+    } else if (!match.$and.some((c: any) => c?.$or?.some?.((o: any) => o?.lpoCreated !== undefined))) {
+      match.$and.unshift(lpoCreatedGuard);
+    }
+  }
+
+  if (opts.search) {
+    const fuzzy = buildFuzzyRegex(opts.search);
+    if (fuzzy) {
+      (match.$and as unknown[]).push({
+        $or: [
+          { lpoNo: { $regex: fuzzy, $options: 'i' } },
+          { truckNo: { $regex: fuzzy, $options: 'i' } },
+          { station: { $regex: fuzzy, $options: 'i' } },
+        ],
+      });
+    }
+  }
+
+  return match;
+}
+
 /**
  * GET /lpo-documents/entries
  * Aggregates LPOSummary.entries into a flat, paginated list.
@@ -3480,14 +3634,14 @@ function applyManagerStationScope(
 
 export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    let { page, limit } = getPaginationParams(req.query);
+    let { page, limit, sort, order } = getPaginationParams(req.query);
     const dashboardLimits = await resolveDashboardSearchLimits('lpo', req.query);
     if (dashboardLimits) {
       page = dashboardLimits.page;
       limit = dashboardLimits.limit;
     }
 
-    const { dateFrom, dateTo, lpoNo, truckNo, station, stations, customZambiaOnly, search, status, isRefer, isDriverAccount, sort } = req.query;
+    const { dateFrom, dateTo, lpoNo, truckNo, station, stations, customZambiaOnly, search, status, isRefer, isDriverAccount } = req.query;
     const effectiveDateFrom = dashboardLimits?.dateFrom ?? dateFrom;
     const effectiveDateTo = dashboardLimits?.dateTo ?? dateTo;
 
@@ -3580,20 +3734,35 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
       }
     }
 
-    // Sort options for the flat entry list.
-    const SORT_MAP: Record<string, Record<string, 1 | -1>> = {
-      newest: { date: -1, lpoNo: -1, entryIdx: 1 },
-      oldest: { date: 1, lpoNo: 1, entryIdx: 1 },
-      liters_desc: { 'entries.liters': -1, date: -1 },
-      liters_asc: { 'entries.liters': 1, date: -1 },
-      lpo_desc: { lpoNo: -1, entryIdx: 1 },
-      lpo_asc: { lpoNo: 1, entryIdx: 1 },
-    };
-    const sortStage = SORT_MAP[(sort as string) || 'newest'] || SORT_MAP.newest;
+    pipeline.push({ $project: FLAT_ENTRY_PROJECTION });
+
+    // Legacy driver-account rows that were never mirrored into LPOSummary.
+    if (isRefer !== 'true') {
+      const legacyMatch = buildLegacyDriverAccountMatch(req, {
+        effectiveDateFrom: effectiveDateFrom as string | undefined,
+        effectiveDateTo: effectiveDateTo as string | undefined,
+        station: station as string | undefined,
+        stations: stations as string | undefined,
+        search: search as string | undefined,
+        status: status as string | undefined,
+        scope,
+        hasSearch: !!search,
+      });
+      if (legacyMatch) {
+        pipeline.push({
+          $unionWith: {
+            coll: DriverAccountEntry.collection.name,
+            pipeline: [{ $match: legacyMatch }, { $project: LEGACY_DA_FLAT_PROJECTION }],
+          },
+        });
+      }
+    }
+
+    const sortStage = resolveFlatEntrySort(sort as string, order as string);
     pipeline.push({ $sort: sortStage });
     pipeline.push({
       $facet: {
-        data: [{ $skip: skip }, { $limit: limit }, { $project: ENTRY_PROJECTION }],
+        data: [{ $skip: skip }, { $limit: limit }],
         total: [{ $count: 'count' }],
       },
     });
@@ -3683,7 +3852,16 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
     }
     applyDateFloor(stationsMatch);
     const rawStations = await LPOSummary.distinct('station', stationsMatch) as string[];
-    const stations = rawStations
+    const legacyDaStationMatch: any = { isDeleted: false, $or: [{ lpoCreated: { $ne: true } }, { lpoCreated: { $exists: false } }] };
+    if (!legacyDaStationMatch.station) legacyDaStationMatch.station = { $nin: [null, ''] };
+    if (dateFrom || dateTo) {
+      legacyDaStationMatch.date = {};
+      if (dateFrom) legacyDaStationMatch.date.$gte = (dateFrom as string).substring(0, 10);
+      if (dateTo) legacyDaStationMatch.date.$lte = (dateTo as string).substring(0, 10);
+    }
+    applyDateFloor(legacyDaStationMatch);
+    const legacyDaStations = await DriverAccountEntry.distinct('station', legacyDaStationMatch) as string[];
+    const stations = [...rawStations, ...legacyDaStations]
       .filter(s => s && s.trim())
       .map(s => s.trim().toUpperCase())
       .filter((v, i, arr) => arr.indexOf(v) === i)

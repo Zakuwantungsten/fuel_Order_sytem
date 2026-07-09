@@ -27,8 +27,6 @@ import {
   lpoKeys,
   periodsToDateRange,
   useLPOList,
-  useDriverAccountEntries,
-  useReferEntries,
   useLPOWorkbooks,
   useLPOAvailableYears,
   useLPOAvailableFilters,
@@ -150,12 +148,10 @@ const LPOs = () => {
     station: stationFilter || undefined,
     dateFrom: dateRange.dateFrom,
     dateTo: dateRange.dateTo,
-    sort: 'createdAt',
+    sort: 'lpo_desc',
     order: 'desc',
     status: statusFilter !== 'all' ? statusFilter : undefined,
   });
-  const { data: driverEntries = [] } = useDriverAccountEntries();
-  const { data: referEntries = [] } = useReferEntries();
   const lpoEntries: LPOEntry[] = lpoQuery.data?.lpos ?? [];
 
   // Separate query to discover all stations for the current search term,
@@ -168,82 +164,24 @@ const LPOs = () => {
       search: searchTerm || undefined,
       dateFrom: dateRange.dateFrom,
       dateTo: dateRange.dateTo,
-      sort: 'createdAt',
+      sort: 'lpo_desc',
       order: 'desc',
     },
     !!searchTerm
   );
   const discoveryEntries: LPOEntry[] = stationDiscoveryQuery.data?.lpos ?? [];
-  // Merge server-paginated LPO entries with cached driver account entries
-  // Apply client-side search, date range, station and status filters to driver account entries
+
+  // Unified server-paginated list (regular, REF, NIL, DA — all entry types).
+  // Client-side station guard only covers stale placeholder data during refetch.
   const orders = useMemo(() => {
-    let filteredDriverEntries = driverEntries;
-    let filteredReferEntries = referEntries;
+    if (!stationFilter) return lpoEntries;
+    const upper = stationFilter.trim().toUpperCase();
+    return lpoEntries.filter(
+      (e) => (e.dieselAt || '').trim().toUpperCase() === upper
+    );
+  }, [lpoEntries, stationFilter]);
 
-    // Mirror the server-side search: filter by truckNo, lpoNo, dieselAt, or doSdo
-    if (searchTerm) {
-      const term = searchTerm.trim().toLowerCase();
-      filteredDriverEntries = filteredDriverEntries.filter(e =>
-        (e.truckNo || '').toLowerCase().startsWith(term) ||
-        (e.lpoNo || '').toLowerCase().startsWith(term) ||
-        (e.dieselAt || '').toLowerCase().startsWith(term) ||
-        (e.doSdo || '').toLowerCase().startsWith(term)
-      );
-      filteredReferEntries = filteredReferEntries.filter(e =>
-        (e.truckNo || '').toLowerCase().startsWith(term) ||
-        (e.lpoNo || '').toLowerCase().startsWith(term) ||
-        (e.dieselAt || '').toLowerCase().startsWith(term) ||
-        (e.doSdo || '').toLowerCase().startsWith(term)
-      );
-    }
-
-    // Respect the selected period so driver/reefer entries from other months don't bleed in
-    if (dateRange.dateFrom || dateRange.dateTo) {
-      const from = dateRange.dateFrom ? new Date(dateRange.dateFrom).getTime() : 0;
-      const to = dateRange.dateTo ? new Date(dateRange.dateTo).getTime() : Infinity;
-      filteredDriverEntries = filteredDriverEntries.filter(e => {
-        const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
-        return ts >= from && ts <= to;
-      });
-      filteredReferEntries = filteredReferEntries.filter(e => {
-        const ts = e.createdAt ? new Date(e.createdAt).getTime() : 0;
-        return ts >= from && ts <= to;
-      });
-    }
-
-    if (stationFilter) {
-      filteredDriverEntries = filteredDriverEntries.filter(
-        e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase()
-      );
-      filteredReferEntries = filteredReferEntries.filter(
-        e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase()
-      );
-    }
-    if (statusFilter === 'active') {
-      filteredDriverEntries = filteredDriverEntries.filter(e => !e.isCancelled);
-      filteredReferEntries = filteredReferEntries.filter(e => !e.isCancelled);
-    } else if (statusFilter === 'cancelled') {
-      filteredDriverEntries = filteredDriverEntries.filter(e => e.isCancelled);
-      filteredReferEntries = filteredReferEntries.filter(e => e.isCancelled);
-    }
-
-    // Guard against stale placeholder data: enforce station filter client-side on
-    // lpoEntries too, since placeholderData keeps the previous query's results
-    // visible while a new station-filtered fetch is in flight.
-    // The main paginated flat list already includes refer entries, and
-    // useReferEntries fetches those same records separately. Drop refer entries
-    // here so each REF entry is rendered exactly once (from filteredReferEntries)
-    // instead of appearing twice.
-    const nonReferLpoEntries = lpoEntries.filter(e => !e.isRefer);
-    const filteredLpoEntries = stationFilter
-      ? nonReferLpoEntries.filter(e => (e.dieselAt || '').trim().toUpperCase() === stationFilter.trim().toUpperCase())
-      : nonReferLpoEntries;
-
-    return [...filteredLpoEntries, ...filteredDriverEntries, ...filteredReferEntries];
-  }, [lpoEntries, driverEntries, referEntries, stationFilter, statusFilter, searchTerm, dateRange.dateFrom, dateRange.dateTo]);
-  // The backend flat-list total already counts refer entries, and we now render
-  // them from referEntries instead of the paginated list, so don't add them twice.
-  const totalItems = (lpoQuery.data?.pagination?.total ?? 0) + driverEntries.length;
+  const totalItems = lpoQuery.data?.pagination?.total ?? 0;
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
   const loading = lpoQuery.isLoading;
   const isFetching = lpoQuery.isFetching;
@@ -260,43 +198,14 @@ const LPOs = () => {
 
   const availableStations: string[] = useMemo(() => {
     if (searchTerm) {
-      // Narrow to stations that actually appear in the search results.
-      // Uses the station-less discovery query so the list stays complete
-      // even after the user selects a station.
-      const term = searchTerm.trim().toLowerCase();
-      const lpoStations = discoveryEntries
-        .map(e => (e.dieselAt || '').trim().toUpperCase())
-        .filter(Boolean);
-      const driverStations = driverEntries
-        .filter(e =>
-          (e.truckNo || '').toLowerCase().startsWith(term) ||
-          (e.lpoNo || '').toLowerCase().startsWith(term) ||
-          (e.dieselAt || '').toLowerCase().startsWith(term) ||
-          (e.doSdo || '').toLowerCase().startsWith(term)
-        )
-        .map(e => (e.dieselAt || '').trim().toUpperCase())
-        .filter(Boolean);
-      const referStationsSearch = referEntries
-        .filter(e =>
-          (e.truckNo || '').toLowerCase().startsWith(term) ||
-          (e.lpoNo || '').toLowerCase().startsWith(term) ||
-          (e.dieselAt || '').toLowerCase().startsWith(term) ||
-          (e.doSdo || '').toLowerCase().startsWith(term)
-        )
-        .map(e => (e.dieselAt || '').trim().toUpperCase())
-        .filter(Boolean);
-      return [...new Set([...lpoStations, ...driverStations, ...referStationsSearch])].sort();
+      return [...new Set(
+        discoveryEntries
+          .map((e) => (e.dieselAt || '').trim().toUpperCase())
+          .filter(Boolean)
+      )].sort();
     }
-    const serverStations = filtersData?.stations ?? [];
-    // Include stations from driver account and reefer entries so they appear in the filter
-    const driverStations = driverEntries
-      .map(e => (e.dieselAt || '').trim().toUpperCase())
-      .filter(Boolean);
-    const referStations = referEntries
-      .map(e => (e.dieselAt || '').trim().toUpperCase())
-      .filter(Boolean);
-    return [...new Set([...serverStations, ...driverStations, ...referStations])].sort();
-  }, [filtersData, driverEntries, referEntries, discoveryEntries, searchTerm]);
+    return filtersData?.stations ?? [];
+  }, [filtersData, discoveryEntries, searchTerm]);
 
   const availableYears = useMemo(() => {
     const yearsFromPeriods = availablePeriods.map((p: {year: number}) => p.year);
@@ -425,21 +334,10 @@ const LPOs = () => {
     let cancelled = false;
 
     const locateAndHighlight = async () => {
-      // Driver-account entries are merged into the list client-side and rendered
-      // on EVERY page (they aren't part of server pagination), so the row is
-      // already in the DOM on the current page — just scroll to it. They also
-      // won't appear in the server LPO query below, so checking here avoids a
-      // false "not found" that would clear the highlight.
-      const isDriverEntry = driverEntries.some((e: any) => e.lpoNo === pendingHighlight);
-      if (isDriverEntry) {
-        scrollToAndHighlightLPO(pendingHighlight, 0, pendingHighlightTruck ?? undefined);
-        return;
-      }
-
       try {
         const response = await lposAPI.getAll({
           limit: 10000,
-          sort: 'createdAt',
+          sort: 'lpo_desc',
           order: 'desc',
           ...(dateRange.dateFrom ? { dateFrom: dateRange.dateFrom } : {}),
           ...(dateRange.dateTo ? { dateTo: dateRange.dateTo } : {}),
@@ -617,9 +515,9 @@ const LPOs = () => {
     const toT = dr.dateTo ? new Date(dr.dateTo).getTime() : Infinity;
     const relevant = countRelevantNewRecords(
       event,
-      { visibleRows: lpoEntries, sortField: 'createdAt', sortOrder: 'desc', page: currentPage, totalPages },
+      { visibleRows: lpoEntries, sortField: 'lpoSortNum', sortOrder: 'desc', page: currentPage, totalPages },
       {
-        dateField: 'createdAt',
+        dateField: 'lpoSortNum',
         matchesFilters: (rec) => {
           if (statusFilter === 'cancelled') return false; // new LPOs are active
           if (stationFilter && String(rec?.station ?? '').trim().toUpperCase() !== stationFilter.trim().toUpperCase()) return false;
@@ -652,30 +550,39 @@ const LPOs = () => {
     }
   };
 
-  // Convert LPO entry to LPOSummary format for image generation
-  // Groups all entries with the same LPO number
-  const convertToLPOSummary = (lpo: LPOEntry): LPOSummaryType => {
-    // Find all entries with the same LPO number
-    const sameLoEntries = orders.filter(entry => entry.lpoNo === lpo.lpoNo);
-    
-    const entries = sameLoEntries.map(entry => ({
+  // Convert LPO entry to LPOSummary format for image generation.
+  // Prefer the full sheet document so all trucks are included, not just the current page.
+  const resolveLpoSummaryForExport = async (lpo: LPOEntry): Promise<LPOSummaryType> => {
+    try {
+      const doc = await lpoDocumentsAPI.getByLpoNo(lpo.lpoNo);
+      if (doc?.entries?.length) {
+        return doc as LPOSummaryType;
+      }
+    } catch {
+      // Legacy driver-account rows may not have a workbook sheet.
+    }
+
+    const sameLpoEntries = orders.filter((entry) => entry.lpoNo === lpo.lpoNo);
+    const sourceEntries = sameLpoEntries.length > 0 ? sameLpoEntries : [lpo];
+
+    const entries = sourceEntries.map((entry) => ({
       doNo: entry.doSdo || 'NIL',
       truckNo: entry.truckNo,
       liters: entry.ltrs,
       rate: entry.pricePerLtr,
       amount: entry.ltrs * entry.pricePerLtr,
-      dest: entry.destinations || 'NIL'
+      dest: entry.destinations || 'NIL',
     }));
-    
+
     const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
-    
+
     return {
       lpoNo: lpo.lpoNo,
       date: lpo.date,
       station: lpo.dieselAt,
-      orderOf: 'TAHMEED', // Default value, can be made configurable
-      entries: entries,
-      total: total
+      orderOf: 'TAHMEED',
+      entries,
+      total,
     };
   };
 
@@ -683,7 +590,7 @@ const LPOs = () => {
   const handleCopyImageToClipboard = async (lpo: LPOEntry) => {
     closeAllDropdowns();
     try {
-      const lpoSummary = convertToLPOSummary(lpo);
+      const lpoSummary = await resolveLpoSummaryForExport(lpo);
       const success = await copyLPOImageToClipboard(lpoSummary, user?.username);
       
       if (success) {
@@ -737,7 +644,7 @@ const LPOs = () => {
       style: { background: '#0284c7', color: '#fff' },
     });
     try {
-      const lpoSummary = convertToLPOSummary(lpo);
+      const lpoSummary = await resolveLpoSummaryForExport(lpo);
       await downloadLPOImage(lpoSummary, undefined, user?.username);
       toast.update(toastId, {
         render: `Image downloaded: LPO ${lpo.lpoNo}`,
@@ -764,7 +671,7 @@ const LPOs = () => {
   const handleCopyWhatsAppText = async (lpo: LPOEntry) => {
     closeAllDropdowns();
     try {
-      const lpoSummary = convertToLPOSummary(lpo);
+      const lpoSummary = await resolveLpoSummaryForExport(lpo);
       const success = await copyLPOForWhatsApp(lpoSummary);
       
       if (success) {
@@ -782,7 +689,7 @@ const LPOs = () => {
   const handleCopyCsvText = async (lpo: LPOEntry) => {
     closeAllDropdowns();
     try {
-      const lpoSummary = convertToLPOSummary(lpo);
+      const lpoSummary = await resolveLpoSummaryForExport(lpo);
       const success = await copyLPOTextToClipboard(lpoSummary);
       
       if (success) {
@@ -871,21 +778,15 @@ const LPOs = () => {
     }
   }, [orders, loading, filtersInitialized, availablePeriods, searchTerm]);
 
-  // Assign serial numbers to LPOs — always continuous across all entries/months
+  // Serial numbers come from the server (sorted by LPO number, highest first).
   const lposWithMonthlySerialNumbers = useMemo(() => {
-    const sorted = [...orders].sort((a, b) => {
-      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bDate - aDate;
-    });
     const pageOffset = (currentPage - 1) * itemsPerPage;
-    return sorted.map((lpo, index) => ({
+    return orders.map((lpo, index) => ({
       ...lpo,
-      sn: pageOffset + index + 1,
+      sn: lpo.sn ?? pageOffset + index + 1,
     }));
   }, [orders, currentPage, itemsPerPage]);
 
-  // Server already paginates — use the serial-numbered list directly
   const paginatedLpos = lposWithMonthlySerialNumbers;
 
   const handlePageChange = (page: number) => {

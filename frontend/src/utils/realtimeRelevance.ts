@@ -37,6 +37,15 @@ function toTime(value: any): number | null {
   return Number.isNaN(t) ? null : t;
 }
 
+function toSortable(value: any, field: string): number | null {
+  if (field === 'lpoSortNum' || field === 'lpoNo') {
+    if (typeof value === 'number' && !Number.isNaN(value)) return value;
+    const parsed = parseInt(String(value ?? '').split('/')[0], 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return toTime(value);
+}
+
 /**
  * Compute the time window [lower, upper] covered by the current page. Returns
  * null when it can't be determined (empty page / no comparable sort values).
@@ -45,7 +54,10 @@ function toTime(value: any): number | null {
  */
 function pageWindow(view: ViewWindow): { lower: number; upper: number } | null {
   const times = view.visibleRows
-    .map(r => toTime(r?.[view.sortField]))
+    .map((r) => toSortable(
+      r?.[view.sortField] ?? (view.sortField === 'lpoSortNum' ? r?.lpoNo : undefined),
+      view.sortField,
+    ))
     .filter((t): t is number => t != null);
   if (times.length === 0) return null;
   const max = Math.max(...times);
@@ -76,7 +88,11 @@ export function countRelevantNewRecords(
     // Already on the page (e.g. the creator's own row after their refetch).
     if (view.visibleRows.some(r => sameId(r, event.record))) return 0;
     if (!match.matchesFilters(event.record)) return 0;
-    const t = toTime(event.record[match.dateField]);
+    const sortField = match.dateField;
+    const t = toSortable(
+      event.record[sortField] ?? (sortField === 'lpoSortNum' ? event.record.lpoNo : undefined),
+      sortField,
+    );
     if (t == null) return 1; // no date to test landing → err toward showing
     const win = pageWindow(view);
     if (!win) return 1; // empty/unknown page → err toward showing

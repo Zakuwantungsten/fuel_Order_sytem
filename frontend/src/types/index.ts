@@ -71,6 +71,7 @@ export interface LPOEntry {
   sn: number;
   date: string;
   lpoNo: string;
+  lpoSortNum?: number;
   dieselAt: string; // Station name like "LAKE CHILABOMBWE"
   doSdo: string;
   truckNo: string;
