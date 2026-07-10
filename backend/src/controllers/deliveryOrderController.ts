@@ -805,6 +805,49 @@ export const getDeliveryOrderSummaryAggregate = async (req: AuthRequest, res: Re
 };
 
 /**
+ * Return all delivery orders for the Summary tab Detailed view (one server query).
+ * Query: dateFrom, dateTo, doType, importOrExport, status=active|all|cancelled
+ */
+export const getSummaryEntries = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom).substring(0, 10) : '';
+    const dateTo = req.query.dateTo ? String(req.query.dateTo).substring(0, 10) : '';
+    if (!dateFrom || !dateTo) {
+      throw new ApiError(400, 'dateFrom and dateTo are required');
+    }
+
+    const doTypeRaw = String(req.query.doType || 'ALL').toUpperCase();
+    const importOrExport = String(req.query.importOrExport || 'ALL').toUpperCase();
+    const status = String(req.query.status || 'active').toLowerCase();
+
+    const filters: Record<string, unknown> = {};
+    if (doTypeRaw === 'DO' || doTypeRaw === 'SDO') filters.doType = doTypeRaw;
+    if (importOrExport !== 'ALL') filters.importOrExport = importOrExport;
+    if (status === 'active') filters.isCancelled = { $ne: true };
+    else if (status === 'cancelled') filters.isCancelled = true;
+    if (req.user?.role === 'driver') filters.truckNo = req.user.username;
+
+    const orders = await unifiedExportService.getAllDeliveryOrders({
+      startDate: new Date(`${dateFrom}T00:00:00.000Z`),
+      endDate: new Date(`${dateTo}T23:59:59.999Z`),
+      includeArchived: true,
+      filters,
+      sort: { date: 1, doNumber: 1 },
+    });
+
+    res.json({
+      success: true,
+      data: orders,
+      count: orders.length,
+    });
+  } catch (error: any) {
+    if (error instanceof ApiError) throw error;
+    logger.error('Error fetching DO summary entries:', error);
+    throw new ApiError(500, 'Failed to fetch summary entries');
+  }
+};
+
+/**
  * Get all delivery orders with pagination and filters
  */
 export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Promise<void> => {

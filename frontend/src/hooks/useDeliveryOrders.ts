@@ -109,28 +109,26 @@ export interface AllDeliveryOrderFilters {
   dateTo?: string;
 }
 
-/** Fetch every DO matching the given filters, paging through until complete. */
+/** Fetch DOs for a date range via one server summary-entries call (no client paging). */
 export async function fetchAllDeliveryOrders(filters: AllDeliveryOrderFilters): Promise<DeliveryOrder[]> {
-  const baseParams: Record<string, unknown> = { sort: 'date', order: 'desc' };
+  if (filters.dateFrom && filters.dateTo) {
+    const rows = await deliveryOrdersAPI.getSummaryEntries({
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      doType: filters.doType,
+      importOrExport: filters.importOrExport,
+      status: filters.status,
+    });
+    return cleanDeliveryOrders(rows);
+  }
+
+  const baseParams: Record<string, unknown> = { sort: 'date', order: 'desc', limit: 5000, page: 1 };
   if (filters.search) baseParams.search = filters.search;
   if (filters.importOrExport && filters.importOrExport !== 'ALL') baseParams.importOrExport = filters.importOrExport;
   if (filters.doType) baseParams.doType = filters.doType;
   if (filters.status && filters.status !== 'all') baseParams.status = filters.status;
-  if (filters.dateFrom) baseParams.dateFrom = filters.dateFrom;
-  if (filters.dateTo) baseParams.dateTo = filters.dateTo;
-
-  const limit = 5000; // backend caps limit at 5000
-  const all: DeliveryOrder[] = [];
-  let page = 1;
-  for (;;) {
-    const response = await deliveryOrdersAPI.getAll({ ...baseParams, page, limit });
-    const cleaned = cleanDeliveryOrders(response.data);
-    all.push(...cleaned);
-    const total = response.pagination?.total ?? cleaned.length;
-    if (cleaned.length === 0 || all.length >= total) break;
-    page += 1;
-  }
-  return all;
+  const response = await deliveryOrdersAPI.getAll(baseParams);
+  return cleanDeliveryOrders(response.data);
 }
 
 export function useAllDeliveryOrders(filters: AllDeliveryOrderFilters, enabled = true) {

@@ -1207,7 +1207,6 @@ const LPOs = () => {
           </div>
         </div>
         <LPOSummaryComponent 
-          lpoEntries={orders} 
           selectedStations={summaryFilters.stations}
           dateFrom={summaryFilters.dateFrom}
           dateTo={summaryFilters.dateTo}

@@ -55,6 +55,7 @@ router.post(
 // Get routes
 router.get('/available-periods', asyncHandler(deliveryOrderController.getAvailablePeriods));
 router.get('/summary-aggregate', asyncHandler(deliveryOrderController.getDeliveryOrderSummaryAggregate));
+router.get('/summary-entries', asyncHandler(deliveryOrderController.getSummaryEntries));
 router.get(
   '/summary-export',
   exportRateLimiter,

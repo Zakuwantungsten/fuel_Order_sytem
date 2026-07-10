@@ -194,3 +194,40 @@ export function useLPOAvailableFilters(dateRange?: { dateFrom?: string; dateTo?:
   });
 }
 
+// ---------------------------------------------------------------------------
+// LPO Summary tab — server aggregate + server entries (no client 5000 loops)
+// ---------------------------------------------------------------------------
+export function useLPOSummaryAggregate(
+  filters: { dateFrom?: string; dateTo?: string; stations?: string[] },
+  enabled = true
+) {
+  return useQuery({
+    queryKey: [...lpoKeys.all, 'summaryAggregate', filters] as const,
+    queryFn: () =>
+      lposAPI.getSummaryAggregate({
+        dateFrom: filters.dateFrom!,
+        dateTo: filters.dateTo!,
+        stations: filters.stations,
+      }),
+    enabled: enabled && !!filters.dateFrom && !!filters.dateTo,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useLPOSummaryEntries(
+  filters: { dateFrom?: string; dateTo?: string; stations?: string[] },
+  enabled = true
+) {
+  return useQuery({
+    queryKey: [...lpoKeys.all, 'summaryEntries', filters] as const,
+    queryFn: () =>
+      lposAPI.getSummaryEntries({
+        dateFrom: filters.dateFrom!,
+        dateTo: filters.dateTo!,
+        stations: filters.stations,
+      }),
+    enabled: enabled && !!filters.dateFrom && !!filters.dateTo,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+

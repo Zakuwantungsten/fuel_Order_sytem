@@ -15,6 +15,7 @@ import {
   monthAbbrToRange,
   monthAbbrFromDate,
   MONTH_ABBR,
+  getCurrencyFromStation,
 } from '../utils/summaryTabExport';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
@@ -3762,6 +3763,112 @@ function parseStationsQuery(raw: unknown): string[] | undefined {
     .filter(Boolean);
   return list.length > 0 ? list : undefined;
 }
+
+/**
+ * Aggregate LPO Monthly Summary metrics server-side.
+ * Query: dateFrom, dateTo, stations (comma-separated optional)
+ */
+export const getSummaryAggregate = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom).substring(0, 10) : '';
+    const dateTo = req.query.dateTo ? String(req.query.dateTo).substring(0, 10) : '';
+    if (!dateFrom || !dateTo) {
+      throw new ApiError(400, 'dateFrom and dateTo are required');
+    }
+
+    const stations = parseStationsQuery(req.query.stations);
+    const entries = await loadLpoEntriesForSummaryExport({ dateFrom, dateTo, stations });
+
+    let totalLiters = 0;
+    let totalLitersTZS = 0;
+    let totalLitersUSD = 0;
+    let totalAmountTZS = 0;
+    let totalAmountUSD = 0;
+    let driverAccountCount = 0;
+    let referCount = 0;
+    const byStation: Record<string, { lpos: number; liters: number; amount: number }> = {};
+    const byDestination: Record<string, number> = {};
+
+    for (const e of entries) {
+      const liters = e.ltrs ?? e.liters ?? 0;
+      const rate = e.pricePerLtr ?? e.rate ?? 0;
+      const amount = liters * rate;
+      const station = e.dieselAt || e.station || 'UNKNOWN';
+      const dest = e.destinations || e.dest || 'UNKNOWN';
+      const currency = getCurrencyFromStation(station);
+
+      totalLiters += liters;
+      if (currency === 'USD') {
+        totalAmountUSD += amount;
+        totalLitersUSD += liters;
+      } else {
+        totalAmountTZS += amount;
+        totalLitersTZS += liters;
+      }
+      if (e.isDriverAccount) driverAccountCount += 1;
+      if (e.isRefer) referCount += 1;
+
+      if (!byStation[station]) byStation[station] = { lpos: 0, liters: 0, amount: 0 };
+      byStation[station].lpos += 1;
+      byStation[station].liters += liters;
+      byStation[station].amount += amount;
+      byDestination[dest] = (byDestination[dest] || 0) + 1;
+    }
+
+    const totalAmount = totalAmountTZS + totalAmountUSD;
+    const totalLPOs = entries.length;
+
+    res.json({
+      totalLPOs,
+      totalLiters,
+      totalAmount,
+      totalAmountTZS,
+      totalAmountUSD,
+      avgPricePerLiter: totalLiters > 0 ? totalAmount / totalLiters : 0,
+      avgPricePerLiterTZS: totalLitersTZS > 0 ? totalAmountTZS / totalLitersTZS : 0,
+      avgPricePerLiterUSD: totalLitersUSD > 0 ? totalAmountUSD / totalLitersUSD : 0,
+      driverAccountCount,
+      referCount,
+      regularLPOCount: totalLPOs - driverAccountCount,
+      byStation,
+      byDestination,
+    });
+  } catch (error: any) {
+    if (error instanceof ApiError) throw error;
+    logger.error('Error aggregating LPO summary:', error);
+    throw new ApiError(500, 'Failed to aggregate LPO summary');
+  }
+};
+
+/**
+ * Return all flat LPO entries for Summary Detailed view (one server query).
+ * Query: dateFrom, dateTo, stations
+ */
+export const getSummaryEntries = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom).substring(0, 10) : '';
+    const dateTo = req.query.dateTo ? String(req.query.dateTo).substring(0, 10) : '';
+    if (!dateFrom || !dateTo) {
+      throw new ApiError(400, 'dateFrom and dateTo are required');
+    }
+
+    const entries = await loadLpoEntriesForSummaryExport({
+      dateFrom,
+      dateTo,
+      stations: parseStationsQuery(req.query.stations),
+    });
+
+    res.json({
+      success: true,
+      data: entries,
+      count: entries.length,
+    });
+  } catch (error: any) {
+    if (error instanceof ApiError) throw error;
+    logger.error('Error fetching LPO summary entries:', error);
+    throw new ApiError(500, 'Failed to fetch LPO summary entries');
+  }
+};
 
 /**
  * Export LPO Monthly Summary — single month sheet.

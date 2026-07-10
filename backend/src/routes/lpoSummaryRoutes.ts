@@ -21,6 +21,8 @@ router.get('/workbooks/:year', asyncHandler(lpoSummaryController.getWorkbookByYe
 router.get('/workbooks/:year/export', exportRateLimiter, authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss'), asyncHandler(lpoSummaryController.exportWorkbook));
 
 // Monthly Summary tab Excel exports (server-side)
+router.get('/summary-aggregate', asyncHandler(lpoSummaryController.getSummaryAggregate));
+router.get('/summary-entries', asyncHandler(lpoSummaryController.getSummaryEntries));
 router.get(
   '/summary-export/month',
   exportRateLimiter,

@@ -294,6 +294,19 @@ export const deliveryOrdersAPI = {
     return response.data as DOSummaryAggregate;
   },
 
+  /** Server-side rows for Summary Detailed view (no client paging). */
+  getSummaryEntries: async (params: {
+    dateFrom: string;
+    dateTo: string;
+    doType?: string;
+    importOrExport?: string;
+    status?: string;
+  }): Promise<DeliveryOrder[]> => {
+    const response = await apiClient.get('/delivery-orders/summary-entries', { params });
+    const data = response.data?.data ?? response.data ?? [];
+    return Array.isArray(data) ? data : [];
+  },
+
   /** Server-side Monthly Summary Excel (one sheet per selected month). */
   exportSummary: async (params: {
     months: string[];
@@ -718,6 +731,51 @@ export const lposAPI = {
   getAvailableFilters: async (params?: { dateFrom?: string; dateTo?: string }): Promise<{ periods: Array<{ year: number; month: number }>; stations: string[] }> => {
     const response = await apiClient.get('/lpo-documents/entries/filters', { params });
     return response.data || { periods: [], stations: [] };
+  },
+
+  getSummaryAggregate: async (params: {
+    dateFrom: string;
+    dateTo: string;
+    stations?: string[];
+  }): Promise<{
+    totalLPOs: number;
+    totalLiters: number;
+    totalAmount: number;
+    totalAmountTZS: number;
+    totalAmountUSD: number;
+    avgPricePerLiter: number;
+    avgPricePerLiterTZS: number;
+    avgPricePerLiterUSD: number;
+    driverAccountCount: number;
+    referCount: number;
+    regularLPOCount: number;
+    byStation: Record<string, { lpos: number; liters: number; amount: number }>;
+    byDestination: Record<string, number>;
+  }> => {
+    const response = await apiClient.get('/lpo-documents/summary-aggregate', {
+      params: {
+        dateFrom: params.dateFrom,
+        dateTo: params.dateTo,
+        ...(params.stations?.length ? { stations: params.stations.join(',') } : {}),
+      },
+    });
+    return response.data;
+  },
+
+  getSummaryEntries: async (params: {
+    dateFrom: string;
+    dateTo: string;
+    stations?: string[];
+  }): Promise<LPOEntry[]> => {
+    const response = await apiClient.get('/lpo-documents/summary-entries', {
+      params: {
+        dateFrom: params.dateFrom,
+        dateTo: params.dateTo,
+        ...(params.stations?.length ? { stations: params.stations.join(',') } : {}),
+      },
+    });
+    const data = response.data?.data ?? response.data ?? [];
+    return Array.isArray(data) ? data : [];
   },
 
   /** Server-side LPO Monthly Summary Excel for one month. */

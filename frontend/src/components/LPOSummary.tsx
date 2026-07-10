@@ -1,8 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle, ChevronDown, Check, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { LPOEntry } from '../types';
 import { lposAPI } from '../services/api';
+import { useLPOAvailableFilters, useLPOSummaryAggregate, useLPOSummaryEntries } from '../hooks/useLPOs';
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const monthAbbrToRange = (monthAbbr: string, yearStr: string): { dateFrom: string; dateTo: string } | null => {
+  const year = parseInt(yearStr, 10);
+  const monthIdx = MONTH_ABBR.indexOf(monthAbbr);
+  if (monthIdx < 0 || isNaN(year)) return null;
+  const mm = String(monthIdx + 1).padStart(2, '0');
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  return { dateFrom: `${year}-${mm}-01`, dateTo: `${year}-${mm}-${String(lastDay).padStart(2, '0')}` };
+};
 
 // Helper to derive currency from station name
 const getCurrencyFromStation = (station: string): 'USD' | 'TZS' => {
@@ -11,7 +23,6 @@ const getCurrencyFromStation = (station: string): 'USD' | 'TZS' => {
   return 'TZS';
 };
 
-// Extended LPO entry type that includes driver account flag
 interface ExtendedLPOEntry extends LPOEntry {
   isDriverAccount?: boolean;
   journeyDirection?: 'going' | 'returning';
@@ -19,7 +30,8 @@ interface ExtendedLPOEntry extends LPOEntry {
 }
 
 interface LPOSummaryProps {
-  lpoEntries: LPOEntry[];
+  /** @deprecated Summary loads its own full-month data; kept optional for callers */
+  lpoEntries?: LPOEntry[];
   selectedStations?: string[];
   dateFrom?: string;
   dateTo?: string;
@@ -48,26 +60,119 @@ interface MonthlySummaryData {
 }
 
 const LPOSummary = ({ 
-  lpoEntries, 
   selectedStations = [], 
   dateFrom = '', 
   dateTo = '', 
   onFiltersChange,
 }: LPOSummaryProps) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
-  const [summary, setSummary] = useState<MonthlySummaryData | null>(null);
-  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
-  const [availableYears, setAvailableYears] = useState<string[]>([]);
+  const [selectedYear, setSelectedYear] = useState<string>('');
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
   const [localSelectedStations, setLocalSelectedStations] = useState<string[]>(selectedStations);
   const [localDateFrom, setLocalDateFrom] = useState<string>(dateFrom);
   const [localDateTo, setLocalDateTo] = useState<string>(dateTo);
   const [showStationDropdown, setShowStationDropdown] = useState(false);
   const stationDropdownRef = useRef<HTMLDivElement>(null);
-  const [availableStations, setAvailableStations] = useState<string[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
+  const stationsInitialized = useRef(false);
 
-  // Click-outside handler for station dropdown
+  // Global periods (all months with data) — same pattern as DO Summary
+  const { data: filtersData, isLoading: filtersLoading } = useLPOAvailableFilters();
+  const availablePeriods = filtersData?.periods ?? [];
+
+  const availableYears = useMemo(() => {
+    const years = [...new Set(availablePeriods.map(p => String(p.year)))];
+    return years.sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
+  }, [availablePeriods]);
+
+  const availableMonths = useMemo(() => {
+    if (!selectedYear) return [];
+    const yearNum = parseInt(selectedYear, 10);
+    return availablePeriods
+      .filter(p => p.year === yearNum)
+      .map(p => MONTH_ABBR[p.month - 1])
+      .filter(Boolean)
+      .sort((a, b) => MONTH_ABBR.indexOf(a) - MONTH_ABBR.indexOf(b));
+  }, [availablePeriods, selectedYear]);
+
+  // Default year / month once periods load
+  useEffect(() => {
+    if (availableYears.length === 0) return;
+    setSelectedYear(prev => {
+      if (prev && availableYears.includes(prev)) return prev;
+      const current = String(new Date().getFullYear());
+      return availableYears.includes(current) ? current : availableYears[0];
+    });
+  }, [availableYears]);
+
+  useEffect(() => {
+    if (availableMonths.length === 0) return;
+    setSelectedMonth(prev => {
+      if (prev && availableMonths.includes(prev)) return prev;
+      const current = new Date().toLocaleDateString('en-US', { month: 'short' });
+      return availableMonths.includes(current) ? current : availableMonths[availableMonths.length - 1];
+    });
+  }, [availableMonths]);
+
+  const monthRange = selectedMonth && selectedYear
+    ? monthAbbrToRange(selectedMonth, selectedYear)
+    : null;
+
+  // Tighten with optional local date filters
+  const fetchRange = useMemo(() => {
+    if (!monthRange) return null;
+    let { dateFrom: from, dateTo: to } = monthRange;
+    if (localDateFrom && localDateFrom > from) from = localDateFrom;
+    if (localDateTo && localDateTo < to) to = localDateTo;
+    return { dateFrom: from, dateTo: to };
+  }, [monthRange, localDateFrom, localDateTo]);
+
+  const stationList = useMemo(() => {
+    if (
+      localSelectedStations.length === 0 ||
+      (filtersData?.stations?.length && localSelectedStations.length === filtersData.stations.length)
+    ) {
+      return undefined;
+    }
+    return localSelectedStations;
+  }, [localSelectedStations, filtersData?.stations]);
+
+  // Server aggregate for metric cards (no row download)
+  const { data: aggregate, isFetching: aggFetching } = useLPOSummaryAggregate(
+    {
+      dateFrom: fetchRange?.dateFrom,
+      dateTo: fetchRange?.dateTo,
+      stations: stationList,
+    },
+    !!fetchRange
+  );
+
+  // Detailed rows only when Detailed view is open
+  const { data: monthEntries = [], isFetching: monthFetching } = useLPOSummaryEntries(
+    {
+      dateFrom: fetchRange?.dateFrom,
+      dateTo: fetchRange?.dateTo,
+      stations: stationList,
+    },
+    viewMode === 'detailed' && !!fetchRange
+  );
+
+  // Stations for dropdown: prefer filter API list for selected month range
+  const { data: stationFilters } = useLPOAvailableFilters(fetchRange ?? undefined);
+  const availableStations = useMemo(() => {
+    const fromApi = stationFilters?.stations ?? filtersData?.stations ?? [];
+    return fromApi.length > 0 ? [...fromApi].sort() : [];
+  }, [stationFilters, filtersData]);
+
+  // Default-select all stations once available
+  useEffect(() => {
+    if (stationsInitialized.current || availableStations.length === 0) return;
+    if (localSelectedStations.length === 0) {
+      setLocalSelectedStations([...availableStations]);
+    }
+    stationsInitialized.current = true;
+  }, [availableStations, localSelectedStations.length]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
@@ -77,57 +182,7 @@ const LPOSummary = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  const [isExporting, setIsExporting] = useState(false);
 
-  // Flat list already includes DA / REF / NIL / regular — trust entry flags
-  const combinedEntries: ExtendedLPOEntry[] = lpoEntries;
-
-  // Get current month name
-  const getCurrentMonth = () => {
-    return new Date().toLocaleDateString('en-US', { month: 'short' });
-  };
-
-  useEffect(() => {
-    if (combinedEntries.length > 0) {
-      // Extract unique months, years, and stations from combined entries
-      const months = new Set<string>();
-      const years = new Set<string>();
-      const stations = new Set<string>();
-      
-      combinedEntries.forEach(entry => {
-        // Extract month from date format like "3-Oct", "15-Nov"
-        const parts = entry.date.split('-');
-        if (parts.length > 1) {
-          months.add(parts[1]); // "Oct", "Nov", etc.
-          // For year, we'll use the selectedYear or extract from full date if available
-          years.add(selectedYear);
-        }
-        stations.add(entry.dieselAt);
-      });
-      
-      const monthsArray = Array.from(months).sort((a, b) => {
-        const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return monthOrder.indexOf(a) - monthOrder.indexOf(b);
-      });
-      
-      setAvailableMonths(monthsArray);
-      setAvailableYears(Array.from(years).sort());
-      setAvailableStations(Array.from(stations).sort());
-      
-      // Only set default month if it hasn't been set yet and we have months available
-      if (!selectedMonth && monthsArray.length > 0) {
-        const currentMonth = getCurrentMonth();
-        if (monthsArray.includes(currentMonth)) {
-          setSelectedMonth(currentMonth);
-        } else {
-          setSelectedMonth(monthsArray[monthsArray.length - 1]); // Latest month
-        }
-      }
-    }
-  }, [combinedEntries.length, selectedYear]);
-
-  // Notify parent of filter changes
   useEffect(() => {
     if (onFiltersChange) {
       onFiltersChange({
@@ -138,115 +193,26 @@ const LPOSummary = ({
     }
   }, [localSelectedStations, localDateFrom, localDateTo, onFiltersChange]);
 
-  // Calculate summary when relevant data changes
-  useEffect(() => {
-    if (selectedMonth && combinedEntries.length > 0) {
-      let filteredEntries = combinedEntries as ExtendedLPOEntry[];
+  const summary = useMemo<MonthlySummaryData | null>(() => {
+    if (!selectedMonth || !fetchRange || !aggregate) return null;
 
-      // Apply month filter
-      if (selectedMonth) {
-        filteredEntries = filteredEntries.filter(entry => entry.date.includes(selectedMonth));
-      }
-
-      // Apply station filter
-      if (localSelectedStations.length > 0) {
-        filteredEntries = filteredEntries.filter(entry => 
-          localSelectedStations.includes(entry.dieselAt)
-        );
-      }
-
-      // Apply date range filter (convert date format for comparison)
-      if (localDateFrom || localDateTo) {
-        filteredEntries = filteredEntries.filter(entry => {
-          // Convert "3-Oct" format to a comparable date
-          const parts = entry.date.split('-');
-          if (parts.length === 2) {
-            const day = parseInt(parts[0]);
-            const monthName = parts[1];
-            const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const monthIndex = monthOrder.indexOf(monthName);
-            
-            if (monthIndex !== -1) {
-              // Construct date for comparison using selectedYear
-              const entryDate = new Date(parseInt(selectedYear), monthIndex, day);
-              entryDate.setHours(0, 0, 0, 0); // Normalize to start of day
-              
-              const fromDate = localDateFrom ? new Date(localDateFrom) : null;
-              const toDate = localDateTo ? new Date(localDateTo) : null;
-              
-              if (fromDate) {
-                fromDate.setHours(0, 0, 0, 0);
-                if (entryDate < fromDate) return false;
-              }
-              if (toDate) {
-                toDate.setHours(23, 59, 59, 999); // End of day
-                if (entryDate > toDate) return false;
-              }
-            }
-          }
-          return true;
-        });
-      }
-      
-      const totalLiters = filteredEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
-      const totalAmount = filteredEntries.reduce((sum, entry) => sum + (entry.ltrs * entry.pricePerLtr), 0);
-      const totalAmountTZS = filteredEntries
-        .filter(e => getCurrencyFromStation(e.dieselAt) === 'TZS')
-        .reduce((sum, e) => sum + (e.ltrs * e.pricePerLtr), 0);
-      const totalAmountUSD = filteredEntries
-        .filter(e => getCurrencyFromStation(e.dieselAt) === 'USD')
-        .reduce((sum, e) => sum + (e.ltrs * e.pricePerLtr), 0);
-      const avgPricePerLiter = totalLiters > 0 ? totalAmount / totalLiters : 0;
-      const tzsList = filteredEntries.filter(e => getCurrencyFromStation(e.dieselAt) === 'TZS');
-      const usdList = filteredEntries.filter(e => getCurrencyFromStation(e.dieselAt) === 'USD');
-      const totalLitersTZS = tzsList.reduce((s, e) => s + e.ltrs, 0);
-      const totalLitersUSD = usdList.reduce((s, e) => s + e.ltrs, 0);
-      const avgPricePerLiterTZS = totalLitersTZS > 0 ? totalAmountTZS / totalLitersTZS : 0;
-      const avgPricePerLiterUSD = totalLitersUSD > 0 ? totalAmountUSD / totalLitersUSD : 0;
-
-      // Count driver account vs regular LPOs
-      const driverAccountCount = filteredEntries.filter(e => e.isDriverAccount).length;
-      const regularLPOCount = filteredEntries.length - driverAccountCount;
-
-      // Group by station
-      const byStation: Record<string, { lpos: number; liters: number; amount: number; }> = {};
-      filteredEntries.forEach(entry => {
-        if (!byStation[entry.dieselAt]) {
-          byStation[entry.dieselAt] = { lpos: 0, liters: 0, amount: 0 };
-        }
-        byStation[entry.dieselAt].lpos += 1;
-        byStation[entry.dieselAt].liters += entry.ltrs;
-        byStation[entry.dieselAt].amount += (entry.ltrs * entry.pricePerLtr);
-      });
-
-      // Group by destination
-      const byDestination: Record<string, number> = {};
-      filteredEntries.forEach(entry => {
-        if (!byDestination[entry.destinations]) {
-          byDestination[entry.destinations] = 0;
-        }
-        byDestination[entry.destinations] += 1;
-      });
-
-      setSummary({
-        month: selectedMonth,
-        totalLPOs: filteredEntries.length,
-        totalLiters,
-        totalAmount,
-        totalAmountTZS,
-        totalAmountUSD,
-        avgPricePerLiter,
-        avgPricePerLiterTZS,
-        avgPricePerLiterUSD,
-        byStation,
-        byDestination,
-        entries: filteredEntries,
-        driverAccountCount,
-        regularLPOCount
-      });
-    }
-  }, [selectedMonth, selectedYear, combinedEntries.length, localSelectedStations, localDateFrom, localDateTo]);
+    return {
+      month: selectedMonth,
+      totalLPOs: aggregate.totalLPOs,
+      totalLiters: aggregate.totalLiters || 0,
+      totalAmount: aggregate.totalAmount || 0,
+      totalAmountTZS: aggregate.totalAmountTZS || 0,
+      totalAmountUSD: aggregate.totalAmountUSD || 0,
+      avgPricePerLiter: aggregate.avgPricePerLiter || 0,
+      avgPricePerLiterTZS: aggregate.avgPricePerLiterTZS || 0,
+      avgPricePerLiterUSD: aggregate.avgPricePerLiterUSD || 0,
+      byStation: aggregate.byStation || {},
+      byDestination: aggregate.byDestination || {},
+      entries: (monthEntries as ExtendedLPOEntry[]) || [],
+      driverAccountCount: aggregate.driverAccountCount || 0,
+      regularLPOCount: aggregate.regularLPOCount || 0,
+    };
+  }, [selectedMonth, fetchRange, aggregate, monthEntries]);
 
   const resolveExportStations = (): string[] | undefined => {
     if (
@@ -259,7 +225,7 @@ const LPOSummary = ({
   };
 
   const handleExportMonth = async () => {
-    if (!selectedMonth || isExporting) return;
+    if (!selectedMonth || !selectedYear || isExporting) return;
 
     setIsExporting(true);
     try {
@@ -278,7 +244,7 @@ const LPOSummary = ({
   };
 
   const handleExportYear = async () => {
-    if (isExporting) return;
+    if (!selectedYear || isExporting) return;
 
     setIsExporting(true);
     try {
@@ -295,10 +261,36 @@ const LPOSummary = ({
     }
   };
 
+  if (filtersLoading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-gray-500 dark:text-gray-400">
+        <Loader2 className="w-6 h-6 mr-2 animate-spin" />
+        Loading periods...
+      </div>
+    );
+  }
+
+  if (availableYears.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        No LPO data available
+      </div>
+    );
+  }
+
+  if (!summary && (aggFetching || monthFetching)) {
+    return (
+      <div className="flex items-center justify-center py-12 text-gray-500 dark:text-gray-400">
+        <Loader2 className="w-6 h-6 mr-2 animate-spin" />
+        Loading {selectedMonth} {selectedYear}...
+      </div>
+    );
+  }
+
   if (!summary) {
     return (
       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-        {availableMonths.length === 0 ? 'No LPO data available' : 'Select a month to view summary'}
+        {availableMonths.length === 0 ? 'No LPO data for this year' : 'Select a month to view summary'}
       </div>
     );
   }
@@ -334,7 +326,10 @@ const LPOSummary = ({
               {/* Year Selector */}
               <select
                 value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
+                onChange={(e) => {
+                  setSelectedYear(e.target.value);
+                  setSelectedMonth(''); // re-default from availableMonths for new year
+                }}
                 className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md text-sm transition-colors"
               >
                 {availableYears.map(year => (
@@ -482,7 +477,7 @@ const LPOSummary = ({
               </button>
 
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {summary.totalLPOs} of {lpoEntries.filter(e => e.date.includes(selectedMonth)).length} entries
+                {summary.totalLPOs} entries
               </span>
             </div>
           </div>
@@ -620,6 +615,12 @@ const LPOSummary = ({
               Detailed LPO Entries - {summary.month} {selectedYear} ({summary.totalLPOs} entries)
             </h4>
           </div>
+          {monthFetching && summary.entries.length === 0 ? (
+            <div className="flex items-center justify-center py-12 text-gray-500 dark:text-gray-400">
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              Loading detailed entries...
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700">
@@ -734,6 +735,7 @@ const LPOSummary = ({
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
     </div>
