@@ -543,10 +543,10 @@ class BackupService {
   /**
    * Hard-delete a completed backup from primary R2, secondary B2, and MongoDB.
    */
-  private async hardDeleteBackup(backup: { id: string; r2Key: string; fileName: string }): Promise<void> {
+  private async hardDeleteBackup(backup: { _id: unknown; r2Key: string; fileName: string }): Promise<void> {
     await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
     await r2Service.deleteFromSecondary(backup.r2Key);
-    await Backup.findByIdAndDelete(backup.id);
+    await Backup.findByIdAndDelete(backup._id);
   }
 
   /**
