@@ -273,6 +273,7 @@ export const fuelRecordValidation = {
     body('date').notEmpty().withMessage('Date is required'),
     body('truckNo').trim().notEmpty().withMessage('Truck number is required'),
     body('goingDo').trim().notEmpty().withMessage('Going DO is required'),
+    body('returnDo').optional({ nullable: true }).isString().trim(),
     body('start').trim().notEmpty().withMessage('Start location is required'),
     body('from').trim().notEmpty().withMessage('From location is required'),
     body('to').trim().notEmpty().withMessage('To location is required'),
@@ -284,6 +285,24 @@ export const fuelRecordValidation = {
       .optional({ nullable: true })
       .isFloat({ min: 0 })
       .withMessage('Extra fuel must be a non-negative number'),
+    // Checkpoint fields MUST be listed so matchedData() includes them on create.
+    // Without these, amounts are dropped while client-calculated balance is kept.
+    body('mmsaYard').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('MMSA yard fuel must be non-negative'),
+    body('tangaYard').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Tanga yard fuel must be non-negative'),
+    body('darYard').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Dar yard fuel must be non-negative'),
+    body('tangaGoing').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Tanga going fuel must be non-negative'),
+    body('darGoing').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Dar going fuel must be non-negative'),
+    body('moroGoing').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Moro going fuel must be non-negative'),
+    body('mbeyaGoing').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Mbeya going fuel must be non-negative'),
+    body('tdmGoing').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('TDM going fuel must be non-negative'),
+    body('zambiaGoing').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Zambia going fuel must be non-negative'),
+    body('congoFuel').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Congo fuel must be non-negative'),
+    body('zambiaReturn').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Zambia return fuel must be non-negative'),
+    body('tundumaReturn').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Tunduma return fuel must be non-negative'),
+    body('mbeyaReturn').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Mbeya return fuel must be non-negative'),
+    body('moroReturn').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Moro return fuel must be non-negative'),
+    body('darReturn').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Dar return fuel must be non-negative'),
+    body('tangaReturn').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Tanga return fuel must be non-negative'),
     body('balance').isNumeric().withMessage('Balance must be a number'),
     // These two fields drive the missing-config notification chain.
     // They MUST be listed here so matchedData() includes them in the payload.

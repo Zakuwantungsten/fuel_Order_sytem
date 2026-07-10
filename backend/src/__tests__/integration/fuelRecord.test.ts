@@ -230,6 +230,7 @@ describe('Fuel Record API Integration Tests', () => {
         to: 'LUBUMBASHI',
         totalLts: 2300,
         extra: 60,
+        // Intentionally wrong client balance — server must recalculate from checkpoints
         balance: 900,
         darYard: 550,
         mbeyaGoing: 450
@@ -244,6 +245,11 @@ describe('Fuel Record API Integration Tests', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.goingDo).toBe('DO-FRCREATE-001');
       expect(response.body.data.truckNo).toBe('T999 NEW');
+      // Checkpoints must persist on create (matchedData previously stripped them)
+      expect(response.body.data.darYard).toBe(550);
+      expect(response.body.data.mbeyaGoing).toBe(450);
+      // Balance = (2300 + 60) - (550 + 450) = 1360
+      expect(response.body.data.balance).toBe(1360);
     });
 
     it('should reject if truck has open fuel record', async () => {
@@ -394,6 +400,8 @@ describe('Fuel Record API Integration Tests', () => {
       const allocated = record.darYard + record.mbeyaGoing + 
                         record.zambiaGoing + record.congoFuel;
       expect(allocated).toBe(1800);
+      // Balance = (2300 + 60) - 1800 = 560
+      expect(record.balance).toBe(560);
     });
 
     it('should handle Tanga start journey', async () => {
@@ -419,6 +427,9 @@ describe('Fuel Record API Integration Tests', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.tangaYard).toBe(100);
+      expect(response.body.data.darYard).toBe(450);
+      // Balance = 2300 - (100 + 450 + 450 + 400 + 400) = 500
+      expect(response.body.data.balance).toBe(500);
     });
 
     it('should handle return journey fuel allocation', async () => {

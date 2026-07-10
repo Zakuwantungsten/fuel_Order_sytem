@@ -26,6 +26,7 @@ import { countRelevantNewRecords } from '../utils/realtimeRelevance';
 import { useAuth } from '../contexts/AuthContext';
 import ConflictModal from '../components/ConflictModal';
 import EditLockBadge from '../components/EditLockBadge';
+import { replaceUrlPreservingState } from '../utils/historyState';
 import {
   deliveryOrderKeys,
   periodsToDateRange,
@@ -215,7 +216,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             setIsFormOpen(true);
             // Clear the query param
             url.searchParams.delete('edit');
-            window.history.replaceState({}, '', url.toString());
+            replaceUrlPreservingState(url.toString());
           }
         }).catch(err => {
           console.error('Failed to fetch DO for edit:', err);
@@ -226,13 +227,13 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         setIsFormOpen(true);
         // Clear the action param
         url.searchParams.delete('action');
-        window.history.replaceState({}, '', url.toString());
+        replaceUrlPreservingState(url.toString());
       } else if (actionParam === 'bulk-create') {
         console.log('Quick Action: Opening Bulk Create DO modal');
         setIsBulkFormOpen(true);
         // Clear the action param
         url.searchParams.delete('action');
-        window.history.replaceState({}, '', url.toString());
+        replaceUrlPreservingState(url.toString());
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         // Mark as processed to avoid re-processing
         highlightProcessedRef.current = highlightId;
@@ -410,7 +411,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     url.searchParams.delete('highlight');
     url.searchParams.delete('year');
     url.searchParams.delete('month');
-    window.history.replaceState({}, '', url.toString());
+    replaceUrlPreservingState(url.toString());
   };
 
   // Handle edit query parameter (e.g., from notification click)

@@ -49,6 +49,7 @@ import {
 // Eagerly loaded — needed on first render (header/auth)
 import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
+import { replaceUrlPreservingState } from '../utils/historyState';
 
 // Lazy-loaded components — only fetched when the user navigates to them
 const YardFuelSimple = lazyWithRetry(() => import('./YardFuelSimple'));
@@ -240,22 +241,30 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   }, []);
 
   // Back-button handler: restore previous tab from history state.
-  // If we are already on the home tab, show exit confirmation instead.
+  // Only show exit confirmation when there is no in-app tab left to restore.
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       const previousTab: string | undefined = event.state?.tab;
       const homeTab = getHomeTab();
 
-      if (!previousTab || previousTab === homeTab) {
-        // Nothing (or home) to go back to — ask user if they want to exit
-        // Push a dummy entry back so the history stack isn't consumed
-        window.history.pushState({ tab: activeTab }, '', window.location.pathname + window.location.search);
-        setShowExitConfirm(true);
+      // Restore any prior tab (including home) when it differs from the current one
+      if (previousTab && previousTab !== activeTab) {
+        isRestoringFromHistory.current = true;
+        setActiveTab(previousTab);
         return;
       }
 
-      isRestoringFromHistory.current = true;
-      setActiveTab(previousTab);
+      // Lost tab metadata while not on home — fall back to home instead of exiting
+      if (!previousTab && activeTab !== homeTab) {
+        isRestoringFromHistory.current = true;
+        window.history.pushState({ tab: homeTab }, '', window.location.pathname + window.location.search);
+        setActiveTab(homeTab);
+        return;
+      }
+
+      // Already at the bottom of the in-app stack — ask whether to leave
+      window.history.pushState({ tab: activeTab }, '', window.location.pathname + window.location.search);
+      setShowExitConfirm(true);
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -302,7 +311,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         currentUrl.searchParams.set('highlight', highlight);
       }
       
-      window.history.replaceState({ tab }, '', currentUrl.toString());
+      replaceUrlPreservingState(currentUrl.toString(), { tab });
       // Dispatch event to notify child components
       window.dispatchEvent(new CustomEvent('urlchange'));
     }
@@ -316,12 +325,16 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       skipHighlightClearRef.current = false;
       return;
     }
+    if (isRestoringFromHistory.current) {
+      isRestoringFromHistory.current = false;
+    }
     setHighlightParam(null);
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete('highlight');
     currentUrl.searchParams.delete('month');
     currentUrl.searchParams.delete('year');
-    window.history.replaceState({}, '', currentUrl.toString());
+    // Keep { tab } on the current history entry so back/forward still works
+    replaceUrlPreservingState(currentUrl.toString(), { tab: activeTab });
   }, [activeTab]);
 
   // Handle edit DO ID by updating URL search params
@@ -329,7 +342,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
     if (editDoId && activeTab === 'do') {
       const currentUrl = new URL(window.location.href);
       currentUrl.searchParams.set('edit', editDoId);
-      window.history.replaceState({}, '', currentUrl.toString());
+      replaceUrlPreservingState(currentUrl.toString(), { tab: activeTab });
       // Dispatch a custom event to notify child components
       window.dispatchEvent(new CustomEvent('urlchange'));
       // Clear the editDoId after setting
@@ -516,42 +529,42 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       case 'reports':
         return <Reports user={user} />;
       
-      // Super Admin sections
+      // Super Admin sections — always use navigateToTab so back restores prior tabs
       case 'sa_overview':
-        return <SuperAdminDashboard user={user} section="overview" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="overview" onNavigate={navigateToTab} />;
       case 'sa_monitoring':
-        return <SuperAdminDashboard user={user} section="monitoring" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="monitoring" onNavigate={navigateToTab} />;
       case 'sa_users':
-        return <SuperAdminDashboard user={user} section="users" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="users" onNavigate={navigateToTab} />;
       case 'sa_fuel_stations':
-        return <SuperAdminDashboard user={user} section="fuel_stations" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="fuel_stations" onNavigate={navigateToTab} />;
       case 'sa_routes':
-        return <SuperAdminDashboard user={user} section="routes" onNavigate={setActiveTab} initialDestination={pendingDestination} onDestinationConsumed={() => setPendingDestination('')} />;
+        return <SuperAdminDashboard user={user} section="routes" onNavigate={navigateToTab} initialDestination={pendingDestination} onDestinationConsumed={() => setPendingDestination('')} />;
       case 'sa_system':
-        return <SuperAdminDashboard user={user} section="system" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="system" onNavigate={navigateToTab} />;
       // sa_config, sa_config_history, sa_config_diff, sa_feature_flags, sa_cron_jobs,
       // sa_maintenance, sa_webhooks, sa_rate_limits, sa_db_indexes, sa_announcements,
       // sa_notification_config, excel_import (super_admin) merged into sa_system
       case 'sa_audit':
-        return <SuperAdminDashboard user={user} section="audit" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="audit" onNavigate={navigateToTab} />;
       case 'sa_security':
-        return <SuperAdminDashboard user={user} section="security" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="security" onNavigate={navigateToTab} />;
       case 'sa_trash':
-        return <SuperAdminDashboard user={user} section="trash" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="trash" onNavigate={navigateToTab} />;
       case 'sa_archival':
-        return <SuperAdminDashboard user={user} section="archival" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="archival" onNavigate={navigateToTab} />;
       case 'sa_backup':
-        return <SuperAdminDashboard user={user} section="backup" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="backup" onNavigate={navigateToTab} />;
       case 'sa_analytics':
-        return <SuperAdminDashboard user={user} section="analytics" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="analytics" onNavigate={navigateToTab} />;
       case 'sa_fuel_prices':
-        return <SuperAdminDashboard user={user} section="fuel_prices" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="fuel_prices" onNavigate={navigateToTab} />;
       case 'sa_data_export':
-        return <SuperAdminDashboard user={user} section="data_export" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="data_export" onNavigate={navigateToTab} />;
       case 'sa_storage':
-        return <SuperAdminDashboard user={user} section="storage" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="storage" onNavigate={navigateToTab} />;
       case 'sa_custom_report':
-        return <SuperAdminDashboard user={user} section="custom_report" onNavigate={setActiveTab} />;
+        return <SuperAdminDashboard user={user} section="custom_report" onNavigate={navigateToTab} />;
       // sa_siem_export merged into sa_monitoring
       
       // Admin sections (admin/boss roles)
@@ -1143,7 +1156,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         </Suspense>
       )}
 
-      {/* Exit Confirmation Modal — shown when user presses back on the home tab */}
+      {/* Exit Confirmation Modal — shown when back has nowhere left in-app to go */}
       {showExitConfirm && (
         <div className="fixed inset-0 z-[300] flex items-end justify-center sm:items-center" style={{ background: 'rgba(15,23,42,0.7)' }}>
           <div className="w-full sm:max-w-sm mx-4 mb-6 sm:mb-0 rounded-2xl shadow-2xl overflow-hidden" style={{ background: isDark ? '#1E293B' : '#FFFFFF', border: `1px solid ${isDark ? '#334155' : '#E2E8F0'}` }}>
@@ -1155,8 +1168,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   <LogOut className="w-5 h-5" style={{ color: '#DC2626' }} />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Exit App?</h3>
-                  <p className="text-sm" style={{ color: isDark ? '#94A3B8' : '#64748B' }}>Do you want to close the application?</p>
+                  <h3 className="text-base font-semibold" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>Leave App?</h3>
+                  <p className="text-sm" style={{ color: isDark ? '#94A3B8' : '#64748B' }}>Do you want to log out and leave the application?</p>
                 </div>
               </div>
               <div className="flex gap-3 mt-5">
@@ -1168,11 +1181,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   Stay
                 </button>
                 <button
-                  onClick={() => { setShowExitConfirm(false); window.history.go(-window.history.length); window.close(); }}
+                  onClick={() => { setShowExitConfirm(false); logout(); }}
                   className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors"
                   style={{ background: '#DC2626' }}
                 >
-                  Exit
+                  Log out
                 </button>
               </div>
             </div>

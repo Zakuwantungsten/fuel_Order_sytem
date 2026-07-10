@@ -24,6 +24,7 @@ import EditLockBadge from '../components/EditLockBadge';
 import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
+import { replaceUrlPreservingState } from '../utils/historyState';
 
 // Map fuel record field names to their primary standard allocation key
 const ALLOCATION_FIELD_MAP: Record<string, keyof StandardAllocations> = {
@@ -295,7 +296,7 @@ const FuelRecords = () => {
         setIsFormOpen(true);
         // Clear the action param
         url.searchParams.delete('action');
-        window.history.replaceState({}, '', url.toString());
+        replaceUrlPreservingState(url.toString());
         setMonthInitialized(true);
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
@@ -456,7 +457,7 @@ const FuelRecords = () => {
     url.searchParams.delete('highlight');
     url.searchParams.delete('month');
     url.searchParams.delete('year');
-    window.history.replaceState({}, '', url.toString());
+    replaceUrlPreservingState(url.toString());
   };
   
   // Click outside detection

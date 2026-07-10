@@ -5,6 +5,7 @@ import { User } from '../types';
 import NotificationBell from './NotificationBell';
 import ChangePasswordModal from './ChangePasswordModal';
 import { useAuth } from '../contexts/AuthContext';
+import { replaceUrlPreservingState } from '../utils/historyState';
 import {
   LogOut,
   User as UserIcon,
@@ -50,11 +51,49 @@ export function OfficerPortal({ user }: OfficerPortalProps) {
   const [showChangePassword, setShowChangePassword] = useState(false);
   // Value not consumed locally — set by navigation helpers, read by child components via URL params
   const [_doTabParams, setDoTabParams] = useState<string | undefined>(undefined);
+  const homeTab: ActiveTab = 'overview';
 
   useEffect(() => {
     const timer = window.setTimeout(() => setLoading(false), 250);
     return () => window.clearTimeout(timer);
   }, []);
+
+  // Seed history so back can restore officer tabs
+  useEffect(() => {
+    if (!window.history.state?.tab) {
+      window.history.replaceState({ tab: activeTab }, '', window.location.pathname + window.location.search);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const previousTab = event.state?.tab as ActiveTab | undefined;
+
+      if (previousTab && previousTab !== activeTab && ['overview', 'do', 'config'].includes(previousTab)) {
+        setActiveTab(previousTab);
+        return;
+      }
+
+      if ((!previousTab || !['overview', 'do', 'config'].includes(previousTab)) && activeTab !== homeTab) {
+        window.history.pushState({ tab: homeTab }, '', window.location.pathname + window.location.search);
+        setActiveTab(homeTab);
+        return;
+      }
+
+      // At bottom of stack — re-push so the user stays in the portal
+      window.history.pushState({ tab: activeTab }, '', window.location.pathname + window.location.search);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTab]);
+
+  const navigateToTab = (tab: ActiveTab) => {
+    if (tab === activeTab) return;
+    window.history.pushState({ tab }, '', window.location.pathname + window.location.search);
+    setActiveTab(tab);
+  };
 
   if (loading) return <UnifiedTabLoader label="Loading officer portal..." />;
 
@@ -70,7 +109,7 @@ export function OfficerPortal({ user }: OfficerPortalProps) {
 
   const handleNavigateToDO = (params?: string) => {
     setDoTabParams(params);
-    setActiveTab('do');
+    navigateToTab('do');
     setMobileSidebarOpen(false);
     // Inject params into URL so DeliveryOrders can read them
     if (params) {
@@ -79,7 +118,7 @@ export function OfficerPortal({ user }: OfficerPortalProps) {
         const [k, v] = pair.split('=');
         if (k && v) url.searchParams.set(k, v);
       });
-      window.history.replaceState({}, '', url.toString());
+      replaceUrlPreservingState(url.toString(), { tab: 'do' });
       // Fire the same event EnhancedDashboard uses so DeliveryOrders picks it up
       window.dispatchEvent(new CustomEvent('tab-url-change'));
     }
@@ -87,7 +126,7 @@ export function OfficerPortal({ user }: OfficerPortalProps) {
 
   const handleTabClick = (tab: ActiveTab) => {
     if (tab !== 'do') setDoTabParams(undefined);
-    setActiveTab(tab);
+    navigateToTab(tab);
     setMobileSidebarOpen(false);
   };
 

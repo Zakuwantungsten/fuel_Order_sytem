@@ -23,6 +23,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
+import { replaceUrlPreservingState } from '../utils/historyState';
 import {
   lpoKeys,
   periodsToDateRange,
@@ -71,7 +72,7 @@ const LPOs = () => {
     const url = new URL(window.location.href);
     if (url.searchParams.get('action') === 'create-lpo') {
       url.searchParams.delete('action');
-      window.history.replaceState({}, '', url.toString());
+      replaceUrlPreservingState(url.toString());
       return true;
     }
     return false;
@@ -261,7 +262,7 @@ const LPOs = () => {
         setIsDetailFormOpen(true);
         // Clear the action param
         url.searchParams.delete('action');
-        window.history.replaceState({}, '', url.toString());
+        replaceUrlPreservingState(url.toString());
         setFiltersInitialized(true);
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
@@ -459,7 +460,7 @@ const LPOs = () => {
     url.searchParams.delete('truck');
     url.searchParams.delete('year');
     url.searchParams.delete('month');
-    window.history.replaceState({}, '', url.toString());
+    replaceUrlPreservingState(url.toString());
   };
 
   // React Query handles filtering server-side; reset page on filter changes

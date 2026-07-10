@@ -636,6 +636,20 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
       payload.month = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
     }
 
+    // Recalculate balance from persisted fields so create never trusts a
+    // client balance that doesn't match the checkpoint amounts being saved.
+    // Formula: Balance = (Total + Extra) - (All Checkpoints)
+    const checkpointFields = [
+      'mmsaYard', 'tangaYard', 'darYard', 'tangaGoing', 'darGoing', 'moroGoing', 'mbeyaGoing',
+      'tdmGoing', 'zambiaGoing', 'congoFuel', 'zambiaReturn', 'tundumaReturn',
+      'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn',
+    ];
+    const totalFuel = (payload.totalLts || 0) + (payload.extra || 0);
+    const totalCheckpoints = checkpointFields.reduce((sum, field) => {
+      return sum + Math.abs(payload[field] || 0);
+    }, 0);
+    payload.balance = totalFuel - totalCheckpoints;
+
     const fuelRecord = await FuelRecord.create(payload);
 
     logger.info(`Fuel record created for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
