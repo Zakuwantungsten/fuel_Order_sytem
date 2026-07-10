@@ -1,9 +1,24 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import https from 'https';
 import { config } from '../config';
 import logger from '../utils/logger';
 import { Readable } from 'stream';
+
+/**
+ * Force IPv4 for S3/R2/B2 calls. Many Ubuntu hosts resolve AAAA first but have
+ * no working IPv6 route ("Network is unreachable"), which makes the AWS SDK
+ * hang/timeout even though curl over IPv4 succeeds.
+ */
+function ipv4RequestHandler() {
+  return new NodeHttpHandler({
+    httpsAgent: new https.Agent({ family: 4, keepAlive: true }),
+    connectionTimeout: 10_000,
+    requestTimeout: 120_000,
+  });
+}
 
 class R2Service {
   private client: S3Client | null = null;
@@ -28,6 +43,7 @@ class R2Service {
             accessKeyId: config.r2AccessKeyId,
             secretAccessKey: config.r2SecretAccessKey,
           },
+          requestHandler: ipv4RequestHandler(),
         });
         logger.info('R2 service initialized successfully');
       } catch (error) {
@@ -54,6 +70,7 @@ class R2Service {
           region: config.r2SecondaryRegion,
           endpoint: secEndpoint,
           credentials: { accessKeyId: secKeyId, secretAccessKey: secSecret },
+          requestHandler: ipv4RequestHandler(),
         });
         const sameAccount = !config.r2SecondaryEndpoint;
         const provider = /backblazeb2\.com/i.test(secEndpoint) ? 'Backblaze B2' : (sameAccount ? 'same account' : 'separate account/provider');
