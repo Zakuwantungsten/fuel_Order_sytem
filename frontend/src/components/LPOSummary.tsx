@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle, ChevronDown, Check, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { LPOEntry, DriverAccountEntry } from '../types';
-import { driverAccountAPI, lposAPI } from '../services/api';
-import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { LPOEntry } from '../types';
+import { lposAPI } from '../services/api';
 
 // Helper to derive currency from station name
 const getCurrencyFromStation = (station: string): 'USD' | 'TZS' => {
@@ -15,8 +14,6 @@ const getCurrencyFromStation = (station: string): 'USD' | 'TZS' => {
 // Extended LPO entry type that includes driver account flag
 interface ExtendedLPOEntry extends LPOEntry {
   isDriverAccount?: boolean;
-  paymentMode?: string;
-  paybillOrMobile?: string;
   journeyDirection?: 'going' | 'returning';
   originalDoNo?: string;
 }
@@ -27,7 +24,6 @@ interface LPOSummaryProps {
   dateFrom?: string;
   dateTo?: string;
   onFiltersChange?: (filters: { stations: string[]; dateFrom: string; dateTo: string }) => void;
-  includeDriverAccounts?: boolean; // Option to include driver account LPOs
 }
 
 interface MonthlySummaryData {
@@ -57,7 +53,6 @@ const LPOSummary = ({
   dateFrom = '', 
   dateTo = '', 
   onFiltersChange,
-  includeDriverAccounts = true 
 }: LPOSummaryProps) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
@@ -82,65 +77,10 @@ const LPOSummary = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-  const [driverAccountEntries, setDriverAccountEntries] = useState<ExtendedLPOEntry[]>([]);
-  const [loadingDriverAccounts, setLoadingDriverAccounts] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Fetch driver account entries
-  useEffect(() => {
-    if (includeDriverAccounts) {
-      fetchDriverAccountEntries();
-    }
-  }, [selectedYear, includeDriverAccounts]);
-
-  const fetchDriverAccountEntries = async () => {
-    setLoadingDriverAccounts(true);
-    try {
-      const yearNum = parseInt(selectedYear) || new Date().getFullYear();
-      const entries = await driverAccountAPI.getAll({ year: yearNum });
-      
-      // Convert driver account entries to LPO entry format
-      const convertedEntries: ExtendedLPOEntry[] = entries.map((entry: DriverAccountEntry, index: number) => {
-        // Parse date to match LPO format
-        const entryDate = new Date(entry.date);
-        const day = entryDate.getDate();
-        const month = entryDate.toLocaleDateString('en-US', { month: 'short' });
-        
-        return {
-          id: entry.id || `da-${index}`,
-          sn: index + 1,
-          date: `${day}-${month}`,
-          lpoNo: entry.lpoNo,
-          dieselAt: entry.station,
-          doSdo: 'NIL', // Driver account LPOs show NIL
-          truckNo: entry.truckNo,
-          ltrs: entry.liters,
-          pricePerLtr: entry.rate,
-          destinations: 'NIL (Driver Acc.)', // Mark as driver account
-          isDriverAccount: true,
-          paymentMode: entry.paymentMode,
-          paybillOrMobile: entry.paybillOrMobile,
-          journeyDirection: entry.journeyDirection,
-          originalDoNo: entry.originalDoNo,
-        };
-      });
-      
-      setDriverAccountEntries(convertedEntries);
-    } catch (error) {
-      console.error('Error fetching driver account entries:', error);
-      setDriverAccountEntries([]);
-    } finally {
-      setLoadingDriverAccounts(false);
-    }
-  };
-
-  useRealtimeSync('lpo_summaries', fetchDriverAccountEntries);
-
-  // Combined entries (regular LPOs + driver account LPOs)
-  const combinedEntries: ExtendedLPOEntry[] = [
-    ...lpoEntries.map(e => ({ ...e, isDriverAccount: false })),
-    ...driverAccountEntries
-  ];
+  // Flat list already includes DA / REF / NIL / regular — trust entry flags
+  const combinedEntries: ExtendedLPOEntry[] = lpoEntries;
 
   // Get current month name
   const getCurrentMonth = () => {
@@ -358,8 +298,7 @@ const LPOSummary = ({
   if (!summary) {
     return (
       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-        {loadingDriverAccounts ? 'Loading driver account entries...' : 
-         (availableMonths.length === 0 ? 'No LPO data available' : 'Select a month to view summary')}
+        {availableMonths.length === 0 ? 'No LPO data available' : 'Select a month to view summary'}
       </div>
     );
   }
@@ -774,11 +713,6 @@ const LPOSummary = ({
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {entry.destinations}
-                        {entry.isDriverAccount && entry.paymentMode && (
-                          <span className="block text-xs text-red-500 dark:text-red-400 mt-0.5">
-                            ({entry.paymentMode.replace('_', ' ')}{entry.paybillOrMobile ? `: ${entry.paybillOrMobile}` : ''})
-                          </span>
-                        )}
                       </td>
                     </tr>
                   ))}

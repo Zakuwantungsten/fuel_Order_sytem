@@ -147,6 +147,12 @@ export function addDoSummaryTabSheets(
   }
 }
 
+function resolveLpoEntryType(entry: any): string {
+  if (entry.isDriverAccount) return 'DRIVER ACCOUNT';
+  if (entry.isRefer) return 'REF';
+  return 'REGULAR';
+}
+
 /**
  * Build LPO Monthly Summary sheets (no Payment Mode / Paybill columns).
  */
@@ -186,7 +192,7 @@ export function addLpoSummaryMonthSheet(
       rate,
       liters * rate,
       entry.destinations || entry.dest || '',
-      entry.isDriverAccount ? 'DRIVER ACCOUNT' : 'REGULAR',
+      resolveLpoEntryType(entry),
     ];
     styleDataRow(row, headers.length, !!entry.isCancelled);
   });

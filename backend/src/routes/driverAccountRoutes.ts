@@ -47,18 +47,25 @@ router.get(
   asyncHandler(driverAccountController.getDriverAccountEntryById)
 );
 
+// Create / update / settle / delete from the DA tab are disabled.
+// Driver-account lines are created only via the main LPO form (isDriverAccount flag), like REF.
+const daWorkflowGone = async (_req: any, _res: any) => {
+  const { ApiError } = await import('../middleware/errorHandler');
+  throw new ApiError(410, 'Driver Account side-collection workflow removed. Create DA entries by typing DA in the main LPO form.');
+};
+
 // Create entry
 router.post(
   '/',
   authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss'),
-  asyncHandler(driverAccountController.createDriverAccountEntry)
+  asyncHandler(daWorkflowGone)
 );
 
 // Create batch entries
 router.post(
   '/batch',
   authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss'),
-  asyncHandler(driverAccountController.createBatchDriverAccountEntries)
+  asyncHandler(daWorkflowGone)
 );
 
 // Update entry
@@ -67,7 +74,7 @@ router.put(
   commonValidation.mongoId,
   authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'),
   validate,
-  asyncHandler(driverAccountController.updateDriverAccountEntry)
+  asyncHandler(daWorkflowGone)
 );
 
 // Update entry status
@@ -76,7 +83,7 @@ router.patch(
   commonValidation.mongoId,
   authorize('super_admin', 'admin', 'manager', 'fuel_order_maker', 'boss'),
   validate,
-  asyncHandler(driverAccountController.updateDriverAccountStatus)
+  asyncHandler(daWorkflowGone)
 );
 
 // Delete entry
@@ -85,7 +92,7 @@ router.delete(
   commonValidation.mongoId,
   authorize('super_admin', 'admin', 'boss'),
   validate,
-  asyncHandler(driverAccountController.deleteDriverAccountEntry)
+  asyncHandler(daWorkflowGone)
 );
 
 export default router;

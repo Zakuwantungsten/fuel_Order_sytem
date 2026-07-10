@@ -5,7 +5,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { lposAPI, lpoWorkbookAPI, driverAccountAPI } from '../services/api';
+import { lposAPI, lpoWorkbookAPI } from '../services/api';
 import type { LPOEntry } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -20,6 +20,7 @@ export const lpoKeys = {
   availableYears: () => [...lpoKeys.all, 'years'] as const,
   availableFilters: () => [...lpoKeys.all, 'filters'] as const,
   referEntries: () => [...lpoKeys.all, 'referEntries'] as const,
+  driverAccountEntries: () => [...lpoKeys.all, 'driverAccountEntries'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -89,33 +90,33 @@ export function useLPOList(filters: LPOFilters, enabled = true) {
 }
 
 // ---------------------------------------------------------------------------
-// Driver account entries (separate cache — few entries, rarely changes)
+// Driver account entries (flag-only — same pattern as reefer / isRefer)
 // ---------------------------------------------------------------------------
 export function useDriverAccountEntries() {
   return useQuery({
-    queryKey: [...lpoKeys.all, 'driverAccounts'] as const,
+    queryKey: lpoKeys.driverAccountEntries(),
     queryFn: async () => {
-      const entries = await driverAccountAPI.getAll().catch(() => [] as any[]);
-      return (entries || []).map((entry: any, idx: number) => {
-        const numMatch = String(entry.lpoNo || '').match(/(\d+)/);
-        const numericSn = numMatch ? parseInt(numMatch[1], 10) : idx + 1;
-        return {
-          id: `da-${entry.id || entry._id}`,
-          sn: numericSn,
-          date: entry.date,
-          lpoNo: entry.lpoNo,
-          dieselAt: entry.station,
-          doSdo: 'NIL',
-          truckNo: entry.truckNo,
-          ltrs: entry.liters,
-          pricePerLtr: entry.rate,
-          destinations: 'NIL',
-          currency: entry.currency,
-          createdAt: entry.createdAt,
-          isCancelled: entry.isCancelled || false,
-          cancelledAt: entry.cancelledAt || null,
-        } as LPOEntry;
-      });
+      const response = await lposAPI.getAll({ isDriverAccount: 'true', limit: 5000, sort: 'lpo_desc', order: 'desc' });
+      const entries = Array.isArray(response.data) ? response.data : [];
+      if (response.pagination && response.pagination.total > entries.length) {
+        console.warn(`useDriverAccountEntries: ${response.pagination.total} DA entries exist but only ${entries.length} loaded — add pagination UI to view the rest.`);
+      }
+      return entries.map((entry: any, idx: number) => ({
+        id: `da-${entry.id || entry._id || idx}`,
+        sn: idx + 1,
+        date: entry.date,
+        lpoNo: entry.lpoNo,
+        dieselAt: entry.dieselAt,
+        doSdo: 'DA(NIL)',
+        truckNo: entry.truckNo,
+        ltrs: entry.ltrs,
+        pricePerLtr: entry.pricePerLtr,
+        destinations: entry.destinations || 'NIL',
+        currency: entry.currency,
+        createdAt: entry.createdAt,
+        isCancelled: entry.isCancelled || false,
+        isDriverAccount: true,
+      } as LPOEntry));
     },
     staleTime: 5 * 60 * 1000,
   });

@@ -1016,66 +1016,6 @@ async function allocateNextLpoNo(year: number, session?: ClientSession): Promise
   return nextLpoNo;
 }
 
-
-/**
- * Sync DriverAccountEntry records when an LPO summary with driver account entries is updated.
- * This ensures edits made through the workbook sheet view reflect in the driver account table.
- */
-const syncDriverAccountEntriesOnUpdate = async (lpoSummary: any): Promise<void> => {
-  try {
-    const driverEntries = lpoSummary.entries.filter((e: any) => e.isDriverAccount);
-    if (driverEntries.length === 0) return;
-
-    // One query to find all existing rows for this LPO, then one bulkWrite — instead of a
-    // findOne + save per entry.
-    const truckNos = driverEntries.map((e: any) => e.truckNo);
-    const existingRows = await DriverAccountEntry.find({
-      lpoNo: lpoSummary.lpoNo,
-      truckNo: { $in: truckNos },
-    }).select('truckNo').lean();
-    const existingTruckNos = new Set(existingRows.map((r: any) => r.truckNo));
-
-    const ops: any[] = [];
-    for (const entry of driverEntries) {
-      if (!existingTruckNos.has(entry.truckNo)) continue; // only sync rows that already exist
-
-      const filter = { lpoNo: lpoSummary.lpoNo, truckNo: entry.truckNo };
-      if (entry.isCancelled) {
-        ops.push({
-          updateOne: {
-            filter,
-            update: { $set: { isCancelled: true, cancelledAt: entry.cancelledAt || new Date() } },
-          },
-        });
-      } else {
-        ops.push({
-          updateOne: {
-            filter,
-            update: {
-              $set: {
-                liters: entry.liters,
-                rate: entry.rate,
-                amount: entry.liters * entry.rate,
-                station: lpoSummary.station,
-                isCancelled: false,
-              },
-              $unset: { cancelledAt: '' },
-            },
-          },
-        });
-      }
-    }
-
-    if (ops.length > 0) {
-      await DriverAccountEntry.bulkWrite(ops);
-      logger.info(`Synced ${ops.length} DriverAccountEntry row(s) for LPO ${lpoSummary.lpoNo}`);
-    }
-  } catch (error: any) {
-    logger.error(`Error syncing DriverAccountEntry for LPO ${lpoSummary.lpoNo}: ${error.message}`);
-  }
-};
-
-
 /**
  * Create new LPO document (sheet in a workbook)
  * Handles regular entries, cancelled entries, and driver account entries
@@ -1126,12 +1066,10 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
     const fuelFlags = await getFuelAutomationFlags();
     let createDeductionsSkipped = 0;
 
-    // Batch all per-entry DB work: fuel-record updates collapse into one bulkWrite, and
-    // driver-account rows insert in one insertMany — instead of one round-trip per entry.
+    // Batch fuel-record updates into one bulkWrite instead of one round-trip per entry.
     const fuelBatch = createFuelUpdateBatch();
-    const driverAccountDocs: any[] = [];
 
-    // Update fuel records for each entry (skip cancelled and driver account entries)
+    // Update fuel records for each entry (skip cancelled, driver account, and refer entries)
     if (lpoSummary.entries && lpoSummary.entries.length > 0) {
       for (const entry of lpoSummary.entries) {
         // Skip fuel record update for cancelled entries
@@ -1140,27 +1078,10 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
           continue;
         }
 
-        // For driver account entries: skip fuel record but create driver account entry
+        // Driver account: flag-only on LPOSummary (like REF) — no side-collection write
         if (entry.isDriverAccount) {
-          logger.debug(`Queuing driver account entry for: ${entry.truckNo}`);
-
-          driverAccountDocs.push({
-            date: data.date,
-            month,
-            year,
-            lpoNo: lpoSummary.lpoNo,
-            truckNo: entry.truckNo,
-            liters: entry.liters,
-            rate: entry.rate,
-            amount: entry.amount,
-            station: lpoSummary.station,
-            cancellationPoint: entry.cancellationPoint || 'DAR_GOING',
-            originalDoNo: entry.referenceDoNo || entry.originalDoNo || entry.doNo,
-            status: 'pending',
-            createdBy: req.user?.username || 'system',
-          });
-
-          continue; // Skip fuel record update
+          logger.debug(`Skipping fuel record update for DA entry: ${entry.truckNo}`);
+          continue;
         }
 
         // For refer entries: skip fuel record update entirely (partner/third-party trucks)
@@ -1221,11 +1142,7 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       }
     }
 
-    // Flush batched DB work: one insertMany for driver-account rows + one bulkWrite for fuel records.
-    if (driverAccountDocs.length > 0) {
-      await DriverAccountEntry.insertMany(driverAccountDocs);
-      logger.info(`Created ${driverAccountDocs.length} driver account entr${driverAccountDocs.length === 1 ? 'y' : 'ies'} for LPO ${lpoSummary.lpoNo}`);
-    }
+    // Flush batched fuel-record updates.
     await flushFuelUpdateBatch(fuelBatch, 'lpo-system');
 
     logger.info(`LPO document created: ${lpoSummary.lpoNo} for year ${year} by ${req.user?.username}`);
@@ -1461,7 +1378,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         newEntry.cancelledAt = new Date();
         newlyCancelledEntries.push(newEntry);
       } else if (newEntry.isDriverAccount && !oldEntry.isDriverAccount) {
-        // Entry was converted to driver account - revert fuel and create driver account entry
+        // Entry was converted to driver account - revert fuel only (flag-only DA, no side collection)
         logger.info(`Entry converted to driver account: ${key}, reverting ${oldEntry.liters}L`);
         if (fuelFlags.lpoEditAdjust) {
           await updateFuelRecordForLPOEntry(
@@ -1482,23 +1399,6 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           skippedAutomation.add('lpoEditAdjust');
           logger.info(`[fuelAutomation] lpoEditAdjust OFF — skipping driver-account conversion revert for ${oldEntry.truckNo}`);
         }
-
-        // Create driver account entry
-        await DriverAccountEntry.create([{
-          date: newData.date || existingLpo.date,
-          month,
-          year,
-          lpoNo: existingLpo.lpoNo,
-          truckNo: newEntry.truckNo,
-          liters: newEntry.liters,
-          rate: newEntry.rate,
-          amount: newEntry.amount,
-          station: newData.station || existingLpo.station,
-          cancellationPoint: newEntry.cancellationPoint || 'DAR_GOING',
-          originalDoNo: newEntry.originalDoNo || oldEntry.doNo,
-          status: 'pending',
-          createdBy: username,
-        }], { session });
       } else if (newEntry.liters !== oldEntry.liters) {
         // Entry liters changed - adjust the difference
         const difference = newEntry.liters - oldEntry.liters;
@@ -1556,26 +1456,9 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           continue;
         }
         
-        // For driver account entries: skip fuel record but create driver account entry
+        // Driver account: flag-only — skip fuel, no side-collection write
         if (newEntry.isDriverAccount) {
-          logger.info(`New driver account entry: ${key}, creating driver account record`);
-          
-          await DriverAccountEntry.create([{
-            date: newData.date || existingLpo.date,
-            month,
-            year,
-            lpoNo: existingLpo.lpoNo,
-            truckNo: newEntry.truckNo,
-            liters: newEntry.liters,
-            rate: newEntry.rate,
-            amount: newEntry.amount,
-            station: newData.station || existingLpo.station,
-            cancellationPoint: newEntry.cancellationPoint || 'DAR_GOING',
-            originalDoNo: newEntry.originalDoNo || newEntry.doNo,
-            status: 'pending',
-            createdBy: username,
-          }], { session });
-          
+          logger.info(`New driver account entry: ${key}, skipping fuel record update`);
           continue;
         }
         
@@ -1652,12 +1535,6 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
   }
 
   // Post-commit side effects — session is closed, data is durable.
-
-  // Sync DriverAccountEntry records if this LPO has driver account entries.
-  const hasDriverAccountEntries = lpoSummary.entries.some((e: any) => e.isDriverAccount);
-  if (hasDriverAccountEntries) {
-    await syncDriverAccountEntriesOnUpdate(lpoSummary);
-  }
 
   // Emit each touched fuel record and run journey promotion.
   if (touchedFuelIds.size > 0) {
@@ -3320,33 +3197,6 @@ const FLAT_ENTRY_PROJECTION = {
   lpoSortNum: LPO_SORT_NUM_EXPR,
 };
 
-const LEGACY_DA_FLAT_PROJECTION = {
-  _id: 0,
-  id: '$_id',
-  lpoId: null,
-  lpoNo: 1,
-  date: 1,
-  dieselAt: '$station',
-  doSdo: { $literal: 'NIL' },
-  truckNo: 1,
-  ltrs: '$liters',
-  pricePerLtr: '$rate',
-  destinations: { $literal: 'NIL' },
-  currency: { $literal: 'USD' },
-  isCancelled: { $ifNull: ['$isCancelled', false] },
-  cancelledAt: '$cancelledAt',
-  isDriverAccount: { $literal: true },
-  isRefer: { $literal: false },
-  paymentMode: { $literal: 'DRIVER_ACCOUNT' },
-  originalLtrs: null,
-  amendedAt: null,
-  referenceDo: '$originalDoNo',
-  createdAt: 1,
-  updatedAt: 1,
-  entryIdx: { $literal: 0 },
-  lpoSortNum: LPO_SORT_NUM_EXPR,
-};
-
 function resolveFlatEntrySort(sort?: string, order?: string): Record<string, 1 | -1> {
   const raw = (sort as string) || 'lpo_desc';
   const asc = order === 'asc';
@@ -3365,97 +3215,6 @@ function resolveFlatEntrySort(sort?: string, order?: string): Record<string, 1 |
     default:
       return asc ? { lpoSortNum: 1, entryIdx: 1 } : { lpoSortNum: -1, entryIdx: 1 };
   }
-}
-
-function buildLegacyDriverAccountMatch(
-  req: AuthRequest,
-  opts: {
-    effectiveDateFrom?: string;
-    effectiveDateTo?: string;
-    station?: string;
-    stations?: string;
-    search?: string;
-    status?: string;
-    scope: Awaited<ReturnType<typeof resolveManagerScope>>;
-    hasSearch: boolean;
-  },
-): Record<string, unknown> | null {
-  const lpoCreatedGuard = { $or: [{ lpoCreated: { $ne: true } }, { lpoCreated: { $exists: false } }] };
-  const match: Record<string, unknown> = {
-    isDeleted: false,
-    $and: [lpoCreatedGuard],
-  };
-
-  if (opts.effectiveDateFrom || opts.effectiveDateTo) {
-    match.date = {};
-    if (opts.effectiveDateFrom) (match.date as any).$gte = opts.effectiveDateFrom.substring(0, 10);
-    if (opts.effectiveDateTo) (match.date as any).$lte = opts.effectiveDateTo.substring(0, 10);
-  }
-
-  if (opts.status === 'active') {
-    (match.$and as unknown[]).push({
-      $or: [{ isCancelled: false }, { isCancelled: { $exists: false } }],
-    });
-  } else if (opts.status === 'cancelled') {
-    match.isCancelled = true;
-  }
-
-  if (req.user?.role === 'driver') {
-    match.truckNo = req.user.username;
-  }
-
-  const managerTier = !!opts.scope;
-  if (!managerTier) {
-    if (opts.station && !opts.hasSearch) {
-      const s = sanitizeRegexInput(opts.station);
-      if (s) match.station = { $regex: `^${s}`, $options: 'i' };
-    }
-    if (opts.stations && !opts.station && !opts.hasSearch) {
-      const list = opts.stations
-        .split(',')
-        .map((x) => sanitizeRegexInput(x.trim()))
-        .filter(Boolean);
-      if (list.length > 0) {
-        (match.$and as unknown[]).push({
-          $or: list.map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } })),
-        });
-      }
-    }
-  }
-
-  if (opts.scope) {
-    applyManagerStationScope(match, opts.scope, {
-      station: opts.station,
-      stations: opts.stations,
-      hasSearch: opts.hasSearch,
-    });
-    if (opts.scope.dateFloor) {
-      match.date = match.date || {};
-      const existingFrom = (match.date as any).$gte as string | undefined;
-      (match.date as any).$gte =
-        existingFrom && existingFrom > opts.scope.dateFloor ? existingFrom : opts.scope.dateFloor;
-    }
-    if (!Array.isArray(match.$and)) {
-      match.$and = [lpoCreatedGuard];
-    } else if (!match.$and.some((c: any) => c?.$or?.some?.((o: any) => o?.lpoCreated !== undefined))) {
-      match.$and.unshift(lpoCreatedGuard);
-    }
-  }
-
-  if (opts.search) {
-    const fuzzy = buildFuzzyRegex(opts.search);
-    if (fuzzy) {
-      (match.$and as unknown[]).push({
-        $or: [
-          { lpoNo: { $regex: fuzzy, $options: 'i' } },
-          { truckNo: { $regex: fuzzy, $options: 'i' } },
-          { station: { $regex: fuzzy, $options: 'i' } },
-        ],
-      });
-    }
-  }
-
-  return match;
 }
 
 /**
@@ -3772,27 +3531,7 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
 
     pipeline.push({ $project: FLAT_ENTRY_PROJECTION });
 
-    // Legacy driver-account rows that were never mirrored into LPOSummary.
-    if (isRefer !== 'true') {
-      const legacyMatch = buildLegacyDriverAccountMatch(req, {
-        effectiveDateFrom: effectiveDateFrom as string | undefined,
-        effectiveDateTo: effectiveDateTo as string | undefined,
-        station: station as string | undefined,
-        stations: stations as string | undefined,
-        search: search as string | undefined,
-        status: status as string | undefined,
-        scope,
-        hasSearch: !!search,
-      });
-      if (legacyMatch) {
-        pipeline.push({
-          $unionWith: {
-            coll: DriverAccountEntry.collection.name,
-            pipeline: [{ $match: legacyMatch }, { $project: LEGACY_DA_FLAT_PROJECTION }],
-          },
-        });
-      }
-    }
+    // Legacy DriverAccountEntry union removed — DA is flag-only on LPOSummary (like REF).
 
     const sortStage = resolveFlatEntrySort(sort as string, order as string);
     pipeline.push({ $sort: sortStage });
@@ -3888,16 +3627,7 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
     }
     applyDateFloor(stationsMatch);
     const rawStations = await LPOSummary.distinct('station', stationsMatch) as string[];
-    const legacyDaStationMatch: any = { isDeleted: false, $or: [{ lpoCreated: { $ne: true } }, { lpoCreated: { $exists: false } }] };
-    if (!legacyDaStationMatch.station) legacyDaStationMatch.station = { $nin: [null, ''] };
-    if (dateFrom || dateTo) {
-      legacyDaStationMatch.date = {};
-      if (dateFrom) legacyDaStationMatch.date.$gte = (dateFrom as string).substring(0, 10);
-      if (dateTo) legacyDaStationMatch.date.$lte = (dateTo as string).substring(0, 10);
-    }
-    applyDateFloor(legacyDaStationMatch);
-    const legacyDaStations = await DriverAccountEntry.distinct('station', legacyDaStationMatch) as string[];
-    const stations = [...rawStations, ...legacyDaStations]
+    const stations = rawStations
       .filter(s => s && s.trim())
       .map(s => s.trim().toUpperCase())
       .filter((v, i, arr) => arr.indexOf(v) === i)
@@ -3998,7 +3728,7 @@ export const downloadLPOPDF = async (req: AuthRequest, res: Response): Promise<v
 };
 
 /**
- * Load flat LPO entries for summary export (active LPOSummary lines + legacy DA-only rows).
+ * Load flat LPO entries for summary export (LPOSummary flag-only; no DA side collection).
  */
 async function loadLpoEntriesForSummaryExport(opts: {
   dateFrom: string;
@@ -4008,30 +3738,7 @@ async function loadLpoEntriesForSummaryExport(opts: {
   const startDate = new Date(`${opts.dateFrom}T00:00:00.000Z`);
   const endDate = new Date(`${opts.dateTo}T23:59:59.999Z`);
 
-  const entries = await unifiedExportService.getAllLPOEntries({ startDate, endDate });
-
-  // Legacy driver-account rows never mirrored into LPOSummary
-  const legacyMatch: Record<string, unknown> = {
-    isDeleted: false,
-    $or: [{ lpoCreated: { $ne: true } }, { lpoCreated: { $exists: false } }],
-    date: { $gte: opts.dateFrom, $lte: opts.dateTo },
-  };
-  const legacyRows = await DriverAccountEntry.find(legacyMatch).lean();
-  const legacyMapped = legacyRows.map((e: any) => ({
-    lpoNo: e.lpoNo,
-    date: e.date,
-    dieselAt: e.station,
-    doSdo: 'NIL',
-    truckNo: e.truckNo,
-    ltrs: e.liters,
-    pricePerLtr: e.rate,
-    destinations: 'NIL',
-    isCancelled: !!e.isCancelled,
-    isDriverAccount: true,
-    isRefer: false,
-  }));
-
-  let all = [...entries, ...legacyMapped];
+  let all = await unifiedExportService.getAllLPOEntries({ startDate, endDate });
 
   if (opts.stations && opts.stations.length > 0) {
     const set = new Set(opts.stations.map((s) => s.trim().toUpperCase()).filter(Boolean));
