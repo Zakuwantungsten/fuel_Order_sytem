@@ -23,6 +23,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
+import QueryErrorState from '../components/QueryErrorState';
 import { replaceUrlPreservingState } from '../utils/historyState';
 import {
   lpoKeys,
@@ -186,6 +187,7 @@ const LPOs = () => {
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
   const loading = lpoQuery.isLoading;
   const isFetching = lpoQuery.isFetching;
+  const isError = lpoQuery.isError;
 
   const { data: workbooks = [] } = useLPOWorkbooks();
   const { data: hookYears = [] } = useLPOAvailableYears();
@@ -1649,6 +1651,12 @@ const LPOs = () => {
         )}
         {loading ? (
           <UnifiedTabLoader label="Loading LPO entries..." />
+        ) : isError && orders.length === 0 ? (
+          <QueryErrorState
+            title="Unable to load LPO entries"
+            onRetry={() => { void lpoQuery.refetch(); }}
+            isRetrying={isFetching}
+          />
         ) : orders.length === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
             <p className="text-sm sm:text-base">No LPO entries found</p>

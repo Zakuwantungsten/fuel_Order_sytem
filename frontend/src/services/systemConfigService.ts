@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { measureSettingsAction } from './settingsTelemetry';
 import { getCsrfToken } from './api';
+import { API_TIMEOUT_MS, attachTransportFailureSignal } from './networkSignals';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
@@ -11,7 +12,10 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
   withCredentials: true,
+  timeout: API_TIMEOUT_MS,
 });
+
+attachTransportFailureSignal(apiClient);
 
 // Add auth token + CSRF token to requests
 apiClient.interceptors.request.use(

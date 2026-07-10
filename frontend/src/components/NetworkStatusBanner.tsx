@@ -1,10 +1,12 @@
-import { WifiOff, Wifi } from 'lucide-react';
+import { WifiOff, Wifi, ServerCrash } from 'lucide-react';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 const NetworkStatusBanner = () => {
-  const { isOnline, showReconnected } = useNetworkStatus();
+  const { status, isOnline, showReconnected } = useNetworkStatus();
 
   if (isOnline && !showReconnected) return null;
+
+  const isDeviceOffline = status === 'device-offline';
 
   return (
     <div
@@ -18,8 +20,16 @@ const NetworkStatusBanner = () => {
     >
       {!isOnline ? (
         <>
-          <WifiOff className="w-4 h-4 flex-shrink-0" />
-          <span>No internet connection — changes may not be saved</span>
+          {isDeviceOffline ? (
+            <WifiOff className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          ) : (
+            <ServerCrash className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          )}
+          <span>
+            {isDeviceOffline
+              ? 'No internet connection — changes may not be saved'
+              : "Can't reach the server — changes may not be saved"}
+          </span>
           <span className="flex gap-1 ml-1" aria-hidden="true">
             <span className="w-1.5 h-1.5 bg-white/70 rounded-full animate-bounce [animation-delay:0ms]" />
             <span className="w-1.5 h-1.5 bg-white/70 rounded-full animate-bounce [animation-delay:150ms]" />
@@ -28,7 +38,7 @@ const NetworkStatusBanner = () => {
         </>
       ) : (
         <>
-          <Wifi className="w-4 h-4 flex-shrink-0" />
+          <Wifi className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
           <span>Back online</span>
         </>
       )}

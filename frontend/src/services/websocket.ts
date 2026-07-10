@@ -10,7 +10,8 @@ export interface LockChangeEvent {
 
 let socket: Socket | null = null;
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
+/** Keep trying forever — recovery after a long outage should not require a refresh. */
+const MAX_RECONNECT_ATTEMPTS = Infinity;
 
 // ----- Stable module-level callbacks -----
 // These are set by subscribe* functions and read by listeners registered
@@ -126,11 +127,6 @@ export const initializeWebSocket = (token: string): Socket => {
   socket.on('connect_error', (error) => {
     console.error('[WebSocket] Connection error:', error.message);
     reconnectAttempts++;
-    
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.error('[WebSocket] Max reconnection attempts reached');
-      socket?.disconnect();
-    }
   });
 
   socket.on('reconnect', (attemptNumber) => {
@@ -295,6 +291,18 @@ export const disconnectWebSocket = (): void => {
 };
 
 /**
+ * Re-open the socket after an outage if it exists but is disconnected.
+ * Safe to call repeatedly — no-ops when already connected or never initialized.
+ */
+export const ensureWebSocketConnected = (): void => {
+  if (!socket) return;
+  if (socket.connected) return;
+  console.log('[WebSocket] Ensuring connection after recovery...');
+  reconnectAttempts = 0;
+  socket.connect();
+};
+
+/**
  * Check if WebSocket is connected
  */
 export const isConnected = (): boolean => {
@@ -327,6 +335,7 @@ export default {
   subscribeToReconnect,
   unsubscribeFromReconnect,
   disconnectWebSocket,
+  ensureWebSocketConnected,
   isConnected,
   getSocket,
 };

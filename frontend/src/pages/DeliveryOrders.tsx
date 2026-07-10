@@ -16,6 +16,7 @@ import ExportLinkModal from '../components/ExportLinkModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import Pagination from '../components/Pagination';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
+import QueryErrorState from '../components/QueryErrorState';
 import { useTruckBatches } from '../hooks/useTruckBatches';
 import { useRoutes } from '../hooks/useRoutes';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -93,7 +94,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
   // --- React Query: server-side paginated orders ---
   const dateRange = periodsToDateRange(selectedPeriods);
-  const { data: ordersData, isLoading: loading, isFetching, refetch: refetchOrders } = useDeliveryOrdersList({
+  const { data: ordersData, isLoading: loading, isFetching, isError, refetch: refetchOrders } = useDeliveryOrdersList({
     page: currentPage,
     limit: itemsPerPage,
     search: searchTerm || undefined,
@@ -1677,6 +1678,12 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             )}
             {loading ? (
               <UnifiedTabLoader label="Loading delivery orders..." />
+            ) : isError && orders.length === 0 ? (
+              <QueryErrorState
+                title="Unable to load delivery orders"
+                onRetry={() => { void refetchOrders(); }}
+                isRetrying={isFetching}
+              />
             ) : orders.length === 0 ? (
               <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
                 <p className="text-sm sm:text-base">No delivery orders found</p>

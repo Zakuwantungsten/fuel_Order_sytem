@@ -32,6 +32,7 @@ import { FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useAuth } from '../contexts/AuthContext';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
+import QueryErrorState from '../components/QueryErrorState';
 
 // Colors for charts — aligned with design system palette
 const CHART_COLORS = ['#2563EB', '#16A34A', '#F97316', '#8B5CF6', '#0891B2', '#EC4899'];
@@ -129,7 +130,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     queryClient.invalidateQueries({ queryKey: ['dashboard-chart-data'] });
   };
 
-  const { data: stats = null, isLoading: loading, error: statsError } = useQuery({
+  const { data: stats = null, isLoading: loading, isFetching: statsFetching, isError: statsIsError, error: statsError, refetch: refetchStats } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => dashboardAPI.getStats(),
     staleTime: 2 * 60 * 1000,
@@ -506,11 +507,17 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     return <UnifiedTabLoader label="Loading dashboard..." />;
   }
 
-  if (!stats) {
+  if (statsIsError || !stats) {
     return (
-      <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
-        <p className="text-red-800 dark:text-red-300">{error || 'No data available'}</p>
-      </div>
+      <QueryErrorState
+        title="Unable to load dashboard"
+        message={error || 'The server may be unreachable or temporarily unavailable. Check your connection and try again.'}
+        onRetry={() => {
+          void refetchStats();
+          handleRefresh();
+        }}
+        isRetrying={statsFetching}
+      />
     );
   }
 

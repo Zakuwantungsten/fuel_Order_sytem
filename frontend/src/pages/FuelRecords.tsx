@@ -12,6 +12,7 @@ import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
 import JourneyStatusBadge from '../components/JourneyStatusBadge';
 import Pagination from '../components/Pagination';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
+import QueryErrorState from '../components/QueryErrorState';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -208,7 +209,7 @@ const FuelRecords = () => {
   const routeFrom = routeFilter ? (routeTypeFilter === 'EXPORT' ? routeFilter.split('-')[0] : undefined) : undefined;
   const routeTo = routeFilter ? (routeTypeFilter === 'IMPORT' ? routeFilter.split('-')[1] : undefined) : undefined;
 
-  const { data: recordsData, isLoading: loading, isFetching, refetch: refetchRecords } = useFuelRecordsList({
+  const { data: recordsData, isLoading: loading, isFetching, isError, refetch: refetchRecords } = useFuelRecordsList({
     page: currentPage,
     limit: itemsPerPage,
     search: searchTerm || undefined,
@@ -1327,6 +1328,12 @@ const FuelRecords = () => {
         )}
         {loading ? (
           <UnifiedTabLoader label="Loading fuel records..." />
+        ) : isError && totalItems === 0 ? (
+          <QueryErrorState
+            title="Unable to load fuel records"
+            onRetry={() => { void refetchRecords(); }}
+            isRetrying={isFetching}
+          />
         ) : totalItems === 0 ? (
           <div className="text-center py-8 sm:py-12 text-gray-500 dark:text-gray-400">
             <p className="text-sm sm:text-base">

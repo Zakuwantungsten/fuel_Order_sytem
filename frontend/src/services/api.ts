@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { measureSettingsAction } from './settingsTelemetry';
+import { API_TIMEOUT_MS, signalNetworkError } from './networkSignals';
 import { 
   DeliveryOrder, 
   LPOEntry, 
@@ -38,6 +39,7 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
   withCredentials: true, // Enable cookies for CSRF
+  timeout: API_TIMEOUT_MS, // Hung servers fail fast instead of spinning forever
 });
 
 // CSRF token storage key in sessionStorage
@@ -167,11 +169,11 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // No response at all = transport failure (network gone, hotspot dropped, DNS failed).
+    // No response at all = transport failure (network gone, timeout, DNS failed).
     // Signal the network-status hook immediately so the offline banner appears without
     // waiting for the next poll cycle — the same technique used by Offline.js.
     if (!error.response) {
-      window.dispatchEvent(new Event('app:network-error'));
+      signalNetworkError();
     }
 
     // Handle CSRF token errors
