@@ -29,6 +29,7 @@ import { startChangeStreams, stopChangeStreams } from './services/changeStreamLi
 import { EditLock } from './models';
 import { connectRedis, disconnectRedis } from './config/redis';
 import { initNotificationQueue, closeNotificationQueue } from './services/notificationQueue';
+import { initBackgroundJobQueue, closeBackgroundJobQueue } from './services/backgroundJobQueue';
 import BlocklistService from './services/blocklistService';
 import { requestId } from './middleware/requestId';
 import { runFirewallSeed } from './scripts/seedFirewallDefaults';
@@ -382,14 +383,15 @@ const startServer = async () => {
 
     // BullMQ workers are safe on every instance (jobs are claimed once via Redis).
     initNotificationQueue();
+    initBackgroundJobQueue();
 
     // Singleton background work: only the primary PM2 worker (NODE_APP_INSTANCE=0).
-    // Secondary workers still serve HTTP + Socket.io.
+    // Secondary workers still serve HTTP + Socket.io + BullMQ job consumers.
     if (isPrimaryWorker()) {
       // Start MongoDB Change Streams for real-time push (requires replica set)
       startChangeStreams();
 
-      // Start archival scheduler (runs monthly at 2 AM on 1st day)
+      // Archival cron is registered with jobRegistry only (startArchivalScheduler is a no-op)
       startArchivalScheduler();
 
       // Start backup scheduler (polls every minute for due user-defined schedules)
@@ -447,6 +449,7 @@ const startServer = async () => {
 
       databaseMonitor.stop();
       await stopChangeStreams();
+      await closeBackgroundJobQueue();
       await closeNotificationQueue();
       await disconnectRedis();
       process.exit(0);

@@ -258,7 +258,7 @@ const STATION_RATES: Record<string, { rate: number; currency: 'USD' | 'TZS' }> =
  *   1. `resolution` memoizes findFuelRecordWithDirection() results per (doNo, truckNo) lookup.
  *   2. `byId` keeps a single in-memory copy of each fuel record so sequential read-modify-write
  *      of balance/checkpoint fields across multiple entries stays correct, and writes are
- *      collected into `pendingSet` for one bulkWrite() at the end instead of one write per entry.
+ *      collected into `pendingInc` for one atomic bulkWrite() at the end instead of one write per entry.
  *
  * `emitDataChange` + `checkAndPromoteStartedJourney` are deferred to flushFuelUpdateBatch()
  * so they run once per affected record after the single bulk write lands.
@@ -266,29 +266,45 @@ const STATION_RATES: Record<string, { rate: number; currency: 'USD' | 'TZS' }> =
 interface FuelUpdateBatch {
   byId: Map<string, any>;
   resolution: Map<string, { fuelRecord: any; direction: 'going' | 'returning' } | null>;
-  pendingSet: Map<string, any>;
+  /** Accumulated field deltas per fuel-record id (applied atomically via pipeline $add/$max). */
+  pendingInc: Map<string, Record<string, number>>;
 }
 
 function createFuelUpdateBatch(): FuelUpdateBatch {
-  return { byId: new Map(), resolution: new Map(), pendingSet: new Map() };
+  return { byId: new Map(), resolution: new Map(), pendingInc: new Map() };
 }
 
 /**
- * Apply all batched fuel-record updates in a single bulkWrite, then emit live updates and
- * run journey promotion once per affected record (sequentially, preserving touch order).
+ * Apply all batched fuel-record updates with atomic pipeline increments,
+ * then emit live updates and run journey promotion once per affected record.
  */
 async function flushFuelUpdateBatch(batch: FuelUpdateBatch, username: string): Promise<void> {
-  if (batch.pendingSet.size === 0) return;
+  if (batch.pendingInc.size === 0) return;
 
-  const ops = Array.from(batch.pendingSet.entries()).map(([id, set]) => ({
-    updateOne: { filter: { _id: id }, update: { $set: set } },
-  }));
+  const ops = Array.from(batch.pendingInc.entries()).map(([id, incs]) => {
+    const setExpr: Record<string, any> = {};
+    for (const [field, delta] of Object.entries(incs)) {
+      if (field === 'balance') {
+        setExpr.balance = { $add: [{ $ifNull: ['$balance', 0] }, delta] };
+      } else {
+        setExpr[field] = {
+          $max: [0, { $add: [{ $ifNull: [`$${field}`, 0] }, delta] }],
+        };
+      }
+    }
+    return {
+      updateOne: {
+        filter: { _id: id },
+        update: [{ $set: setExpr }],
+      },
+    };
+  });
 
-  await FuelRecord.bulkWrite(ops);
-  logger.info(`Batched ${ops.length} fuel-record update(s) into a single bulkWrite`);
+  await FuelRecord.bulkWrite(ops as any);
+  logger.info(`Batched ${ops.length} fuel-record update(s) into a single atomic bulkWrite`);
 
   for (const [id, record] of batch.byId) {
-    if (!batch.pendingSet.has(id)) continue;
+    if (!batch.pendingInc.has(id)) continue;
     emitDataChange('fuel_records', 'update', record.toObject ? record.toObject() : record);
     await checkAndPromoteStartedJourney(record, username);
   }
@@ -533,28 +549,36 @@ async function updateFuelRecordForLPOEntry(
     // Update balance: positive litersChange reduces balance, negative litersChange increases balance
     const newBalance = fuelRecord.balance - litersChange; // For cancellation, litersChange is negative, so this adds
 
-    const updateData: any = {};
-    updateData[fieldToUpdate] = Math.max(0, newValue); // Ensure non-negative
-    updateData.balance = newBalance;
-
     const action = litersChange > 0 ? 'added' : 'removed';
-    logger.debug(`Updating field ${fieldToUpdate}: ${currentValue}L -> ${updateData[fieldToUpdate]}L (${action}: ${Math.abs(litersChange)}L, balance: ${oldBalance}L -> ${newBalance}L)`);
+    logger.debug(`Updating field ${fieldToUpdate}: ${currentValue}L -> ${Math.max(0, newValue)}L (${action}: ${Math.abs(litersChange)}L, balance: ${oldBalance}L -> ${newBalance}L)`);
 
     // Batched path: mutate the shared in-memory record so subsequent entries see this change,
-    // accumulate the write, and defer emit/promotion to flushFuelUpdateBatch().
+    // accumulate atomic $inc deltas, and defer emit/promotion to flushFuelUpdateBatch().
     if (batch) {
-      (fuelRecord as any)[fieldToUpdate] = updateData[fieldToUpdate];
+      (fuelRecord as any)[fieldToUpdate] = Math.max(0, newValue);
       fuelRecord.balance = newBalance;
       const idStr = fuelRecord._id.toString();
-      const existing = batch.pendingSet.get(idStr) || {};
-      batch.pendingSet.set(idStr, { ...existing, ...updateData });
+      const existing = batch.pendingInc.get(idStr) || {};
+      existing[fieldToUpdate] = (existing[fieldToUpdate] || 0) + litersChange;
+      existing.balance = (existing.balance || 0) - litersChange;
+      batch.pendingInc.set(idStr, existing);
       logger.debug(`✓ Queued fuel record ${idStr} field ${fieldToUpdate}: ${litersChange > 0 ? 'deducted' : 'restored'} ${Math.abs(litersChange)}L`);
       return;
     }
 
+    // Atomic pipeline update — safe under concurrent LPO writes on the same record
     const updatedRecord = await FuelRecord.findByIdAndUpdate(
       fuelRecord._id,
-      { $set: updateData },
+      [
+        {
+          $set: {
+            [fieldToUpdate]: {
+              $max: [0, { $add: [{ $ifNull: [`$${fieldToUpdate}`, 0] }, litersChange] }],
+            },
+            balance: { $add: [{ $ifNull: ['$balance', 0] }, -litersChange] },
+          },
+        },
+      ],
       { new: true, session: opts?.session ?? null }
     );
 
@@ -1051,6 +1075,11 @@ const syncDriverAccountEntriesOnUpdate = async (lpoSummary: any): Promise<void> 
  */
 export const createLPOSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+    const { enforceResourceLock } = await import('./resourceLockController');
+    await enforceResourceLock('lpo_create', username);
+
     const data = req.body;
     
     logger.debug(`Creating LPO: station=${data.station}, isCustomStation=${data.isCustomStation}, customStationName=${data.customStationName}, entries=${data.entries?.length || 0}`);

@@ -1242,6 +1242,11 @@ const applyExportFuelUpdates = async (
  */
 export const createDeliveryOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+    const { enforceResourceLock } = await import('./resourceLockController');
+    await enforceResourceLock('do_create', username);
+
     const payload = matchedData(req, { locations: ['body'] }) as any;
 
     // If sn is not provided, derive it from doNumber
@@ -1277,7 +1282,6 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     // ── Server-side fuel-record side-effects (previously done in the browser) ──
     // IMPORT → create a going-journey fuel record. EXPORT → fill the return leg of
     // the matched going record. SDO → nothing. Each gated by its automation toggle.
-    const username = req.user?.username || 'system';
     const userId = req.user?.userId || 'system';
     const userRole = req.user?.role;
     const order = deliveryOrder.toObject() as any;
@@ -1393,6 +1397,10 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
   const username = req.user?.username || 'system';
   const userId = req.user?.userId || 'system';
   const userRole = req.user?.role;
+
+  if (!req.user?.username) throw new ApiError(401, 'Authentication required');
+  const { enforceResourceLock } = await import('./resourceLockController');
+  await enforceResourceLock('do_create', req.user.username);
 
   const incoming = Array.isArray(req.body?.orders) ? req.body.orders : null;
   if (!incoming || incoming.length === 0) {

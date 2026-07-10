@@ -96,11 +96,17 @@ export const syncBackupsFromR2 = async (req: AuthRequest, res: Response) => {
 export const runDrill = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.username || 'system';
-    const report = await backupService.runDisasterRecoveryDrill(userId);
-    res.status(report.passed ? 200 : 500).json({
-      success: report.passed,
-      message: report.details,
-      data: report,
+    const { enqueueBackgroundJob } = await import('../services/backgroundJobQueue');
+    const result = await enqueueBackgroundJob({
+      name: 'backup-dr-drill',
+      triggeredBy: userId,
+    });
+    res.status(202).json({
+      success: true,
+      message: result.queued
+        ? 'DR drill queued. Check logs for results.'
+        : 'DR drill started inline. Check logs for results.',
+      data: { queued: result.queued, jobId: result.jobId },
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message || 'DR drill failed' });
@@ -110,23 +116,32 @@ export const runDrill = async (req: AuthRequest, res: Response) => {
 /**
  * Create a manual backup
  * POST /api/system-admin/backups
+ * Enqueues to BullMQ — HTTP returns immediately; any worker runs the job.
  */
 export const createBackup = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.username || 'system';
-    const { collections } = req.body; // optional string[] for selective backup
+    const { collections } = req.body;
 
-    const backup = await backupService.createBackup(userId, 'manual', collections);
+    const { enqueueBackgroundJob } = await import('../services/backgroundJobQueue');
+    const result = await enqueueBackgroundJob({
+      name: 'backup-create',
+      triggeredBy: userId,
+      type: 'manual',
+      collections,
+    });
 
-    res.status(201).json({
+    res.status(202).json({
       success: true,
-      message: 'Backup created successfully',
-      data: backup,
+      message: result.queued
+        ? 'Backup job queued. It will run in the background.'
+        : 'Backup started (ran inline — Redis queue unavailable).',
+      data: { queued: result.queued, jobId: result.jobId, ranInline: result.ranInline },
     });
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: 'Failed to create backup',
+      message: error.message || 'Failed to create backup',
     });
   }
 };
@@ -280,6 +295,7 @@ export const downloadBackup = async (req: AuthRequest, res: Response): Promise<v
 /**
  * Restore backup
  * POST /api/system-admin/backups/:id/restore
+ * Enqueues to BullMQ — single-flight across the cluster.
  */
 export const restoreBackup = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -293,21 +309,27 @@ export const restoreBackup = async (req: AuthRequest, res: Response): Promise<vo
         success: false,
         message: 'Backup not found',
       });
-    } else {
-      // Start restore in background (in production, use a job queue)
-      backupService.restoreBackup(id, userId).catch(error => {
-        console.error('Restore failed:', error);
-      });
-
-      res.json({
-        success: true,
-        message: 'Backup restore started. This may take several minutes.',
-      });
+      return;
     }
+
+    const { enqueueBackgroundJob } = await import('../services/backgroundJobQueue');
+    const result = await enqueueBackgroundJob({
+      name: 'backup-restore',
+      triggeredBy: userId,
+      backupId: id,
+    });
+
+    res.json({
+      success: true,
+      message: result.queued
+        ? 'Backup restore queued. This may take several minutes.'
+        : 'Backup restore started (inline). This may take several minutes.',
+      data: { queued: result.queued, jobId: result.jobId },
+    });
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: 'Failed to restore backup',
+      message: error.message || 'Failed to restore backup',
     });
   }
 };

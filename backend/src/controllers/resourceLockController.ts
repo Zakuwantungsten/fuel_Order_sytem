@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { acquireLock, releaseLock, getDisplayName } from '../services/lockService';
+import { acquireLock, releaseLock, getDisplayName, enforceLock } from '../services/lockService';
 import logger from '../utils/logger';
 
 /**
@@ -41,6 +41,15 @@ export const acquireResourceLock = async (req: AuthRequest, res: Response): Prom
     data: { lockedUntil: lock.lockedUntil },
   });
 };
+
+/**
+ * Server-side enforcement: create handlers must call this so the UI lock
+ * cannot be bypassed by a direct API call.
+ */
+export async function enforceResourceLock(key: string, username: string): Promise<void> {
+  if (!ALLOWED_RESOURCE_KEYS.has(key)) throw new ApiError(400, 'Unknown resource lock');
+  await enforceLock(RESOURCE_LOCK_COLLECTION, key, username);
+}
 
 export const releaseResourceLock = async (req: AuthRequest, res: Response): Promise<void> => {
   const { key } = req.params;

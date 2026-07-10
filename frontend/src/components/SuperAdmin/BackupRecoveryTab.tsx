@@ -149,8 +149,8 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     try {
       setCreating(true);
       await backupAPI.createBackup();
-      onMessage('success', 'Backup created successfully');
-      loadData();
+      onMessage('success', 'Backup queued — it will run in the background');
+      setTimeout(() => loadData(), 3000);
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to create backup');
     } finally {

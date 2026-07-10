@@ -28,8 +28,8 @@ const SecurityScoreSnapshotSchema = new Schema<ISecurityScoreSnapshot>(
   { timestamps: true }
 );
 
-// TTL: auto-delete snapshots older than 365 days
-SecurityScoreSnapshotSchema.index({ date: 1 }, { expireAfterSeconds: 365 * 24 * 60 * 60 });
+// Unique per calendar day + TTL: auto-delete snapshots older than 365 days
+SecurityScoreSnapshotSchema.index({ date: 1 }, { unique: true, expireAfterSeconds: 365 * 24 * 60 * 60 });
 
 export const SecurityScoreSnapshot = mongoose.model<ISecurityScoreSnapshot>(
   'SecurityScoreSnapshot',

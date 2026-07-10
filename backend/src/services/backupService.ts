@@ -176,6 +176,7 @@ class BackupService {
     type: 'manual' | 'scheduled' = 'manual',
     selectedCollections?: string[],
     retentionTier?: 'daily' | 'weekly' | 'monthly',
+    opts?: { skipRetention?: boolean },
   ): Promise<any> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `backup_${timestamp}.json.gz`;
@@ -316,8 +317,10 @@ class BackupService {
       // DR: refresh the R2-side catalog so the backup list survives MongoDB loss
       await this.writeManifestSafe();
 
-      // Enforce global keep-N in the background (don't block the create response)
-      this.scheduleConfiguredRetention();
+      // Enforce global keep-N via background queue (unless caller handles it)
+      if (!opts?.skipRetention) {
+        this.scheduleConfiguredRetention();
+      }
 
       logger.info(`Backup created successfully: ${fileName}`);
       return backup;
@@ -716,16 +719,18 @@ class BackupService {
   }
 
   /**
-   * Fire-and-forget retention prune for HTTP handlers — avoids request timeouts
-   * when hundreds of R2/B2 deletes are needed.
+   * Fire-and-forget retention prune via BullMQ (falls back to in-process).
    */
   scheduleConfiguredRetention(): void {
-    void this.applyConfiguredRetention()
-      .then((n) => {
-        if (n > 0) logger.info(`[BACKUP RETENTION] Background prune finished: ${n} deleted`);
-      })
+    void import('./backgroundJobQueue')
+      .then(({ enqueueBackgroundJob }) =>
+        enqueueBackgroundJob({
+          name: 'backup-retention',
+          triggeredBy: 'system-retention',
+        }),
+      )
       .catch((err: any) => {
-        logger.warn(`[BACKUP RETENTION] Background prune failed: ${String(err?.message ?? err)}`);
+        logger.warn(`[BACKUP RETENTION] Failed to schedule prune: ${String(err?.message ?? err)}`);
       });
   }
 

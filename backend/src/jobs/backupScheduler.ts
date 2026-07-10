@@ -61,35 +61,55 @@ async function runDueBackups() {
   try {
     const now = new Date();
 
+    // Claim due schedules atomically so two runners can't advance the same row
     const dueSchedules = await BackupSchedule.find({
       enabled: true,
       nextRun: { $lte: now },
     });
 
     for (const schedule of dueSchedules) {
-      logger.info(`[BACKUP SCHEDULER] Running scheduled backup: "${schedule.name}" (${schedule.frequency})`);
-
-      try {
-        // LE-1: pass the schedule's frequency as the retentionTier so we can
-        // apply tiered cleanup later. Hourly backups aren't a retention tier —
-        // they're pruned by the simple retentionDays policy instead.
-        const tier = (['daily', 'weekly', 'monthly'] as const).find(t => t === schedule.frequency);
-        await backupService.createBackup('system-scheduler', 'scheduled', undefined, tier);
-        logger.info(`[BACKUP SCHEDULER] Backup completed for schedule: "${schedule.name}"`);
-      } catch (err: any) {
-        logger.error(`[BACKUP SCHEDULER] Backup failed for schedule "${schedule.name}": ${String(err?.message ?? err)}`);
-      }
-
-      // Always advance the schedule even if the backup errored, to prevent a
-      // failing backup from blocking all future runs in a busy-retry loop.
-      schedule.lastRun = now;
-      schedule.nextRun = computeNextRun({
+      const nextRun = computeNextRun({
         frequency: schedule.frequency,
         time: schedule.time,
         dayOfWeek: schedule.dayOfWeek,
         dayOfMonth: schedule.dayOfMonth,
       });
-      await schedule.save();
+
+      const claimed = await BackupSchedule.findOneAndUpdate(
+        {
+          _id: schedule._id,
+          enabled: true,
+          nextRun: { $lte: now },
+        },
+        {
+          $set: {
+            lastRun: now,
+            nextRun,
+          },
+        },
+        { new: true },
+      );
+
+      if (!claimed) {
+        logger.info(`[BACKUP SCHEDULER] Schedule "${schedule.name}" already claimed — skipping`);
+        continue;
+      }
+
+      logger.info(`[BACKUP SCHEDULER] Queueing scheduled backup: "${claimed.name}" (${claimed.frequency})`);
+
+      try {
+        const tier = (['daily', 'weekly', 'monthly'] as const).find(t => t === claimed.frequency);
+        const { enqueueBackgroundJob } = await import('../services/backgroundJobQueue');
+        await enqueueBackgroundJob({
+          name: 'backup-create',
+          triggeredBy: 'system-scheduler',
+          type: 'scheduled',
+          retentionTier: tier,
+        });
+        logger.info(`[BACKUP SCHEDULER] Backup job enqueued for schedule: "${claimed.name}"`);
+      } catch (err: any) {
+        logger.error(`[BACKUP SCHEDULER] Backup enqueue failed for "${claimed.name}": ${String(err?.message ?? err)}`);
+      }
     }
 
     // LE-1: Apply tiered retention cleanup for schedules with retentionPolicy
@@ -114,15 +134,11 @@ async function runDueBackups() {
       }
     }
 
-    // Global keep-N from system settings (hard cap across all completed backups).
-    // Deletes excess from primary R2 and secondary Backblaze B2.
+    // Global keep-N via queue (single-flight across workers)
     try {
-      const pruned = await backupService.applyConfiguredRetention();
-      if (pruned > 0) {
-        logger.info(`[BACKUP SCHEDULER] Global retention pruned ${pruned} excess backup(s)`);
-      }
+      await backupService.scheduleConfiguredRetention();
     } catch (err: any) {
-      logger.warn(`[BACKUP SCHEDULER] Global retention cleanup failed: ${String(err?.message ?? err)}`);
+      logger.warn(`[BACKUP SCHEDULER] Global retention schedule failed: ${String(err?.message ?? err)}`);
     }
   } catch (err: any) {
     logger.error(`[BACKUP SCHEDULER] Error in runDueBackups: ${String(err?.message ?? err)}`);

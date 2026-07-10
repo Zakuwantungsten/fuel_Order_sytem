@@ -1,6 +1,9 @@
 /**
  * Fuel Price Scheduler — registered with jobRegistry so the cron manager
  * can list, enable/disable, and manually trigger it.
+ *
+ * Each due schedule is claimed atomically (isApplied: false → true) so two
+ * runners cannot apply the same price change twice.
  */
 
 import { FuelPriceSchedule, FuelPriceHistory } from '../models/FuelPrice';
@@ -25,31 +28,51 @@ export async function applyDueFuelPriceSchedules(): Promise<void> {
   const applied: string[] = [];
 
   for (const schedule of dueSchedules) {
-    const station = await FuelStationConfig.findById(schedule.stationId);
+    // Atomic claim — only one worker wins
+    const claimed = await FuelPriceSchedule.findOneAndUpdate(
+      { _id: schedule._id, isApplied: false, isCancelled: false },
+      { $set: { isApplied: true, appliedAt: now } },
+      { new: true },
+    );
+    if (!claimed) {
+      logger.info(`[FuelPriceScheduler] Schedule ${schedule._id} already claimed — skipping`);
+      continue;
+    }
+
+    const station = await FuelStationConfig.findById(claimed.stationId);
     if (!station) {
-      logger.warn(`[FuelPriceScheduler] Station ${schedule.stationId} not found; skipping`);
+      logger.warn(`[FuelPriceScheduler] Station ${claimed.stationId} not found; rolling back claim`);
+      await FuelPriceSchedule.findByIdAndUpdate(claimed._id, {
+        $set: { isApplied: false },
+        $unset: { appliedAt: 1 },
+      });
       continue;
     }
 
     const oldPrice = station.defaultRate;
 
-    await FuelPriceHistory.create({
-      stationId: schedule.stationId,
-      stationName: schedule.stationName,
-      oldPrice,
-      newPrice: schedule.newPrice,
-      changedBy: `scheduled-by:${schedule.createdBy}`,
-      changedAt: now,
-      reason: schedule.reason ? `Scheduled: ${schedule.reason}` : 'Scheduled price change',
-    });
+    try {
+      await FuelPriceHistory.create({
+        stationId: claimed.stationId,
+        stationName: claimed.stationName,
+        oldPrice,
+        newPrice: claimed.newPrice,
+        changedBy: `scheduled-by:${claimed.createdBy}`,
+        changedAt: now,
+        reason: claimed.reason ? `Scheduled: ${claimed.reason}` : 'Scheduled price change',
+      });
 
-    station.defaultRate = schedule.newPrice;
-    station.updatedBy = 'scheduler';
-    await station.save();
-    schedule.isApplied = true;
-    schedule.appliedAt = now;
-    await schedule.save();
-    applied.push(schedule.stationId);
+      station.defaultRate = claimed.newPrice;
+      station.updatedBy = 'scheduler';
+      await station.save();
+      applied.push(claimed.stationId);
+    } catch (err: any) {
+      logger.error(`[FuelPriceScheduler] Failed applying ${claimed._id}: ${err?.message}`);
+      await FuelPriceSchedule.findByIdAndUpdate(claimed._id, {
+        $set: { isApplied: false },
+        $unset: { appliedAt: 1 },
+      });
+    }
   }
 
   if (applied.length > 0) {

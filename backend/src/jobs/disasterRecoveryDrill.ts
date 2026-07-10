@@ -1,30 +1,30 @@
 /**
  * Disaster Recovery Drill  (Chaos Engineering)
  *
- * Weekly automated proof that backups are actually restorable. Restores the
- * latest backup into an ISOLATED scratch database on the same cluster, verifies
- * the document counts match, then drops the scratch database. Never touches
- * live data. Fires a critical Slack + email alert if the restore fails.
- *
- * This is the "Chaos Monkey for backups" — it surfaces a broken backup pipeline
- * BEFORE a real disaster, instead of discovering it during one.
+ * Weekly automated proof that backups are actually restorable. Enqueues to
+ * BullMQ so any free worker runs it under the backup-mutex (never overlaps
+ * create/restore).
  */
 
-import backupService from '../services/backupService';
 import logger from '../utils/logger';
 import { jobRegistry } from './jobRegistry';
 
 async function runDrillHandler(): Promise<void> {
-  logger.info('[DR DRILL] Starting scheduled disaster-recovery drill…');
-  const report = await backupService.runDisasterRecoveryDrill('system-chaos-drill');
-  if (!report.passed) {
-    // Throwing marks the job as failed in the Cron dashboard run-history.
-    throw new Error(report.details || 'DR drill failed');
+  logger.info('[DR DRILL] Enqueueing scheduled disaster-recovery drill…');
+  const { enqueueBackgroundJob } = await import('../services/backgroundJobQueue');
+  const result = await enqueueBackgroundJob({
+    name: 'backup-dr-drill',
+    triggeredBy: 'system-chaos-drill',
+  });
+  // When queued, success means "accepted"; the worker throws if the drill fails.
+  // When inline, runJob already threw on failure.
+  if (result.queued) {
+    logger.info(`[DR DRILL] Queued (jobId=${result.jobId})`);
+  } else {
+    logger.info('[DR DRILL] Completed inline');
   }
-  logger.info(`[DR DRILL] ${report.details}`);
 }
 
-// Register with the central job registry — runs weekly on Sundays at 04:00 UTC
 jobRegistry.register({
   id: 'dr-drill',
   name: 'Disaster Recovery Drill',

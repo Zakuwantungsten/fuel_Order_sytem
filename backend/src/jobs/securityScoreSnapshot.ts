@@ -34,14 +34,22 @@ export async function takeScoreSnapshot(): Promise<void> {
     partial: score.checks.filter(c => c.status === 'partial').length,
   };
 
-  await SecurityScoreSnapshot.create({
-    date: today,
-    overallScore: score.overallScore,
-    categoryScores: score.categoryScores,
-    checksSummary: summary,
-  });
-
-  logger.info(`[SecurityScoreSnapshot] Saved daily snapshot: score=${score.overallScore}`);
+  try {
+    await SecurityScoreSnapshot.create({
+      date: today,
+      overallScore: score.overallScore,
+      categoryScores: score.categoryScores,
+      checksSummary: summary,
+    });
+    logger.info(`[SecurityScoreSnapshot] Saved daily snapshot: score=${score.overallScore}`);
+  } catch (err: any) {
+    // Unique index race: another worker inserted first
+    if (err?.code === 11000 || err?.code === 11001) {
+      logger.info('[SecurityScoreSnapshot] Snapshot already inserted by another worker, skipping');
+      return;
+    }
+    throw err;
+  }
 }
 
 // Register with job registry

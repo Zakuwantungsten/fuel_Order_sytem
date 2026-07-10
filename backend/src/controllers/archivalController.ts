@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import archivalService, { ArchivalOptions } from '../services/archivalService';
+import archivalService from '../services/archivalService';
 import unifiedExportService from '../services/unifiedExportService';
 import { ApiError } from '../middleware/errorHandler';
 import { logger } from '../utils';
@@ -33,24 +33,28 @@ export const runArchival = async (req: AuthRequest, res: Response): Promise<void
 
     logger.info(`Archival process initiated by ${user.username}`);
 
-    const options: ArchivalOptions = {
+    const { enqueueBackgroundJob } = await import('../services/backgroundJobQueue');
+    const result = await enqueueBackgroundJob({
+      name: 'archival-run',
+      triggeredBy: user.username,
+      dryRun,
       monthsToKeep,
       auditLogMonthsToKeep,
-      dryRun,
-      collections,
-      batchSize: 1000,
-    };
+    });
 
-    const result = await archivalService.archiveOldData(options, user.username);
-
-    res.status(200).json({
+    res.status(202).json({
       success: true,
-      message: dryRun
-        ? 'Dry run completed. No data was actually archived.'
-        : 'Archival process completed successfully',
-      data: result,
+      message: result.queued
+        ? dryRun
+          ? 'Archival dry-run queued.'
+          : 'Archival job queued. It will run in the background.'
+        : dryRun
+          ? 'Archival dry-run completed inline.'
+          : 'Archival completed inline (Redis queue unavailable).',
+      data: { queued: result.queued, jobId: result.jobId, ranInline: result.ranInline },
     });
   } catch (error: any) {
+    logger.error('Archival process error:', error);
     throw error;
   }
 };
