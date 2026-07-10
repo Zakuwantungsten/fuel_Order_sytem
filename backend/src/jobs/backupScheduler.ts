@@ -113,6 +113,17 @@ async function runDueBackups() {
         logger.warn(`[BACKUP SCHEDULER] Retention cleanup failed for "${schedule.name}": ${String(err?.message ?? err)}`);
       }
     }
+
+    // Global keep-N from system settings (hard cap across all completed backups).
+    // Deletes excess from primary R2 and secondary Backblaze B2.
+    try {
+      const pruned = await backupService.applyConfiguredRetention();
+      if (pruned > 0) {
+        logger.info(`[BACKUP SCHEDULER] Global retention pruned ${pruned} excess backup(s)`);
+      }
+    } catch (err: any) {
+      logger.warn(`[BACKUP SCHEDULER] Global retention cleanup failed: ${String(err?.message ?? err)}`);
+    }
   } catch (err: any) {
     logger.error(`[BACKUP SCHEDULER] Error in runDueBackups: ${String(err?.message ?? err)}`);
   }

@@ -620,6 +620,16 @@ export const updateRetentionSettings = async (req: AuthRequest, res: Response): 
     systemConfig.lastUpdatedBy = req.user.username;
     await systemConfig.save();
 
+    let prunedBackups = 0;
+    if (backupRetention !== undefined) {
+      try {
+        const backupService = (await import('../services/backupService')).default;
+        prunedBackups = await backupService.applyConfiguredRetention();
+      } catch (err: any) {
+        logger.warn(`Backup retention prune after trash retention save failed: ${String(err?.message ?? err)}`);
+      }
+    }
+
     // Log config change
     await AuditService.logConfigChange(
       req.user.userId,
@@ -630,7 +640,7 @@ export const updateRetentionSettings = async (req: AuthRequest, res: Response): 
       req.ip
     );
 
-    logger.info(`Retention policy updated by ${req.user.username}`);
+    logger.info(`Retention policy updated by ${req.user.username}${prunedBackups ? ` (pruned ${prunedBackups} backups)` : ''}`);
 
     res.status(200).json({
       success: true,
@@ -640,6 +650,7 @@ export const updateRetentionSettings = async (req: AuthRequest, res: Response): 
         autoCleanupEnabled: systemConfig.systemSettings?.data?.autoCleanupEnabled,
         backupRetention: systemConfig.systemSettings?.data?.backupRetention,
         archivalMonths: systemConfig.systemSettings?.data?.archivalMonths,
+        prunedBackups,
       },
     });
   } catch (error: any) {

@@ -463,6 +463,18 @@ export const updateDataRetentionSettings = async (req: AuthRequest, res: Respons
     systemConfig.lastUpdatedBy = req.user?.username || 'system';
     await systemConfig.save();
 
+    // Immediately enforce keep-N so saving "30 copies" prunes excess now
+    // (primary R2 + secondary B2), not only on the next scheduled backup.
+    let prunedBackups = 0;
+    if (backupRetention !== undefined) {
+      try {
+        const backupService = (await import('../services/backupService')).default;
+        prunedBackups = await backupService.applyConfiguredRetention();
+      } catch (err: any) {
+        logger.warn(`Backup retention prune after settings save failed: ${String(err?.message ?? err)}`);
+      }
+    }
+
     // Audit log
     await AuditService.logConfigChange(
       req.user?.userId || 'system',
@@ -473,9 +485,12 @@ export const updateDataRetentionSettings = async (req: AuthRequest, res: Respons
       req.ip
     );
 
-    logger.info(`Data retention settings updated by ${req.user?.username}`);
+    logger.info(`Data retention settings updated by ${req.user?.username}${prunedBackups ? ` (pruned ${prunedBackups} backups)` : ''}`);
 
-    sendSuccess(res, 200, 'Data retention settings updated successfully', systemConfig.systemSettings?.data);
+    sendSuccess(res, 200, 'Data retention settings updated successfully', {
+      ...systemConfig.systemSettings?.data,
+      prunedBackups,
+    });
   } catch (error: any) {
     logger.error('Error updating data retention settings:', error);
     throw error;

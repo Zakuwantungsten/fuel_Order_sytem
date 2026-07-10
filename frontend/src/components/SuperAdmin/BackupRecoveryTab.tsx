@@ -126,8 +126,15 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
   const saveBackupSettings = async () => {
     try {
       setSettingsSaving(true);
-      await systemConfigAPI.updateDataRetentionSettings({ backupFrequency, backupRetention });
-      onMessage('success', 'Backup settings saved');
+      const result = await systemConfigAPI.updateDataRetentionSettings({ backupFrequency, backupRetention });
+      const pruned = result?.data?.prunedBackups ?? result?.prunedBackups ?? 0;
+      onMessage(
+        'success',
+        pruned > 0
+          ? `Backup settings saved — pruned ${pruned} old backup(s) from R2 and B2`
+          : 'Backup settings saved'
+      );
+      if (pruned > 0) loadData();
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to save backup settings');
     } finally {
@@ -787,6 +794,9 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
               onChange={e => setBackupRetention(Math.max(1, Number(e.target.value)))}
               className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Keeps the newest N completed backups. Older copies are deleted from Cloudflare R2 and Backblaze B2 when you save, after each backup, and on the scheduler.
+            </p>
           </div>
         </div>
         <div className="flex justify-end mt-5">
@@ -989,7 +999,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
 
         <div className="mt-5 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
           <p className="text-sm text-blue-900 dark:text-blue-300">
-            <strong>Cloudflare R2 Storage:</strong> All backups are securely stored in Cloudflare R2 cloud storage with automatic retention management.
+            <strong>Cloudflare R2 + Backblaze B2:</strong> Backups are stored in R2 (primary) and mirrored to B2 (secondary). Retention deletes excess copies from both destinations.
           </p>
         </div>
       </div>

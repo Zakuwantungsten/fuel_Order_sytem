@@ -166,7 +166,7 @@ export interface ISystemSettings {
     trashRetention: number; // days
     autoCleanupEnabled: boolean;
     backupFrequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
-    backupRetention: number; // days
+    backupRetention: number; // completed backup copies to keep
     // Per-collection archival settings
     collectionArchivalSettings?: {
       [collectionName: string]: {

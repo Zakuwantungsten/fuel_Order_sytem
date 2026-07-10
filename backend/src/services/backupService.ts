@@ -3,6 +3,7 @@ import zlib from 'zlib';
 import { promisify } from 'util';
 import Backup from '../models/Backup';
 import { AuditLog } from '../models/AuditLog';
+import { SystemConfig } from '../models/SystemConfig';
 import r2Service from './r2Service';
 import logger from '../utils/logger';
 import { encryptBuffer, decryptBuffer } from '../utils/cryptoUtils';
@@ -314,6 +315,9 @@ class BackupService {
       // DR: refresh the R2-side catalog so the backup list survives MongoDB loss
       await this.writeManifestSafe();
 
+      // Enforce global keep-N retention (primary R2 + secondary B2)
+      await this.applyConfiguredRetention();
+
       logger.info(`Backup created successfully: ${fileName}`);
       return backup;
     } catch (error: any) {
@@ -537,7 +541,17 @@ class BackupService {
   }
 
   /**
-   * Delete old backups based on retention policy
+   * Hard-delete a completed backup from primary R2, secondary B2, and MongoDB.
+   */
+  private async hardDeleteBackup(backup: { id: string; r2Key: string; fileName: string }): Promise<void> {
+    await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
+    await r2Service.deleteFromSecondary(backup.r2Key);
+    await Backup.findByIdAndDelete(backup.id);
+  }
+
+  /**
+   * Delete old backups based on retention policy (age in days).
+   * Removes from primary R2 and secondary B2.
    */
   async cleanupOldBackups(retentionDays: number): Promise<number> {
     const cutoffDate = new Date();
@@ -552,13 +566,7 @@ class BackupService {
 
     for (const backup of oldBackups) {
       try {
-        // Delete from R2 (primary + secondary)
-        await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
-        await r2Service.deleteFromSecondary(backup.r2Key);
-
-        // Delete backup record
-        await Backup.findByIdAndDelete(backup.id);
-
+        await this.hardDeleteBackup(backup);
         deletedCount++;
         logger.info(`Deleted old backup: ${backup.fileName}`);
       } catch (error) {
@@ -571,9 +579,55 @@ class BackupService {
   }
 
   /**
+   * Keep only the N most-recent completed backups (global copy-count retention).
+   * Hard-deletes excess from primary R2, secondary B2, and MongoDB.
+   */
+  async cleanupExcessBackups(keepCount: number): Promise<number> {
+    if (!Number.isFinite(keepCount) || keepCount < 1) return 0;
+
+    const backups = await Backup.find({ status: 'completed' }).sort({ createdAt: -1 });
+    const toDelete = backups.slice(Math.floor(keepCount));
+
+    let deletedCount = 0;
+    for (const backup of toDelete) {
+      try {
+        await this.hardDeleteBackup(backup);
+        deletedCount++;
+        logger.info(`[BACKUP RETENTION] Deleted excess backup (keep ${keepCount}): ${backup.fileName}`);
+      } catch (error) {
+        logger.error(`[BACKUP RETENTION] Failed to delete ${backup.fileName}:`, error);
+      }
+    }
+
+    if (deletedCount > 0) {
+      await this.writeManifestSafe();
+      logger.info(`[BACKUP RETENTION] Pruned ${deletedCount} excess backup(s); kept ${keepCount} most recent`);
+    }
+    return deletedCount;
+  }
+
+  /**
+   * Apply the system-config "backupRetention" keep-N policy.
+   * Safe to call frequently; no-ops when at or under the limit.
+   */
+  async applyConfiguredRetention(): Promise<number> {
+    try {
+      const systemConfig = await SystemConfig.findOne({
+        configType: 'system_settings',
+        isDeleted: false,
+      }).lean();
+      const keepCount = systemConfig?.systemSettings?.data?.backupRetention ?? 30;
+      return await this.cleanupExcessBackups(keepCount);
+    } catch (err: any) {
+      logger.warn(`[BACKUP RETENTION] Global keep-N cleanup failed: ${String(err?.message ?? err)}`);
+      return 0;
+    }
+  }
+
+  /**
    * LE-1: Tiered retention cleanup.
    * Keeps the N most-recent backups of each tier (daily/weekly/monthly),
-   * hard-deleting the excess from R2 and MongoDB.
+   * hard-deleting the excess from primary R2, secondary B2, and MongoDB.
    */
   async cleanupTieredBackups(policy: { daily: number; weekly: number; monthly: number }): Promise<number> {
     let deletedCount = 0;
@@ -586,9 +640,7 @@ class BackupService {
       const toDelete = backups.slice(keepCount);
       for (const backup of toDelete) {
         try {
-          await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
-          await r2Service.deleteFromSecondary(backup.r2Key);
-          await Backup.findByIdAndDelete(backup.id);
+          await this.hardDeleteBackup(backup);
           deletedCount++;
           logger.info(`[BACKUP TIERED] Deleted ${tier} backup: ${backup.fileName}`);
         } catch (err) {
