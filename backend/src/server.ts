@@ -309,12 +309,9 @@ app.use(legacyApiBasePath, (req, res, next) => {
   next();
 }, routes);
 
-// Welcome route (no version or tech info)
+// Apex `/` → frontend; API lives under /api/v1 (and legacy /api)
 app.get('/', (_req, res) => {
-  res.json({
-    success: true,
-    message: 'API is running',
-  });
+  res.redirect(302, 'https://www.tahfuelorder.dev');
 });
 
 // ✅ SECURITY: Honeypot trap routes (catches scanners probing common CMS/admin paths)
