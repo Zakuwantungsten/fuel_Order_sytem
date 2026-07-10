@@ -463,15 +463,16 @@ export const updateDataRetentionSettings = async (req: AuthRequest, res: Respons
     systemConfig.lastUpdatedBy = req.user?.username || 'system';
     await systemConfig.save();
 
-    // Immediately enforce keep-N so saving "30 copies" prunes excess now
-    // (primary R2 + secondary B2), not only on the next scheduled backup.
-    let prunedBackups = 0;
+    // Prune in the background — awaiting hundreds of R2/B2 deletes times out the HTTP request
+    // (settings still save; UI was showing "Failed to save" while prune continued on the server).
+    let pruneStarted = false;
     if (backupRetention !== undefined) {
       try {
         const backupService = (await import('../services/backupService')).default;
-        prunedBackups = await backupService.applyConfiguredRetention();
+        backupService.scheduleConfiguredRetention();
+        pruneStarted = true;
       } catch (err: any) {
-        logger.warn(`Backup retention prune after settings save failed: ${String(err?.message ?? err)}`);
+        logger.warn(`Backup retention prune schedule after settings save failed: ${String(err?.message ?? err)}`);
       }
     }
 
@@ -485,11 +486,11 @@ export const updateDataRetentionSettings = async (req: AuthRequest, res: Respons
       req.ip
     );
 
-    logger.info(`Data retention settings updated by ${req.user?.username}${prunedBackups ? ` (pruned ${prunedBackups} backups)` : ''}`);
+    logger.info(`Data retention settings updated by ${req.user?.username}${pruneStarted ? ' (retention prune started in background)' : ''}`);
 
     sendSuccess(res, 200, 'Data retention settings updated successfully', {
       ...systemConfig.systemSettings?.data,
-      prunedBackups,
+      pruneStarted,
     });
   } catch (error: any) {
     logger.error('Error updating data retention settings:', error);

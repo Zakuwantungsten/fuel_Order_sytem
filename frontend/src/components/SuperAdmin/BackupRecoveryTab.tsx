@@ -127,14 +127,15 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
     try {
       setSettingsSaving(true);
       const result = await systemConfigAPI.updateDataRetentionSettings({ backupFrequency, backupRetention });
-      const pruned = result?.data?.prunedBackups ?? result?.prunedBackups ?? 0;
+      const pruneStarted = result?.data?.pruneStarted ?? result?.pruneStarted ?? false;
       onMessage(
         'success',
-        pruned > 0
-          ? `Backup settings saved — pruned ${pruned} old backup(s) from R2 and B2`
+        pruneStarted
+          ? 'Backup settings saved — excess copies are pruning in the background (R2 + B2)'
           : 'Backup settings saved'
       );
-      if (pruned > 0) loadData();
+      // Refresh list shortly after; full prune may still be running
+      if (pruneStarted) setTimeout(() => loadData(), 5000);
     } catch (error: any) {
       onMessage('error', error.response?.data?.message || 'Failed to save backup settings');
     } finally {
@@ -795,7 +796,7 @@ export default function BackupRecoveryTab({ onMessage }: BackupRecoveryTabProps)
               className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Keeps the newest N completed backups. Older copies are deleted from Cloudflare R2 and Backblaze B2 when you save, after each backup, and on the scheduler.
+              Keeps the newest N completed backups. Saving starts a background prune on Cloudflare R2 and Backblaze B2 (does not block the save).
             </p>
           </div>
         </div>

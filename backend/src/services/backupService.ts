@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import Backup from '../models/Backup';
 import { AuditLog } from '../models/AuditLog';
 import { SystemConfig } from '../models/SystemConfig';
+import { EditLock } from '../models/EditLock';
 import r2Service from './r2Service';
 import logger from '../utils/logger';
 import { encryptBuffer, decryptBuffer } from '../utils/cryptoUtils';
@@ -315,8 +316,8 @@ class BackupService {
       // DR: refresh the R2-side catalog so the backup list survives MongoDB loss
       await this.writeManifestSafe();
 
-      // Enforce global keep-N retention (primary R2 + secondary B2)
-      await this.applyConfiguredRetention();
+      // Enforce global keep-N in the background (don't block the create response)
+      this.scheduleConfiguredRetention();
 
       logger.info(`Backup created successfully: ${fileName}`);
       return backup;
@@ -542,11 +543,95 @@ class BackupService {
 
   /**
    * Hard-delete a completed backup from primary R2, secondary B2, and MongoDB.
+   * Atomically claims the Mongo row first so PM2 cluster workers don't race
+   * the same file (duplicate R2/B2 deletes).
+   * @returns true if this process claimed and deleted the backup
    */
-  private async hardDeleteBackup(backup: { _id: unknown; r2Key: string; fileName: string }): Promise<void> {
-    await r2Service.deleteFile(backup.r2Key, config.r2BackupBucketName);
-    await r2Service.deleteFromSecondary(backup.r2Key);
-    await Backup.findByIdAndDelete(backup._id);
+  private async hardDeleteBackup(backup: { _id: unknown; r2Key: string; fileName: string }): Promise<boolean> {
+    const claimed = await Backup.findOneAndUpdate(
+      { _id: backup._id, status: 'completed' },
+      { $set: { status: 'deleted', deletedAt: new Date(), deletedBy: 'retention-prune' } },
+      { new: true },
+    );
+    if (!claimed) return false;
+
+    try {
+      await r2Service.deleteFile(claimed.r2Key, config.r2BackupBucketName);
+    } catch (err: any) {
+      logger.warn(`[BACKUP RETENTION] Primary R2 delete failed for ${claimed.fileName}: ${String(err?.message ?? err)}`);
+    }
+    await r2Service.deleteFromSecondary(claimed.r2Key);
+    await Backup.findByIdAndDelete(claimed._id);
+    return true;
+  }
+
+  /** In-process guard (complements the Mongo lock for same-worker re-entry). */
+  private retentionBusy = false;
+
+  /**
+   * Cluster-safe single-flight lock so only one PM2 worker runs retention at a time.
+   * Returns null when another worker already holds the lock.
+   */
+  private async withRetentionLock<T>(fn: () => Promise<T>): Promise<T | null> {
+    if (this.retentionBusy) {
+      logger.info('[BACKUP RETENTION] Skipped — already running on this process');
+      return null;
+    }
+
+    const owner = `backup-retention:${process.pid}`;
+    const now = new Date();
+    const lockUntil = new Date(now.getTime() + 45 * 60 * 1000); // long prune can take minutes
+    let acquired = false;
+
+    try {
+      try {
+        await EditLock.findOneAndUpdate(
+          {
+            collectionName: '_system',
+            documentId: 'backup-retention',
+            $or: [{ lockedUntil: { $lt: now } }, { lockedBy: owner }],
+          },
+          {
+            $set: {
+              lockedBy: owner,
+              lockedByName: 'Backup Retention',
+              lockedAt: now,
+              lockedUntil: lockUntil,
+            },
+            $setOnInsert: {
+              collectionName: '_system',
+              documentId: 'backup-retention',
+            },
+          },
+          { upsert: true, new: true },
+        );
+      } catch (err: any) {
+        if (err?.code === 11000 || err?.code === 11001) {
+          logger.info('[BACKUP RETENTION] Skipped — another instance holds the lock');
+          return null;
+        }
+        throw err;
+      }
+
+      const lock = await EditLock.findOne({ collectionName: '_system', documentId: 'backup-retention' }).lean();
+      if (!lock || lock.lockedBy !== owner) {
+        logger.info('[BACKUP RETENTION] Skipped — another instance holds the lock');
+        return null;
+      }
+
+      acquired = true;
+      this.retentionBusy = true;
+      return await fn();
+    } finally {
+      if (acquired) {
+        this.retentionBusy = false;
+        await EditLock.deleteOne({
+          collectionName: '_system',
+          documentId: 'backup-retention',
+          lockedBy: owner,
+        }).catch(() => { /* non-fatal */ });
+      }
+    }
   }
 
   /**
@@ -566,9 +651,10 @@ class BackupService {
 
     for (const backup of oldBackups) {
       try {
-        await this.hardDeleteBackup(backup);
-        deletedCount++;
-        logger.info(`Deleted old backup: ${backup.fileName}`);
+        if (await this.hardDeleteBackup(backup)) {
+          deletedCount++;
+          logger.info(`Deleted old backup: ${backup.fileName}`);
+        }
       } catch (error) {
         logger.error(`Failed to delete backup ${backup.fileName}:`, error);
       }
@@ -591,9 +677,10 @@ class BackupService {
     let deletedCount = 0;
     for (const backup of toDelete) {
       try {
-        await this.hardDeleteBackup(backup);
-        deletedCount++;
-        logger.info(`[BACKUP RETENTION] Deleted excess backup (keep ${keepCount}): ${backup.fileName}`);
+        if (await this.hardDeleteBackup(backup)) {
+          deletedCount++;
+          logger.info(`[BACKUP RETENTION] Deleted excess backup (keep ${keepCount}): ${backup.fileName}`);
+        }
       } catch (error) {
         logger.error(`[BACKUP RETENTION] Failed to delete ${backup.fileName}:`, error);
       }
@@ -608,20 +695,38 @@ class BackupService {
 
   /**
    * Apply the system-config "backupRetention" keep-N policy.
-   * Safe to call frequently; no-ops when at or under the limit.
+   * Cluster-safe (single-flight). Safe to call frequently; no-ops when at/under limit
+   * or when another worker is already pruning.
    */
   async applyConfiguredRetention(): Promise<number> {
     try {
-      const systemConfig = await SystemConfig.findOne({
-        configType: 'system_settings',
-        isDeleted: false,
-      }).lean();
-      const keepCount = systemConfig?.systemSettings?.data?.backupRetention ?? 30;
-      return await this.cleanupExcessBackups(keepCount);
+      const result = await this.withRetentionLock(async () => {
+        const systemConfig = await SystemConfig.findOne({
+          configType: 'system_settings',
+          isDeleted: false,
+        }).lean();
+        const keepCount = systemConfig?.systemSettings?.data?.backupRetention ?? 30;
+        return await this.cleanupExcessBackups(keepCount);
+      });
+      return result ?? 0;
     } catch (err: any) {
       logger.warn(`[BACKUP RETENTION] Global keep-N cleanup failed: ${String(err?.message ?? err)}`);
       return 0;
     }
+  }
+
+  /**
+   * Fire-and-forget retention prune for HTTP handlers — avoids request timeouts
+   * when hundreds of R2/B2 deletes are needed.
+   */
+  scheduleConfiguredRetention(): void {
+    void this.applyConfiguredRetention()
+      .then((n) => {
+        if (n > 0) logger.info(`[BACKUP RETENTION] Background prune finished: ${n} deleted`);
+      })
+      .catch((err: any) => {
+        logger.warn(`[BACKUP RETENTION] Background prune failed: ${String(err?.message ?? err)}`);
+      });
   }
 
   /**
@@ -640,9 +745,10 @@ class BackupService {
       const toDelete = backups.slice(keepCount);
       for (const backup of toDelete) {
         try {
-          await this.hardDeleteBackup(backup);
-          deletedCount++;
-          logger.info(`[BACKUP TIERED] Deleted ${tier} backup: ${backup.fileName}`);
+          if (await this.hardDeleteBackup(backup)) {
+            deletedCount++;
+            logger.info(`[BACKUP TIERED] Deleted ${tier} backup: ${backup.fileName}`);
+          }
         } catch (err) {
           logger.error(`[BACKUP TIERED] Failed to delete ${backup.fileName}:`, err);
         }

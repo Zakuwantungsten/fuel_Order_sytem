@@ -620,13 +620,14 @@ export const updateRetentionSettings = async (req: AuthRequest, res: Response): 
     systemConfig.lastUpdatedBy = req.user.username;
     await systemConfig.save();
 
-    let prunedBackups = 0;
+    let pruneStarted = false;
     if (backupRetention !== undefined) {
       try {
         const backupService = (await import('../services/backupService')).default;
-        prunedBackups = await backupService.applyConfiguredRetention();
+        backupService.scheduleConfiguredRetention();
+        pruneStarted = true;
       } catch (err: any) {
-        logger.warn(`Backup retention prune after trash retention save failed: ${String(err?.message ?? err)}`);
+        logger.warn(`Backup retention prune schedule after trash retention save failed: ${String(err?.message ?? err)}`);
       }
     }
 
@@ -640,7 +641,7 @@ export const updateRetentionSettings = async (req: AuthRequest, res: Response): 
       req.ip
     );
 
-    logger.info(`Retention policy updated by ${req.user.username}${prunedBackups ? ` (pruned ${prunedBackups} backups)` : ''}`);
+    logger.info(`Retention policy updated by ${req.user.username}${pruneStarted ? ' (retention prune started in background)' : ''}`);
 
     res.status(200).json({
       success: true,
@@ -650,7 +651,7 @@ export const updateRetentionSettings = async (req: AuthRequest, res: Response): 
         autoCleanupEnabled: systemConfig.systemSettings?.data?.autoCleanupEnabled,
         backupRetention: systemConfig.systemSettings?.data?.backupRetention,
         archivalMonths: systemConfig.systemSettings?.data?.archivalMonths,
-        prunedBackups,
+        pruneStarted,
       },
     });
   } catch (error: any) {
