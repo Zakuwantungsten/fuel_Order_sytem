@@ -2,8 +2,7 @@ import Redis from 'ioredis';
 import logger from '../utils/logger';
 
 let redisClient: Redis | null = null;
-// redisPub / redisSub are only needed for multi-instance Socket.io.
-// This app runs as a single process — Socket.io uses in-memory adapter instead.
+// Dedicated pub/sub connections for Socket.io Redis adapter (required for PM2 cluster).
 let redisPub: Redis | null = null;
 let redisSub: Redis | null = null;
 
@@ -54,15 +53,22 @@ export async function connectRedis(): Promise<void> {
   }
 
   try {
-    // Single main client for caching/sessions + one BullMQ pair below.
-    // No pub/sub clients — single-instance deployment uses Socket.io in-memory adapter.
     redisClient = createClient('main');
-    await redisClient?.connect();
+    redisPub = createClient('pub');
+    redisSub = createClient('sub');
 
-    logger.info('Redis: client connected successfully');
+    await Promise.all([
+      redisClient?.connect(),
+      redisPub?.connect(),
+      redisSub?.connect(),
+    ]);
+
+    logger.info('Redis: main + pub/sub clients connected (Socket.io multi-instance ready)');
   } catch (error) {
     logger.error('Redis connection failed — falling back to in-memory mode:', error);
     redisClient = null;
+    redisPub = null;
+    redisSub = null;
   }
 }
 
@@ -107,11 +113,19 @@ export function createBullMQConnection(): Redis | null {
  * Graceful shutdown — close all Redis connections.
  */
 export async function disconnectRedis(): Promise<void> {
+  const closers: Promise<unknown>[] = [];
   if (redisClient) {
-    await redisClient.quit().catch(() => {});
+    closers.push(redisClient.quit().catch(() => {}));
     redisClient = null;
   }
-  redisPub = null;
-  redisSub = null;
-  logger.info('Redis: client disconnected');
+  if (redisPub) {
+    closers.push(redisPub.quit().catch(() => {}));
+    redisPub = null;
+  }
+  if (redisSub) {
+    closers.push(redisSub.quit().catch(() => {}));
+    redisSub = null;
+  }
+  await Promise.all(closers);
+  logger.info('Redis: clients disconnected');
 }
