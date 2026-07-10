@@ -34,6 +34,7 @@ import { requestId } from './middleware/requestId';
 import { runFirewallSeed } from './scripts/seedFirewallDefaults';
 import { backfillFuelMonthKeys } from './scripts/backfillFuelMonthKeys';
 import databaseMonitor from './utils/databaseMonitor';
+import { isPrimaryWorker, getWorkerInstanceId } from './utils/workerRole';
 
 // Validate environment variables
 try {
@@ -340,32 +341,36 @@ const startServer = async () => {
     // Ensure the EditLock indexes exist (unique lock key + TTL auto-expiry).
     // Mongoose builds indexes for new collections automatically, but syncing
     // here guarantees the TTL index is applied to pre-existing databases too.
-    try {
-      await EditLock.syncIndexes();
-      logger.info('EditLock indexes synced (unique key + TTL)');
-    } catch (idxErr) {
-      logger.warn('EditLock index sync failed (non-fatal):', idxErr);
-    }
+    // Primary-only: avoid duplicate index builds when PM2 starts 2 workers.
+    if (isPrimaryWorker()) {
+      try {
+        await EditLock.syncIndexes();
+        logger.info('EditLock indexes synced (unique key + TTL)');
+      } catch (idxErr) {
+        logger.warn('EditLock index sync failed (non-fatal):', idxErr);
+      }
 
-    // Seed firewall defaults (path rules, honeypots, bot UAs) on every boot.
-    // Idempotent — skips rows that already exist, only inserts new ones.
-    try {
-      await runFirewallSeed();
-    } catch (seedErr) {
-      logger.warn('Firewall seed failed (non-fatal):', seedErr);
-    }
+      // Seed firewall defaults (path rules, honeypots, bot UAs) on every boot.
+      // Idempotent — skips rows that already exist, only inserts new ones.
+      try {
+        await runFirewallSeed();
+      } catch (seedErr) {
+        logger.warn('Firewall seed failed (non-fatal):', seedErr);
+      }
 
-    // Backfill FuelRecord.monthKey (idempotent; a no-op once filled). Awaited
-    // so the indexed month filter in getAllFuelRecords never serves requests
-    // against partially-backfilled data.
-    try {
-      await backfillFuelMonthKeys();
-    } catch (backfillErr) {
-      logger.error('monthKey backfill failed — month filters may miss old records until next restart:', backfillErr);
+      // Backfill FuelRecord.monthKey (idempotent; a no-op once filled). Awaited
+      // so the indexed month filter in getAllFuelRecords never serves requests
+      // against partially-backfilled data.
+      try {
+        await backfillFuelMonthKeys();
+      } catch (backfillErr) {
+        logger.error('monthKey backfill failed — month filters may miss old records until next restart:', backfillErr);
+      }
     }
 
     // Connect to Redis (for Socket.io adapter, caching, sessions)
-    // If REDIS_URL is not set, operates in single-instance mode
+    // REQUIRED for PM2 cluster / multi-instance — without Redis, sockets won't
+    // cross workers and realtime broadcasts stay local to one process.
     await connectRedis();
 
     // Load persisted autoblock config from DB into runtime config
@@ -375,39 +380,47 @@ const startServer = async () => {
     initializeWebSocket(httpServer);
     logger.info('WebSocket server initialized');
 
-    // Start MongoDB Change Streams for real-time push (requires replica set)
-    startChangeStreams();
-
-    // Initialize BullMQ notification queue (uses Redis for async push dispatch)
+    // BullMQ workers are safe on every instance (jobs are claimed once via Redis).
     initNotificationQueue();
 
-    // Start archival scheduler (runs monthly at 2 AM on 1st day)
-    startArchivalScheduler();
+    // Singleton background work: only the primary PM2 worker (NODE_APP_INSTANCE=0).
+    // Secondary workers still serve HTTP + Socket.io.
+    if (isPrimaryWorker()) {
+      // Start MongoDB Change Streams for real-time push (requires replica set)
+      startChangeStreams();
 
-    // Start backup scheduler (polls every minute for due user-defined schedules)
-    startBackupScheduler();
+      // Start archival scheduler (runs monthly at 2 AM on 1st day)
+      startArchivalScheduler();
 
-    // DR: refresh the R2-side backup catalog (metadata stored separately from
-    // MongoDB) so the backup list survives a total database loss. Fire-and-forget.
-    backupService.writeManifestSafe().catch(() => { /* non-fatal */ });
+      // Start backup scheduler (polls every minute for due user-defined schedules)
+      startBackupScheduler();
 
-    // Start all registered cron jobs via central registry
-    jobRegistry.startAll();
-    logger.info('Job registry started');
+      // DR: refresh the R2-side backup catalog (metadata stored separately from
+      // MongoDB) so the backup list survives a total database loss. Fire-and-forget.
+      backupService.writeManifestSafe().catch(() => { /* non-fatal */ });
 
-    // Start continuous DB/memory health monitoring (every 60s). Threshold alerts
-    // (connection-pool, storage, memory) are evaluated here — independently of
-    // whether a super-admin is viewing a monitoring tab. 60s is a deliberate balance:
-    // frequent enough to catch real pressure, infrequent enough that the serverStatus
-    // / dbStats / collection-count queries don't add meaningful load at 600 users.
-    databaseMonitor.start(60_000);
-    logger.info('Database monitor started (60s interval)');
+      // Start all registered cron jobs via central registry
+      jobRegistry.startAll();
+      logger.info('Job registry started (primary worker)');
+
+      // Start continuous DB/memory health monitoring (every 60s). Threshold alerts
+      // (connection-pool, storage, memory) are evaluated here — independently of
+      // whether a super-admin is viewing a monitoring tab. 60s is a deliberate balance:
+      // frequent enough to catch real pressure, infrequent enough that the serverStatus
+      // / dbStats / collection-count queries don't add meaningful load at 600 users.
+      databaseMonitor.start(60_000);
+      logger.info('Database monitor started (60s interval, primary worker)');
+    } else {
+      logger.info(`Secondary worker ${getWorkerInstanceId()} — HTTP/WS only (crons/change-streams skipped)`);
+    }
 
     // Start listening
     httpServer.listen(PORT, () => {
-      logger.info(`Server running in ${config.nodeEnv} mode on port ${PORT}`);
+      logger.info(`Server running in ${config.nodeEnv} mode on port ${PORT} (worker ${getWorkerInstanceId()})`);
       logger.info(`CORS origin: ${config.corsOrigin}`);
-      logger.info('Archival scheduler: Active (runs monthly on 1st day at 2:00 AM)');
+      if (isPrimaryWorker()) {
+        logger.info('Archival scheduler: Active (runs monthly on 1st day at 2:00 AM)');
+      }
       logger.info('WebSocket server: Active');
 
       // Phase 3: signal PM2 (wait_ready) that the app is fully initialised and now
