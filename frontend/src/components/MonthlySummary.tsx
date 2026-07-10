@@ -2,12 +2,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Download, Calendar, Filter, Fuel, DollarSign, ChevronDown, Check, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { DeliveryOrder, FuelRecord, LPOEntry } from '../types';
-import { exportToXLSXMultiSheet } from '../utils/csvParser';
+import { deliveryOrdersAPI } from '../services/api';
 import {
   useDOAvailablePeriods,
   useDOSummaryAggregate,
   useAllDeliveryOrders,
-  fetchAllDeliveryOrders,
 } from '../hooks/useDeliveryOrders';
 
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -227,60 +226,12 @@ const MonthlySummary = ({ importOrExport = 'ALL', doType = 'DO', fuelRecords = [
   const handleExportSummary = async () => {
     if (selectedMonths.length === 0 || isExporting) return;
 
-    const orderTypeLabel = doType === 'SDO' ? 'SDO' : doType === 'ALL' ? 'All_Orders' : 'DO';
     setIsExporting(true);
     try {
-      // Fetch the actual rows for each selected month on demand (bounded).
-      const sheets = await Promise.all(
-        selectedMonths.map(async monthYear => {
-          const range = monthYearToRange(monthYear);
-          // Include cancelled DOs too — they're rendered red + struck-through
-          // in the sheet (via the _isCancelled marker below).
-          const rows = range
-            ? await fetchAllDeliveryOrders({
-                importOrExport,
-                doType: queryDoType,
-                status: 'all',
-                dateFrom: range.dateFrom,
-                dateTo: range.dateTo,
-              })
-            : [];
-
-          const exportData = rows.map((order, index) => ({
-            'S/N': index + 1,
-            'DATE': order.date,
-            'IMPORT OR EXPORT': order.importOrExport,
-            'D.O No.': order.doNumber,
-            'Invoice Nos': order.invoiceNos || '',
-            'CLIENT NAME': order.clientName,
-            'TRUCK No.': order.truckNo,
-            'TRAILER No.': order.trailerNo,
-            'CONTAINER No.': order.containerNo || 'LOOSE CARGO',
-            'BORDER ENTRY DRC': order.borderEntryDRC || '',
-            'LOADING POINT': order.loadingPoint || '',
-            'DESTINATION': order.destination,
-            'HAULIER': order.haulier || '',
-            'TONNAGES': order.tonnages,
-            'RATE PER TON': order.ratePerTon,
-            'RATE': order.tonnages * order.ratePerTon,
-            _isCancelled: !!order.isCancelled,
-          }));
-
-          return { sheetName: monthYear, data: exportData };
-        })
-      );
-
-      const monthsLabel = selectedMonths.length === 1
-        ? selectedMonths[0].replace('-', '_')
-        : selectedMonths.length === availableMonths.filter(m => selectedYears.some(y => m.endsWith(`-${y}`))).length
-          ? `All_Months_${selectedYears.join('_')}`
-          : `${selectedMonths.length}_Months`;
-
-      exportToXLSXMultiSheet(sheets, `${orderTypeLabel}_Summary_${monthsLabel}.xlsx`, {
-        headerColor: '4472C4',
-        addBorders: true,
-        centerAllCells: true,
-        strikethroughCancelledRows: true,
+      await deliveryOrdersAPI.exportSummary({
+        months: selectedMonths,
+        doType,
+        importOrExport,
       });
     } catch {
       toast.error('Failed to export summary. Please try again.');

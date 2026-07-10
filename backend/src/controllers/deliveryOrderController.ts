@@ -15,6 +15,7 @@ import { emitDataChange, BulkChangeMeta } from '../services/websocket';
 import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
 import { getFuelAutomationFlags, resolveDashboardSearchLimits } from '../services/journeyService';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
+import { addDoSummaryTabSheets, parseMonthYearLabel } from '../utils/summaryTabExport';
 import unifiedExportService from '../services/unifiedExportService';
 import ExcelJS from 'exceljs';
 import path from 'path';
@@ -4053,6 +4054,141 @@ export const exportYearlyMonthlySummaries = async (req: AuthRequest, res: Respon
     } else {
       logger.error('Error exporting DO monthly summaries:', error);
       res.status(500).json({ error: 'Failed to export monthly summaries' });
+    }
+  }
+};
+
+/**
+ * Export Monthly Summary tab Excel (server-side).
+ * Query: months=Jan-2026,Feb-2026&doType=DO|SDO|ALL&importOrExport=ALL|IMPORT|EXPORT
+ * Includes cancelled rows (struck through). One sheet per selected month label.
+ */
+export const exportSummaryTab = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const monthsRaw = String(req.query.months || '').trim();
+    if (!monthsRaw) {
+      throw new ApiError(400, 'months query param is required (e.g. Jan-2026,Feb-2026)');
+    }
+
+    const doTypeRaw = String(req.query.doType || 'ALL').toUpperCase();
+    const importOrExport = String(req.query.importOrExport || 'ALL').toUpperCase();
+
+    if (!['DO', 'SDO', 'ALL'].includes(doTypeRaw)) {
+      throw new ApiError(400, 'doType must be DO, SDO, or ALL');
+    }
+    if (!['ALL', 'IMPORT', 'EXPORT'].includes(importOrExport)) {
+      throw new ApiError(400, 'importOrExport must be ALL, IMPORT, or EXPORT');
+    }
+
+    const monthLabels = monthsRaw.split(',').map((m) => m.trim()).filter(Boolean);
+    const parsed = monthLabels.map(parseMonthYearLabel);
+    if (parsed.some((p) => !p)) {
+      throw new ApiError(400, 'Invalid month label. Use format Mon-YYYY (e.g. Jan-2026)');
+    }
+    const ranges = parsed as NonNullable<(typeof parsed)[number]>[];
+
+    let minFrom = ranges[0].dateFrom;
+    let maxTo = ranges[0].dateTo;
+    for (const r of ranges) {
+      if (r.dateFrom < minFrom) minFrom = r.dateFrom;
+      if (r.dateTo > maxTo) maxTo = r.dateTo;
+    }
+
+    const filters: Record<string, unknown> = {};
+    if (doTypeRaw === 'DO' || doTypeRaw === 'SDO') filters.doType = doTypeRaw;
+    if (importOrExport !== 'ALL') filters.importOrExport = importOrExport;
+
+    const allOrders = await unifiedExportService.getAllDeliveryOrders({
+      startDate: new Date(`${minFrom}T00:00:00.000Z`),
+      endDate: new Date(`${maxTo}T23:59:59.999Z`),
+      includeArchived: true,
+      filters,
+    });
+
+    const ordersBySheet = new Map<string, any[]>();
+    for (const r of ranges) {
+      ordersBySheet.set(r.sheetName, []);
+    }
+
+    for (const order of allOrders) {
+      const dateStr = String(order.date || '').substring(0, 10);
+      for (const r of ranges) {
+        if (dateStr >= r.dateFrom && dateStr <= r.dateTo) {
+          ordersBySheet.get(r.sheetName)!.push(order);
+          break;
+        }
+      }
+    }
+
+    // Stable sort within each sheet
+    for (const [key, list] of ordersBySheet) {
+      list.sort((a, b) => {
+        const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
+        if (dateCompare !== 0) return dateCompare;
+        return String(a.doNumber || '').localeCompare(String(b.doNumber || ''));
+      });
+      ordersBySheet.set(key, list);
+    }
+
+    const totalRows = [...ordersBySheet.values()].reduce((n, list) => n + list.length, 0);
+    if (totalRows === 0) {
+      throw new ApiError(404, 'No delivery orders found for the selected months');
+    }
+
+    const excelWorkbook = new ExcelJS.Workbook();
+    excelWorkbook.creator = 'Fuel Order System';
+    excelWorkbook.created = new Date();
+
+    const doNumberHeader = doTypeRaw === 'SDO' ? 'SDO No.' : 'D.O No.';
+    addDoSummaryTabSheets(excelWorkbook, ordersBySheet, monthLabels, doNumberHeader);
+
+    const orderTypeLabel = doTypeRaw === 'SDO' ? 'SDO' : doTypeRaw === 'ALL' ? 'All_Orders' : 'DO';
+    const monthsLabel =
+      monthLabels.length === 1
+        ? monthLabels[0].replace('-', '_')
+        : `${monthLabels.length}_Months`;
+    const filename = `${orderTypeLabel}_Summary_${monthsLabel}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    await excelWorkbook.xlsx.write(res);
+
+    try {
+      await AuditService.logExport(
+        req.user?.userId || 'unknown',
+        req.user?.username || 'system',
+        'delivery_orders_summary',
+        'xlsx',
+        totalRows,
+        req.ip || 'unknown'
+      );
+      await AnomalyDetectionService.detectExportAnomaly(
+        req.user?.username || 'system',
+        totalRows,
+        'xlsx',
+        req.ip || 'unknown',
+        req.get('user-agent') || 'unknown'
+      );
+    } catch (logError: any) {
+      logger.error(`Error logging summary export: ${logError.message}`);
+    }
+
+    res.end();
+    logger.info(`DO summary tab exported (${monthLabels.join(',')}) by ${req.user?.username}`);
+  } catch (error: any) {
+    if (error instanceof ApiError) {
+      if (!res.headersSent) {
+        res.status(error.statusCode).json({ error: error.message });
+      }
+    } else {
+      logger.error('Error exporting DO summary tab:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to export summary' });
+      }
     }
   }
 };

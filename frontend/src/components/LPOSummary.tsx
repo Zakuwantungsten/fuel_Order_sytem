@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle, ChevronDown, Check } from 'lucide-react';
+import { Download, Calendar, FileSpreadsheet, DollarSign, Fuel, AlertTriangle, ChevronDown, Check, Loader2 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { LPOEntry, DriverAccountEntry } from '../types';
-import { driverAccountAPI } from '../services/api';
+import { driverAccountAPI, lposAPI } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 // Helper to derive currency from station name
@@ -83,6 +84,7 @@ const LPOSummary = ({
   }, []);
   const [driverAccountEntries, setDriverAccountEntries] = useState<ExtendedLPOEntry[]>([]);
   const [loadingDriverAccounts, setLoadingDriverAccounts] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Fetch driver account entries
   useEffect(() => {
@@ -304,148 +306,53 @@ const LPOSummary = ({
         regularLPOCount
       });
     }
-  }, [selectedMonth, selectedYear, combinedEntries.length, localSelectedStations, localDateFrom, localDateTo]);  // Helper function to apply borders and center alignment to worksheet.
-  // Receives the lazily-imported xlsx-js-style module from the caller.
-  const applyExcelStyles = (XLSX: any, ws: any) => {
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    
-    const borderStyle = {
-      top: { style: 'thin', color: { rgb: '000000' } },
-      bottom: { style: 'thin', color: { rgb: '000000' } },
-      left: { style: 'thin', color: { rgb: '000000' } },
-      right: { style: 'thin', color: { rgb: '000000' } }
-    };
+  }, [selectedMonth, selectedYear, combinedEntries.length, localSelectedStations, localDateFrom, localDateTo]);
 
-    const cellStyle = {
-      border: borderStyle,
-      alignment: { horizontal: 'center', vertical: 'center' }
-    };
-
-    const headerStyle = {
-      border: borderStyle,
-      alignment: { horizontal: 'center', vertical: 'center' },
-      font: { bold: true },
-      fill: { fgColor: { rgb: 'E0E0E0' } }
-    };
-
-    for (let row = range.s.r; row <= range.e.r; row++) {
-      for (let col = range.s.c; col <= range.e.c; col++) {
-        const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
-        if (!ws[cellRef]) {
-          ws[cellRef] = { v: '', t: 's' };
-        }
-        ws[cellRef].s = row === 0 ? headerStyle : cellStyle;
-      }
+  const resolveExportStations = (): string[] | undefined => {
+    if (
+      localSelectedStations.length === 0 ||
+      (availableStations.length > 0 && localSelectedStations.length === availableStations.length)
+    ) {
+      return undefined;
     }
-
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 6 },   // S/N
-      { wch: 12 },  // Date
-      { wch: 10 },  // LPO No.
-      { wch: 15 },  // Diesel At
-      { wch: 10 },  // DO/SDO
-      { wch: 12 },  // Truck No.
-      { wch: 10 },  // Liters
-      { wch: 12 },  // Price per Liter
-      { wch: 15 },  // Total Amount
-      { wch: 12 },  // Destinations
-      { wch: 15 },  // Type
-      { wch: 12 },  // Payment Mode
-      { wch: 15 },  // Paybill/Mobile
-    ];
+    return localSelectedStations;
   };
 
   const handleExportMonth = async () => {
-    if (!summary) return;
-    // xlsx-js-style is loaded on demand — it's ~870 KB and only needed here
-    const XLSX = (await import('xlsx-js-style')).default;
+    if (!selectedMonth || isExporting) return;
 
-    const exportData = summary.entries.map((entry, index) => ({
-      'S/N': index + 1,
-      'Date': entry.date,
-      'LPO No.': entry.lpoNo,
-      'Diesel At': entry.dieselAt,
-      'Currency': getCurrencyFromStation(entry.dieselAt),
-      'DO/SDO': entry.doSdo,
-      'Truck No.': entry.truckNo,
-      'Liters': entry.ltrs,
-      'Price per Liter': entry.pricePerLtr,
-      'Total Amount': entry.ltrs * entry.pricePerLtr,
-      'Destinations': entry.destinations,
-      'Type': entry.isDriverAccount ? 'DRIVER ACCOUNT' : 'REGULAR',
-      'Payment Mode': entry.isDriverAccount ? (entry.paymentMode || 'N/A') : '',
-      'Paybill/Mobile': entry.isDriverAccount ? (entry.paybillOrMobile || 'N/A') : ''
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    applyExcelStyles(XLSX, ws);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `${selectedMonth}_${selectedYear}`);
-    XLSX.writeFile(wb, `LPO_Summary_${selectedMonth}_${selectedYear}.xlsx`);
+    setIsExporting(true);
+    try {
+      await lposAPI.exportSummaryMonth({
+        year: selectedYear,
+        month: selectedMonth,
+        stations: resolveExportStations(),
+        dateFrom: localDateFrom || undefined,
+        dateTo: localDateTo || undefined,
+      });
+    } catch {
+      toast.error('Failed to export LPO summary. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleExportYear = async () => {
-    if (availableMonths.length === 0) return;
-    // xlsx-js-style is loaded on demand — it's ~870 KB and only needed here
-    const XLSX = (await import('xlsx-js-style')).default;
+    if (isExporting) return;
 
-    const wb = XLSX.utils.book_new();
-
-    // Create a sheet for each month
-    availableMonths.forEach(month => {
-      const monthEntries = combinedEntries.filter(entry => entry.date.includes(month));
-      
-      if (monthEntries.length > 0) {
-        const exportData = monthEntries.map((entry, index) => ({
-          'S/N': index + 1,
-          'Date': entry.date,
-          'LPO No.': entry.lpoNo,
-          'Diesel At': entry.dieselAt,
-          'Currency': getCurrencyFromStation(entry.dieselAt),
-          'DO/SDO': entry.doSdo,
-          'Truck No.': entry.truckNo,
-          'Liters': entry.ltrs,
-          'Price per Liter': entry.pricePerLtr,
-          'Total Amount': entry.ltrs * entry.pricePerLtr,
-          'Destinations': entry.destinations,
-          'Type': entry.isDriverAccount ? 'DRIVER ACCOUNT' : 'REGULAR',
-          'Payment Mode': entry.isDriverAccount ? (entry.paymentMode || 'N/A') : '',
-          'Paybill/Mobile': entry.isDriverAccount ? (entry.paybillOrMobile || 'N/A') : ''
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        applyExcelStyles(XLSX, ws);
-        XLSX.utils.book_append_sheet(wb, ws, `${month}_${selectedYear}`);
-      }
-    });
-
-    // Create summary sheet
-    const yearSummary = availableMonths.map(month => {
-      const monthEntries = combinedEntries.filter(entry => entry.date.includes(month));
-      const totalLiters = monthEntries.reduce((sum, entry) => sum + entry.ltrs, 0);
-      const totalAmountTZS = monthEntries.filter(e => getCurrencyFromStation(e.dieselAt) === 'TZS').reduce((sum, e) => sum + (e.ltrs * e.pricePerLtr), 0);
-      const totalAmountUSD = monthEntries.filter(e => getCurrencyFromStation(e.dieselAt) === 'USD').reduce((sum, e) => sum + (e.ltrs * e.pricePerLtr), 0);
-      const totalAmount = totalAmountTZS + totalAmountUSD;
-      const driverAccountLPOs = monthEntries.filter(e => e.isDriverAccount).length;
-      
-      return {
-        'Month': month,
-        'Total LPOs': monthEntries.length,
-        'Regular LPOs': monthEntries.length - driverAccountLPOs,
-        'Driver Account LPOs': driverAccountLPOs,
-        'Total Liters': totalLiters,
-        'Total Amount (TZS)': totalAmountTZS,
-        'Total Amount (USD)': totalAmountUSD,
-        'Average Price/Liter': totalLiters > 0 ? (totalAmount / totalLiters).toFixed(2) : 0
-      };
-    });
-
-    const summaryWs = XLSX.utils.json_to_sheet(yearSummary);
-    applyExcelStyles(XLSX, summaryWs);
-    XLSX.utils.book_append_sheet(wb, summaryWs, `${selectedYear}_Summary`);
-
-    XLSX.writeFile(wb, `LPO_Summary_${selectedYear}.xlsx`);
+    setIsExporting(true);
+    try {
+      await lposAPI.exportSummaryYear({
+        year: selectedYear,
+        stations: resolveExportStations(),
+        dateFrom: localDateFrom || undefined,
+        dateTo: localDateTo || undefined,
+      });
+    } catch {
+      toast.error('Failed to export year summary. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   if (!summary) {
@@ -534,17 +441,19 @@ const LPOSummary = ({
               {/* Export Buttons */}
               <button
                 onClick={handleExportMonth}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                disabled={isExporting}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Download className="w-4 h-4 mr-2" />
+                {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
                 Export Filtered
               </button>
               
               <button
                 onClick={handleExportYear}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+                disabled={isExporting}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 mr-2" />}
                 Export Year
               </button>
             </div>

@@ -9,6 +9,13 @@ import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sa
 import { AuditService } from '../utils/auditService';
 import ExcelJS from 'exceljs';
 import unifiedExportService from '../services/unifiedExportService';
+import {
+  addLpoSummaryMonthSheet,
+  addLpoYearSummarySheet,
+  monthAbbrToRange,
+  monthAbbrFromDate,
+  MONTH_ABBR,
+} from '../utils/summaryTabExport';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
 import { acquireLock as acquireLockRecord, releaseLock as releaseLockRecord, getDisplayName } from '../services/lockService';
@@ -3987,5 +3994,207 @@ export const downloadLPOPDF = async (req: AuthRequest, res: Response): Promise<v
     logger.info(`LPO PDF downloaded: ${lpoSummary.lpoNo} by ${req.user?.username}`);
   } catch (error: any) {
     throw error;
+  }
+};
+
+/**
+ * Load flat LPO entries for summary export (active LPOSummary lines + legacy DA-only rows).
+ */
+async function loadLpoEntriesForSummaryExport(opts: {
+  dateFrom: string;
+  dateTo: string;
+  stations?: string[];
+}): Promise<any[]> {
+  const startDate = new Date(`${opts.dateFrom}T00:00:00.000Z`);
+  const endDate = new Date(`${opts.dateTo}T23:59:59.999Z`);
+
+  const entries = await unifiedExportService.getAllLPOEntries({ startDate, endDate });
+
+  // Legacy driver-account rows never mirrored into LPOSummary
+  const legacyMatch: Record<string, unknown> = {
+    isDeleted: false,
+    $or: [{ lpoCreated: { $ne: true } }, { lpoCreated: { $exists: false } }],
+    date: { $gte: opts.dateFrom, $lte: opts.dateTo },
+  };
+  const legacyRows = await DriverAccountEntry.find(legacyMatch).lean();
+  const legacyMapped = legacyRows.map((e: any) => ({
+    lpoNo: e.lpoNo,
+    date: e.date,
+    dieselAt: e.station,
+    doSdo: 'NIL',
+    truckNo: e.truckNo,
+    ltrs: e.liters,
+    pricePerLtr: e.rate,
+    destinations: 'NIL',
+    isCancelled: !!e.isCancelled,
+    isDriverAccount: true,
+    isRefer: false,
+  }));
+
+  let all = [...entries, ...legacyMapped];
+
+  if (opts.stations && opts.stations.length > 0) {
+    const set = new Set(opts.stations.map((s) => s.trim().toUpperCase()).filter(Boolean));
+    all = all.filter((e) => set.has(String(e.dieselAt || e.station || '').trim().toUpperCase()));
+  }
+
+  all.sort((a, b) => {
+    const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
+    if (dateCompare !== 0) return dateCompare;
+    return String(a.lpoNo || '').localeCompare(String(b.lpoNo || ''));
+  });
+
+  return all;
+}
+
+function parseStationsQuery(raw: unknown): string[] | undefined {
+  if (!raw) return undefined;
+  const list = String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return list.length > 0 ? list : undefined;
+}
+
+/**
+ * Export LPO Monthly Summary — single month sheet.
+ * Query: year=2026&month=Oct&stations=A,B&dateFrom=&dateTo=
+ */
+export const exportSummaryMonth = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const year = parseInt(String(req.query.year || ''), 10);
+    const month = String(req.query.month || '').trim();
+    if (isNaN(year) || !month || !MONTH_ABBR.includes(month)) {
+      throw new ApiError(400, 'year and month (Jan..Dec) are required');
+    }
+
+    const monthRange = monthAbbrToRange(month, year);
+    if (!monthRange) throw new ApiError(400, 'Invalid month/year');
+
+    let { dateFrom, dateTo } = monthRange;
+    const qFrom = req.query.dateFrom ? String(req.query.dateFrom).substring(0, 10) : '';
+    const qTo = req.query.dateTo ? String(req.query.dateTo).substring(0, 10) : '';
+    if (qFrom && qFrom > dateFrom) dateFrom = qFrom;
+    if (qTo && qTo < dateTo) dateTo = qTo;
+
+    const entries = await loadLpoEntriesForSummaryExport({
+      dateFrom,
+      dateTo,
+      stations: parseStationsQuery(req.query.stations),
+    });
+
+    if (entries.length === 0) {
+      throw new ApiError(404, 'No LPO entries found for the selected month');
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Fuel Order System';
+    workbook.created = new Date();
+    addLpoSummaryMonthSheet(workbook, `${month}_${year}`, entries);
+
+    const filename = `LPO_Summary_${month}_${year}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'EXPORT',
+      resourceType: 'LPOSummary',
+      resourceId: `${month}_${year}`,
+      details: `LPO summary month export (${entries.length} rows) by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    }).catch(() => {});
+
+    res.end();
+    logger.info(`LPO summary month ${month} ${year} exported by ${req.user?.username}`);
+  } catch (error: any) {
+    if (error instanceof ApiError) {
+      if (!res.headersSent) res.status(error.statusCode).json({ error: error.message });
+    } else {
+      logger.error('Error exporting LPO summary month:', error);
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to export LPO summary' });
+    }
+  }
+};
+
+/**
+ * Export LPO Monthly Summary — full year (one sheet per month + year summary).
+ * Query: year=2026&stations=A,B&dateFrom=&dateTo=
+ */
+export const exportSummaryYear = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const year = parseInt(String(req.query.year || ''), 10);
+    if (isNaN(year)) throw new ApiError(400, 'year is required');
+
+    let dateFrom = `${year}-01-01`;
+    let dateTo = `${year}-12-31`;
+    const qFrom = req.query.dateFrom ? String(req.query.dateFrom).substring(0, 10) : '';
+    const qTo = req.query.dateTo ? String(req.query.dateTo).substring(0, 10) : '';
+    if (qFrom && qFrom > dateFrom) dateFrom = qFrom;
+    if (qTo && qTo < dateTo) dateTo = qTo;
+
+    const entries = await loadLpoEntriesForSummaryExport({
+      dateFrom,
+      dateTo,
+      stations: parseStationsQuery(req.query.stations),
+    });
+
+    if (entries.length === 0) {
+      throw new ApiError(404, 'No LPO entries found for the selected year');
+    }
+
+    const byMonth = new Map<string, any[]>();
+    for (const entry of entries) {
+      const mon = monthAbbrFromDate(entry.date);
+      if (!mon) continue;
+      if (!byMonth.has(mon)) byMonth.set(mon, []);
+      byMonth.get(mon)!.push(entry);
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Fuel Order System';
+    workbook.created = new Date();
+
+    for (const month of MONTH_ABBR) {
+      const monthEntries = byMonth.get(month);
+      if (!monthEntries || monthEntries.length === 0) continue;
+      addLpoSummaryMonthSheet(workbook, `${month}_${year}`, monthEntries);
+    }
+    addLpoYearSummarySheet(workbook, year, byMonth);
+
+    const filename = `LPO_Summary_${year}.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await workbook.xlsx.write(res);
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'EXPORT',
+      resourceType: 'LPOSummary',
+      resourceId: String(year),
+      details: `LPO summary year export (${entries.length} rows) by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'low',
+    }).catch(() => {});
+
+    res.end();
+    logger.info(`LPO summary year ${year} exported by ${req.user?.username}`);
+  } catch (error: any) {
+    if (error instanceof ApiError) {
+      if (!res.headersSent) res.status(error.statusCode).json({ error: error.message });
+    } else {
+      logger.error('Error exporting LPO summary year:', error);
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to export LPO summary' });
+    }
   }
 };

@@ -293,6 +293,39 @@ export const deliveryOrdersAPI = {
     const response = await apiClient.get('/delivery-orders/summary-aggregate', { params });
     return response.data as DOSummaryAggregate;
   },
+
+  /** Server-side Monthly Summary Excel (one sheet per selected month). */
+  exportSummary: async (params: {
+    months: string[];
+    doType?: 'DO' | 'SDO' | 'ALL';
+    importOrExport?: string;
+  }): Promise<void> => {
+    const response = await apiClient.get('/delivery-orders/summary-export', {
+      params: {
+        months: params.months.join(','),
+        doType: params.doType || 'ALL',
+        importOrExport: params.importOrExport || 'ALL',
+      },
+      responseType: 'blob',
+    });
+
+    const orderTypeLabel =
+      params.doType === 'SDO' ? 'SDO' : params.doType === 'ALL' ? 'All_Orders' : 'DO';
+    const monthsLabel =
+      params.months.length === 1
+        ? params.months[0].replace('-', '_')
+        : `${params.months.length}_Months`;
+    const filename = `${orderTypeLabel}_Summary_${monthsLabel}.xlsx`;
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
   
   getById: async (id: string | number): Promise<DeliveryOrder> => {
     const response = await apiClient.get(`/delivery-orders/${id}`);
@@ -685,6 +718,64 @@ export const lposAPI = {
   getAvailableFilters: async (params?: { dateFrom?: string; dateTo?: string }): Promise<{ periods: Array<{ year: number; month: number }>; stations: string[] }> => {
     const response = await apiClient.get('/lpo-documents/entries/filters', { params });
     return response.data || { periods: [], stations: [] };
+  },
+
+  /** Server-side LPO Monthly Summary Excel for one month. */
+  exportSummaryMonth: async (params: {
+    year: number | string;
+    month: string;
+    stations?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<void> => {
+    const response = await apiClient.get('/lpo-documents/summary-export/month', {
+      params: {
+        year: params.year,
+        month: params.month,
+        ...(params.stations?.length ? { stations: params.stations.join(',') } : {}),
+        ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}),
+        ...(params.dateTo ? { dateTo: params.dateTo } : {}),
+      },
+      responseType: 'blob',
+    });
+
+    const filename = `LPO_Summary_${params.month}_${params.year}.xlsx`;
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  /** Server-side LPO Monthly Summary Excel for a full year. */
+  exportSummaryYear: async (params: {
+    year: number | string;
+    stations?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<void> => {
+    const response = await apiClient.get('/lpo-documents/summary-export/year', {
+      params: {
+        year: params.year,
+        ...(params.stations?.length ? { stations: params.stations.join(',') } : {}),
+        ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}),
+        ...(params.dateTo ? { dateTo: params.dateTo } : {}),
+      },
+      responseType: 'blob',
+    });
+
+    const filename = `LPO_Summary_${params.year}.xlsx`;
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   },
 };
 

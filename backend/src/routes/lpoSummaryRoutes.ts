@@ -20,6 +20,20 @@ router.get('/workbooks/years', asyncHandler(lpoSummaryController.getAvailableYea
 router.get('/workbooks/:year', asyncHandler(lpoSummaryController.getWorkbookByYear));
 router.get('/workbooks/:year/export', exportRateLimiter, authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss'), asyncHandler(lpoSummaryController.exportWorkbook));
 
+// Monthly Summary tab Excel exports (server-side)
+router.get(
+  '/summary-export/month',
+  exportRateLimiter,
+  authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss'),
+  asyncHandler(lpoSummaryController.exportSummaryMonth)
+);
+router.get(
+  '/summary-export/year',
+  exportRateLimiter,
+  authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss'),
+  asyncHandler(lpoSummaryController.exportSummaryYear)
+);
+
 // LPO PDF download - server-generated PDF
 router.get('/:id/pdf', commonValidation.mongoId, validate, asyncHandler(lpoSummaryController.downloadLPOPDF));
 

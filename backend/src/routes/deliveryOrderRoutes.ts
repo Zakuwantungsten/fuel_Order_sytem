@@ -55,6 +55,12 @@ router.post(
 // Get routes
 router.get('/available-periods', asyncHandler(deliveryOrderController.getAvailablePeriods));
 router.get('/summary-aggregate', asyncHandler(deliveryOrderController.getDeliveryOrderSummaryAggregate));
+router.get(
+  '/summary-export',
+  exportRateLimiter,
+  authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'),
+  asyncHandler(deliveryOrderController.exportSummaryTab)
+);
 router.get('/', commonValidation.pagination, validate, asyncHandler(deliveryOrderController.getAllDeliveryOrders));
 router.get('/next-do-number', asyncHandler(deliveryOrderController.getNextDONumber));
 router.get('/trucks', asyncHandler(deliveryOrderController.getAllTrucks));
