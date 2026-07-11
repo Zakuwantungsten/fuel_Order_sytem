@@ -8,15 +8,19 @@
  *     journey COMPLETED — the moment one of the configured "start columns" (e.g.
  *     darYard / darGoing / moroGoing) is filled on a queued journey. Filling those
  *     origin-leg columns means the truck has physically begun that new trip.
+ *   - Cancelling an active journey completes it and promotes the next queued (FIFO).
+ *   - Changing truckNo on a live journey re-places it on the target truck (append
+ *     as last queued if that truck already has an active journey; otherwise active)
+ *     and cleans up the old truck's queue.
  *
  * This replaces the old balance===0 + return-checkpoint completion rule, which was
  * hardcoded and never fired for the LPO-driven path.
  */
-import mongoose from 'mongoose';
+import mongoose, { ClientSession } from 'mongoose';
 import { FuelRecord } from '../models';
 import { SystemConfig, IFuelAutomationConfig, DEFAULT_FUEL_AUTOMATION } from '../models/SystemConfig';
 import { emitDataChange } from './websocket';
-import { logger } from '../utils';
+import { logger, formatTruckNumber } from '../utils';
 
 /** Default start columns when no journey_config has been saved yet. */
 export const DEFAULT_START_COLUMNS = ['darYard', 'darGoing', 'moroGoing'];
@@ -341,6 +345,282 @@ function hasStartColumnFilled(record: any, startColumns: string[]): boolean {
   return startColumns.some((col) => Math.abs(Number(record?.[col]) || 0) > 0);
 }
 
+/** Active journeys that still count for queue rules (not deleted/cancelled). */
+function activeJourneyFilter(truckNo: string, excludeId?: string) {
+  const filter: Record<string, unknown> = {
+    truckNo,
+    journeyStatus: 'active',
+    isDeleted: false,
+    isCancelled: { $ne: true },
+  };
+  if (excludeId) filter._id = { $ne: excludeId };
+  return filter;
+}
+
+/** Live queued journeys (excludes cancelled). */
+function queuedJourneyFilter(truckNo: string, excludeId?: string) {
+  const filter: Record<string, unknown> = {
+    truckNo,
+    journeyStatus: 'queued',
+    isDeleted: false,
+    isCancelled: { $ne: true },
+  };
+  if (excludeId) filter._id = { $ne: excludeId };
+  return filter;
+}
+
+async function emitFuelRecordUpdates(ids: Iterable<string>): Promise<void> {
+  for (const id of ids) {
+    const fresh = await FuelRecord.findById(id);
+    if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+  }
+}
+
+/**
+ * Re-number live queued journeys for a truck to contiguous 1..n.
+ * Returns ids whose queueOrder was rewritten.
+ */
+async function renumberQueuedJourneys(
+  truckNo: string,
+  session?: ClientSession | null
+): Promise<string[]> {
+  const remainingQueued = await FuelRecord.find(queuedJourneyFilter(truckNo))
+    .sort({ queueOrder: 1, createdAt: 1 })
+    .session(session || null);
+
+  if (remainingQueued.length === 0) return [];
+
+  const bulkOps = remainingQueued.map((r, i) => ({
+    updateOne: {
+      filter: { _id: r._id },
+      update: { $set: { queueOrder: i + 1 } },
+    },
+  }));
+  await FuelRecord.bulkWrite(bulkOps, session ? { session } : undefined);
+  return remainingQueued.map((r) => r._id.toString());
+}
+
+/**
+ * Promote the next queued journey for a truck to active (FIFO by queueOrder).
+ * Does not complete any other journey — caller is responsible for that when needed.
+ */
+export async function promoteNextQueuedJourney(
+  truckNo: string,
+  username: string,
+  session?: ClientSession | null
+): Promise<string | null> {
+  const next = await FuelRecord.findOne(queuedJourneyFilter(truckNo))
+    .sort({ queueOrder: 1, createdAt: 1 })
+    .session(session || null);
+
+  if (!next) return null;
+
+  next.journeyStatus = 'active';
+  next.activatedAt = new Date();
+  next.queueOrder = undefined;
+  await next.save(session ? { session } : undefined);
+
+  const affected = await renumberQueuedJourneys(truckNo, session);
+  logger.info(
+    `Journey ${next.goingDo} (truck ${truckNo}) promoted to active after queue advance by ${username}` +
+      (affected.length ? ` (renumbered ${affected.length} remaining)` : '')
+  );
+  return next._id.toString();
+}
+
+/**
+ * After a fuel journey is cancelled: complete it if it was active (so it no longer
+ * blocks the one-active rule), promote the next queued on that truck, or renumber
+ * the queue if a queued journey was cancelled.
+ *
+ * Pass `wasActive` / `wasQueued` from the pre-cancel status — after cancel the
+ * record may already be marked isCancelled.
+ */
+export async function afterJourneyCancelled(
+  recordId: string,
+  username: string,
+  options: { session?: ClientSession; wasActive: boolean; wasQueued: boolean }
+): Promise<{ affectedIds: string[] }> {
+  const session = options.session;
+  const ownSession = !session;
+  const localSession = session || (await mongoose.startSession());
+  const affectedIds = new Set<string>([recordId]);
+
+  try {
+    const run = async (s: ClientSession) => {
+      const record = await FuelRecord.findById(recordId).session(s);
+      if (!record || record.isDeleted) return;
+
+      const truckNo = record.truckNo;
+
+      if (options.wasActive) {
+        if (record.journeyStatus !== 'completed') {
+          record.journeyStatus = 'completed';
+          record.completedAt = record.completedAt || new Date();
+          record.queueOrder = undefined;
+          await record.save({ session: s });
+        }
+        const promotedId = await promoteNextQueuedJourney(truckNo, username, s);
+        if (promotedId) affectedIds.add(promotedId);
+        for (const id of await renumberQueuedJourneys(truckNo, s)) affectedIds.add(id);
+        logger.info(
+          `Cancelled active journey ${record.goingDo} (truck ${truckNo}) completed; queue advanced by ${username}`
+        );
+        return;
+      }
+
+      if (options.wasQueued) {
+        for (const id of await renumberQueuedJourneys(truckNo, s)) affectedIds.add(id);
+        logger.info(
+          `Cancelled queued journey ${record.goingDo} (truck ${truckNo}); queue renumbered by ${username}`
+        );
+      }
+    };
+
+    if (ownSession) {
+      await localSession.withTransaction(async () => run(localSession));
+    } else {
+      await run(localSession);
+    }
+  } finally {
+    if (ownSession) await localSession.endSession();
+  }
+
+  const ids = [...affectedIds];
+  if (ownSession) {
+    await emitFuelRecordUpdates(ids);
+  }
+  return { affectedIds: ids };
+}
+
+/**
+ * Move a fuel journey onto a different truck and place it correctly in that truck's
+ * queue: append as last queued if the new truck has an active journey; otherwise
+ * become active. Cleans up the old truck's queue (renumber / promote next if the
+ * moved record was that truck's active).
+ */
+export async function reassignJourneyOnTruckChange(
+  recordId: string,
+  newTruckNoRaw: string,
+  username: string,
+  options?: { session?: ClientSession }
+): Promise<{
+  changed: boolean;
+  oldTruckNo?: string;
+  newTruckNo?: string;
+  placement?: 'active' | 'queued' | 'unchanged';
+  affectedIds: string[];
+}> {
+  const newTruckNo = formatTruckNumber(newTruckNoRaw);
+  if (!newTruckNo) {
+    return { changed: false, affectedIds: [] };
+  }
+
+  const session = options?.session;
+  const ownSession = !session;
+  const localSession = session || (await mongoose.startSession());
+  const affectedIds = new Set<string>([recordId]);
+  let result: {
+    changed: boolean;
+    oldTruckNo?: string;
+    newTruckNo?: string;
+    placement?: 'active' | 'queued' | 'unchanged';
+  } = { changed: false };
+
+  try {
+    const run = async (s: ClientSession) => {
+      const record = await FuelRecord.findById(recordId).session(s);
+      if (!record || record.isDeleted) {
+        result = { changed: false };
+        return;
+      }
+
+      const oldTruckNo = record.truckNo;
+      if (formatTruckNumber(oldTruckNo) === newTruckNo) {
+        if (record.truckNo !== newTruckNo) {
+          record.truckNo = newTruckNo;
+          await record.save({ session: s });
+          result = { changed: true, oldTruckNo, newTruckNo, placement: 'unchanged' };
+        } else {
+          result = { changed: false, oldTruckNo, newTruckNo, placement: 'unchanged' };
+        }
+        return;
+      }
+
+      const wasActive = record.journeyStatus === 'active' && !record.isCancelled;
+      const wasQueued = record.journeyStatus === 'queued' && !record.isCancelled;
+      const isLiveJourney = wasActive || wasQueued;
+
+      record.truckNo = newTruckNo;
+
+      let placement: 'active' | 'queued' | 'unchanged' = 'unchanged';
+
+      if (isLiveJourney) {
+        const activeOnNew = await FuelRecord.findOne(
+          activeJourneyFilter(newTruckNo, record._id.toString())
+        ).session(s);
+
+        if (activeOnNew) {
+          const queuedCount = await FuelRecord.countDocuments(
+            queuedJourneyFilter(newTruckNo, record._id.toString())
+          ).session(s);
+          record.journeyStatus = 'queued';
+          record.queueOrder = queuedCount + 1;
+          record.previousJourneyId = activeOnNew._id.toString();
+          placement = 'queued';
+          logger.info(
+            `Journey ${record.goingDo} moved ${oldTruckNo} → ${newTruckNo}: queued #${record.queueOrder} behind ${activeOnNew.goingDo} by ${username}`
+          );
+        } else {
+          record.journeyStatus = 'active';
+          record.activatedAt = record.activatedAt || new Date();
+          record.queueOrder = undefined;
+          record.previousJourneyId = undefined;
+          placement = 'active';
+          logger.info(
+            `Journey ${record.goingDo} moved ${oldTruckNo} → ${newTruckNo}: set active (no active on target) by ${username}`
+          );
+        }
+      } else {
+        logger.info(
+          `Journey ${record.goingDo} truck changed ${oldTruckNo} → ${newTruckNo} (status ${record.journeyStatus}) by ${username}`
+        );
+      }
+
+      await record.save({ session: s });
+
+      // Old truck cleanup
+      for (const id of await renumberQueuedJourneys(oldTruckNo, s)) affectedIds.add(id);
+      if (wasActive) {
+        const promotedId = await promoteNextQueuedJourney(oldTruckNo, username, s);
+        if (promotedId) affectedIds.add(promotedId);
+      }
+
+      // New truck queue integrity (in case we inserted mid-flight)
+      if (placement === 'queued') {
+        for (const id of await renumberQueuedJourneys(newTruckNo, s)) affectedIds.add(id);
+      }
+
+      result = { changed: true, oldTruckNo, newTruckNo, placement };
+    };
+
+    if (ownSession) {
+      await localSession.withTransaction(async () => run(localSession));
+    } else {
+      await run(localSession);
+    }
+  } finally {
+    if (ownSession) await localSession.endSession();
+  }
+
+  const ids = [...affectedIds];
+  if (ownSession && result.changed) {
+    await emitFuelRecordUpdates(ids);
+  }
+
+  return { ...result, affectedIds: ids };
+}
+
 /**
  * Atomically complete the truck's current active journey and promote the started
  * (queued) journey to active, then re-number any remaining queued journeys so the
@@ -357,12 +637,9 @@ async function promoteJourney(
   try {
     await session.withTransaction(async () => {
       // 1. Complete any currently-active journey for this truck (normally exactly one).
-      const activeJourneys = await FuelRecord.find({
-        truckNo,
-        journeyStatus: 'active',
-        isDeleted: false,
-        _id: { $ne: startedRecordId },
-      }).session(session);
+      const activeJourneys = await FuelRecord.find(
+        activeJourneyFilter(truckNo, startedRecordId)
+      ).session(session);
 
       for (const aj of activeJourneys) {
         aj.journeyStatus = 'completed';
@@ -386,22 +663,8 @@ async function promoteJourney(
       }
 
       // 3. Re-number remaining queued journeys (queue integrity).
-      const remainingQueued = await FuelRecord.find({
-        truckNo,
-        journeyStatus: 'queued',
-        isDeleted: false,
-      })
-        .sort({ queueOrder: 1 })
-        .session(session);
-
-      if (remainingQueued.length > 0) {
-        const bulkOps = remainingQueued.map((r, i) => ({
-          updateOne: {
-            filter: { _id: r._id },
-            update: { $set: { queueOrder: i + 1 } },
-          },
-        }));
-        await FuelRecord.bulkWrite(bulkOps, { session });
+      for (const id of await renumberQueuedJourneys(truckNo, session)) {
+        affectedIds.add(id);
       }
     });
   } finally {
@@ -409,10 +672,7 @@ async function promoteJourney(
   }
 
   // Emit live updates AFTER the transaction commits so clients patch the latest state.
-  for (const id of affectedIds) {
-    const fresh = await FuelRecord.findById(id);
-    if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
-  }
+  await emitFuelRecordUpdates(affectedIds);
 }
 
 /**
@@ -427,6 +687,7 @@ export async function checkAndPromoteStartedJourney(
 ): Promise<void> {
   try {
     if (!record || record.journeyStatus !== 'queued') return;
+    if (record.isCancelled) return;
 
     const startColumns = await getJourneyStartColumns();
     if (!hasStartColumnFilled(record, startColumns)) return;

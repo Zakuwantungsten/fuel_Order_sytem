@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import mongoose from 'mongoose';
 import { matchedData } from 'express-validator';
 import { FuelRecord } from '../models';
 import { ApiError } from '../middleware/errorHandler';
@@ -10,7 +11,7 @@ import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
-import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, resolveDashboardSearchLimits } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled } from '../services/journeyService';
 
 /**
  * Get available periods (year-month pairs) for the period picker dropdown.
@@ -603,6 +604,7 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
       truckNo: payload.truckNo,
       journeyStatus: 'active',
       isDeleted: false,
+      isCancelled: { $ne: true },
     });
 
     if (activeRecord) {
@@ -611,6 +613,7 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
         truckNo: payload.truckNo,
         journeyStatus: 'queued',
         isDeleted: false,
+        isCancelled: { $ne: true },
       });
       
       payload.journeyStatus = 'queued';
@@ -820,11 +823,52 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       logger.info(`Recalculating balance for fuel record ${id}: (${finalTotalLts || 0} + ${finalExtra || 0}) - ${totalCheckpoints} = ${safeUpdates.balance}L`);
     }
 
-    const fuelRecord = await FuelRecord.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      safeUpdates,
-      { new: true, runValidators: true }
-    );
+    // Truck changes must go through queue reassignment (append on new truck / cleanup old truck).
+    let truckReassigned = false;
+    const incomingTruckRaw = safeUpdates.truckNo;
+    if (incomingTruckRaw !== undefined && incomingTruckRaw !== null) {
+      const formattedIncoming = formatTruckNumber(String(incomingTruckRaw));
+      if (formattedIncoming && formattedIncoming !== formatTruckNumber(existingRecord.truckNo)) {
+        delete safeUpdates.truckNo;
+        truckReassigned = true;
+      } else if (formattedIncoming) {
+        safeUpdates.truckNo = formattedIncoming;
+      }
+    }
+
+    // Field update + optional truck reassignment must commit together (all-or-nothing).
+    const session = await mongoose.startSession();
+    let fuelRecord: any;
+    let reassignAffectedIds: string[] = [];
+    try {
+      await session.withTransaction(async () => {
+        fuelRecord = await FuelRecord.findOneAndUpdate(
+          { _id: id, isDeleted: false },
+          safeUpdates,
+          { new: true, runValidators: true, session }
+        );
+
+        if (!fuelRecord) {
+          throw new ApiError(404, 'Fuel record not found');
+        }
+
+        if (truckReassigned && incomingTruckRaw) {
+          const reassign = await reassignJourneyOnTruckChange(
+            id,
+            String(incomingTruckRaw),
+            req.user?.username || 'system',
+            { session }
+          );
+          reassignAffectedIds = reassign.affectedIds || [];
+          fuelRecord = await FuelRecord.findById(id).session(session);
+          if (!fuelRecord) {
+            throw new ApiError(404, 'Fuel record not found after truck reassignment');
+          }
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
 
     if (!fuelRecord) {
       throw new ApiError(404, 'Fuel record not found');
@@ -838,7 +882,7 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
       'mmsaYard', 'tangaYard', 'darYard', 'tangaGoing', 'darGoing', 'moroGoing', 'mbeyaGoing',
       'tdmGoing', 'zambiaGoing', 'congoFuel', 'zambiaReturn', 'tundumaReturn',
       'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn',
-      'date', 'month', 'lpoNo', 'routeFrom', 'routeTo',
+      'date', 'month', 'lpoNo', 'routeFrom', 'routeTo', 'journeyStatus', 'queueOrder',
     ];
     const previousSnapshot: Record<string, any> = {};
     const newSnapshot: Record<string, any> = {};
@@ -883,7 +927,13 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
         : 'Fuel record updated successfully',
       data: fuelRecord,
     });
-    emitDataChange('fuel_records', 'update', fuelRecord.toObject());
+    const emitIds = new Set<string>([fuelRecord._id.toString(), ...reassignAffectedIds]);
+    for (const emitId of emitIds) {
+      const fresh = emitId === fuelRecord._id.toString()
+        ? fuelRecord
+        : await FuelRecord.findById(emitId);
+      if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+    }
   } catch (error: any) {
     throw error;
   }
@@ -902,11 +952,34 @@ export const cancelFuelRecord = async (req: AuthRequest, res: Response): Promise
       throw new ApiError(409, 'Fuel record is already cancelled');
     }
 
-    const fuelRecord = await FuelRecord.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      { isCancelled: true, cancelledAt: new Date(), cancelledBy: username },
-      { new: true, runValidators: true }
-    );
+    const wasActive = existingRecord.journeyStatus === 'active';
+    const wasQueued = existingRecord.journeyStatus === 'queued';
+
+    // Cancel flag + complete/promote/renumber must commit together (all-or-nothing).
+    const session = await mongoose.startSession();
+    let fuelRecord: any;
+    let cancelAffectedIds: string[] = [];
+    try {
+      await session.withTransaction(async () => {
+        fuelRecord = await FuelRecord.findOneAndUpdate(
+          { _id: id, isDeleted: false, isCancelled: { $ne: true } },
+          { isCancelled: true, cancelledAt: new Date(), cancelledBy: username },
+          { new: true, runValidators: true, session }
+        );
+
+        if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
+
+        const sideEffects = await afterJourneyCancelled(id, username, {
+          session,
+          wasActive,
+          wasQueued,
+        });
+        cancelAffectedIds = sideEffects.affectedIds || [];
+        fuelRecord = await FuelRecord.findById(id).session(session);
+      });
+    } finally {
+      await session.endSession();
+    }
 
     if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
 
@@ -915,8 +988,12 @@ export const cancelFuelRecord = async (req: AuthRequest, res: Response): Promise
       username,
       'FuelRecord',
       fuelRecord._id.toString(),
-      { isCancelled: false },
-      { isCancelled: true, cancelledBy: username },
+      { isCancelled: false, journeyStatus: existingRecord.journeyStatus },
+      {
+        isCancelled: true,
+        cancelledBy: username,
+        journeyStatus: fuelRecord.journeyStatus,
+      },
       req.ip
     );
 
@@ -927,7 +1004,13 @@ export const cancelFuelRecord = async (req: AuthRequest, res: Response): Promise
       message: 'Fuel record cancelled successfully',
       data: fuelRecord,
     });
-    emitDataChange('fuel_records', 'update', fuelRecord.toObject());
+    const emitIds = new Set<string>([fuelRecord._id.toString(), ...cancelAffectedIds]);
+    for (const emitId of emitIds) {
+      const fresh = emitId === fuelRecord._id.toString()
+        ? fuelRecord
+        : await FuelRecord.findById(emitId);
+      if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+    }
   } catch (error: any) {
     throw error;
   }

@@ -6,14 +6,14 @@ import { RouteConfig } from '../models/RouteConfig';
 import { ArchivedDeliveryOrder } from '../models/ArchivedData';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex, normalizeTruckNo } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex, normalizeTruckNo, formatTruckNumber } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
 import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { emitDataChange, BulkChangeMeta } from '../services/websocket';
 import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
-import { getFuelAutomationFlags, resolveDashboardSearchLimits } from '../services/journeyService';
+import { getFuelAutomationFlags, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled } from '../services/journeyService';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import { addDoSummaryTabSheets, parseMonthYearLabel } from '../utils/summaryTabExport';
 import unifiedExportService from '../services/unifiedExportService';
@@ -159,9 +159,16 @@ const cascadeUpdateToFuelRecord = async (
   updatedData: any,
   username: string,
   session?: ClientSession
-): Promise<{ updated: boolean; fuelRecordId?: string; changes?: string[]; routeNotificationCreated?: boolean }> => {
+): Promise<{
+  updated: boolean;
+  fuelRecordId?: string;
+  changes?: string[];
+  routeNotificationCreated?: boolean;
+  affectedFuelRecordIds?: string[];
+}> => {
   const changes: string[] = [];
   const opts = session ? { session } : {};
+  const affectedFuelRecordIds = new Set<string>();
 
   try {
     if (originalDO.doType === 'SDO') {
@@ -193,15 +200,40 @@ const cascadeUpdateToFuelRecord = async (
       return { updated: false };
     }
 
+    affectedFuelRecordIds.add(fuelRecord._id.toString());
+
     const updates: any = {};
     const destChanged =
       !!updatedData.destination && updatedData.destination !== originalDO.destination;
     const lpChanged =
       !!updatedData.loadingPoint && updatedData.loadingPoint !== originalDO.loadingPoint;
 
-    if (updatedData.truckNo && updatedData.truckNo !== originalDO.truckNo) {
-      updates.truckNo = updatedData.truckNo;
-      changes.push(`Truck: ${originalDO.truckNo} → ${updatedData.truckNo}`);
+    const truckChanged =
+      !!updatedData.truckNo &&
+      formatTruckNumber(updatedData.truckNo) !== formatTruckNumber(originalDO.truckNo);
+
+    // Truck moves must re-place the journey on the target truck's queue (append as
+    // last queued if target has an active journey). Do this before route/liters
+    // updates so subsequent balance math sees the correct truckNo.
+    if (truckChanged) {
+      const reassign = await reassignJourneyOnTruckChange(
+        fuelRecord._id.toString(),
+        updatedData.truckNo,
+        username,
+        { session: session || undefined }
+      );
+      if (reassign.changed) {
+        changes.push(
+          `Truck: ${reassign.oldTruckNo} → ${reassign.newTruckNo}` +
+            (reassign.placement && reassign.placement !== 'unchanged'
+              ? ` (${reassign.placement})`
+              : '')
+        );
+        for (const id of reassign.affectedIds) affectedFuelRecordIds.add(id);
+        // Refresh in-memory doc for liters/route logic below
+        const refreshed = await FuelRecord.findById(fuelRecord._id).session(session || null);
+        if (refreshed) fuelRecord = refreshed;
+      }
     }
 
     if (originalDO.importOrExport === 'IMPORT' && (destChanged || lpChanged)) {
@@ -397,6 +429,18 @@ const cascadeUpdateToFuelRecord = async (
         fuelRecordId: fuelRecord._id.toString(),
         changes,
         routeNotificationCreated: !!needsRouteNotification,
+        affectedFuelRecordIds: [...affectedFuelRecordIds],
+      };
+    }
+
+    // Truck-only amend: reassignment already applied above
+    if (changes.length > 0) {
+      logger.info(`Fuel record ${fuelRecord._id} updated due to DO changes: ${changes.join(', ')}`);
+      return {
+        updated: true,
+        fuelRecordId: fuelRecord._id.toString(),
+        changes,
+        affectedFuelRecordIds: [...affectedFuelRecordIds],
       };
     }
 
@@ -417,7 +461,12 @@ const cascadeCancelFuelRecord = async (
   cancellationReason: string,
   username: string,
   session?: ClientSession
-): Promise<{ cancelled: boolean; fuelRecordId?: string; action?: string }> => {
+): Promise<{
+  cancelled: boolean;
+  fuelRecordId?: string;
+  action?: string;
+  affectedFuelRecordIds?: string[];
+}> => {
   const opts = session ? { session } : {};
   try {
     // Skip cascade for SDO - they don't interact with fuel records
@@ -444,16 +493,30 @@ const cascadeCancelFuelRecord = async (
       
       // IMPORT DO (going DO) is cancelled - cancel the entire fuel record
       // The going DO is the primary journey, without it the fuel record has no purpose
+      const wasActive = fuelRecord.journeyStatus === 'active';
+      const wasQueued = fuelRecord.journeyStatus === 'queued';
+
       await FuelRecord.findByIdAndUpdate(fuelRecord._id, {
         isCancelled: true,
         cancelledAt: new Date(),
         cancellationReason: `Going DO ${deliveryOrder.doNumber} cancelled: ${cancellationReason}`,
         cancelledBy: username,
       }, opts);
+
+      const cancelSideEffects = await afterJourneyCancelled(fuelRecord._id.toString(), username, {
+        session: session || undefined,
+        wasActive,
+        wasQueued,
+      });
       
       logger.info(`Fuel record ${fuelRecord._id} fully cancelled due to going DO ${deliveryOrder.doNumber} cancellation. Reason: ${cancellationReason}`);
       
-      return { cancelled: true, fuelRecordId: fuelRecord._id.toString(), action: 'fully_cancelled' };
+      return {
+        cancelled: true,
+        fuelRecordId: fuelRecord._id.toString(),
+        action: 'fully_cancelled',
+        affectedFuelRecordIds: cancelSideEffects.affectedIds,
+      };
       
     } else if (deliveryOrder.importOrExport === 'EXPORT') {
       // Find fuel record where this DO is the returnDo
@@ -549,13 +612,15 @@ const cascadeCancelFuelRecord = async (
 };
 
 /**
- * Helper: Update LPO entries when DO is edited or cancelled
- * Note: This function works for both DO and SDO since LPOs can be linked to either
+ * Helper: Update LPO entries when DO is edited or cancelled.
+ * Note: truck number is intentionally NOT cascaded on DO edit — historical LPO
+ * lines keep the truck that actually uplifted (accidents/swaps). Future LPOs
+ * pick up the DO's new truck naturally.
  */
 const cascadeToLPOEntries = async (
   doNumber: string,
   action: 'update' | 'cancel',
-  updates?: { truckNo?: string; destination?: string },
+  updates?: { destination?: string },
   session?: ClientSession
 ): Promise<{ count: number }> => {
   const opts = session ? { session } : {};
@@ -576,7 +641,6 @@ const cascadeToLPOEntries = async (
       return { count: result.modifiedCount };
     } else if (action === 'update' && updates) {
       const setFields: any = {};
-      if (updates.truckNo) setFields['entries.$[e].truckNo'] = updates.truckNo;
       if (updates.destination) setFields['entries.$[e].dest'] = updates.destination;
 
       if (Object.keys(setFields).length > 0) {
@@ -1139,11 +1203,13 @@ const applyImportFuelRecords = async (
     truckNo: { $in: importTrucks },
     journeyStatus: 'active',
     isDeleted: false,
+    isCancelled: { $ne: true },
   }).select('_id truckNo').lean();
   const queuedQuery = FuelRecord.find({
     truckNo: { $in: importTrucks },
     journeyStatus: 'queued',
     isDeleted: false,
+    isCancelled: { $ne: true },
   }).select('truckNo').lean();
   if (session) {
     activeQuery.session(session);
@@ -1261,6 +1327,7 @@ const applyExportFuelUpdates = async (
     truckNo: { $in: exportTrucks },
     journeyStatus: 'active',
     isDeleted: false,
+    isCancelled: { $ne: true },
     $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
   })
     .sort({ date: -1 })
@@ -1605,6 +1672,7 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
       truckNo: { $in: exportTrucks },
       journeyStatus: 'active',
       isDeleted: false,
+      isCancelled: { $ne: true },
       $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
     })
       .sort({ date: -1 })
@@ -1915,10 +1983,12 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       fuelRecordLocked?: boolean;
       routeNotificationCreated?: boolean;
       lpoEntriesUpdated: number;
+      affectedFuelRecordIds: string[];
     } = {
       fuelRecordUpdated: false,
       fuelRecordChanges: [],
       lpoEntriesUpdated: 0,
+      affectedFuelRecordIds: [],
     };
 
     try {
@@ -1950,6 +2020,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
             cascadeResults.fuelRecordChanges = fuelResult.changes || [];
             cascadeResults.fuelRecordId = fuelResult.fuelRecordId;
             cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
+            cascadeResults.affectedFuelRecordIds = fuelResult.affectedFuelRecordIds || [];
             if (fuelResult.routeNotificationCreated) {
               cascadeResults.fuelRecordLocked = true;
             }
@@ -1959,10 +2030,10 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           }
         }
 
-        // Cascade to LPO entries if truck or destination changed
-        if (changes.some(c => ['truckNo', 'destination'].includes(c.field))) {
+        // Cascade destination to LPO entries only (truck is NOT rewritten on past LPOs —
+        // they keep history of which truck actually uplifted).
+        if (changes.some(c => c.field === 'destination')) {
           const lpoResult = await cascadeToLPOEntries(originalDO.doNumber, 'update', {
-            truckNo: payload.truckNo,
             destination: payload.destination,
           }, session);
           cascadeResults.lpoEntriesUpdated = lpoResult.count;
@@ -2017,7 +2088,14 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       cascadeResults,
     });
     emitDataChange('delivery_orders', 'update', deliveryOrder.toObject());
-    await emitFuelRecordChange(cascadeResults.fuelRecordId);
+    const fuelIdsToEmit = cascadeResults.affectedFuelRecordIds.length
+      ? cascadeResults.affectedFuelRecordIds
+      : cascadeResults.fuelRecordId
+        ? [cascadeResults.fuelRecordId]
+        : [];
+    for (const fuelId of fuelIdsToEmit) {
+      await emitFuelRecordChange(fuelId);
+    }
     emitDataChange('lpo_summaries', 'update');
   } catch (error: any) {
     throw error;
@@ -2057,11 +2135,13 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       fuelRecordId: string;
       fuelRecordAction: string;
       lpoEntriesCancelled: number;
+      affectedFuelRecordIds: string[];
     } = {
       fuelRecordCancelled: false,
       fuelRecordId: '',
       fuelRecordAction: '',
       lpoEntriesCancelled: 0,
+      affectedFuelRecordIds: [],
     };
     let fuelAction: string | undefined;
 
@@ -2098,6 +2178,7 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           cascadeResults.fuelRecordCancelled = fuelResult.cancelled;
           cascadeResults.fuelRecordId = fuelResult.fuelRecordId || '';
           cascadeResults.fuelRecordAction = fuelResult.action || '';
+          cascadeResults.affectedFuelRecordIds = fuelResult.affectedFuelRecordIds || [];
           fuelAction = fuelResult.action;
         } else {
           cancelCascadeSkipped = true;
@@ -2156,7 +2237,14 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       cascadeResults,
     });
     emitDataChange('delivery_orders', 'update', deliveryOrder.toObject());
-    await emitFuelRecordChange(cascadeResults.fuelRecordId);
+    const cancelFuelIds = cascadeResults.affectedFuelRecordIds.length
+      ? cascadeResults.affectedFuelRecordIds
+      : cascadeResults.fuelRecordId
+        ? [cascadeResults.fuelRecordId]
+        : [];
+    for (const fuelId of cancelFuelIds) {
+      await emitFuelRecordChange(fuelId);
+    }
   } catch (error: any) {
     throw error;
   }
@@ -4523,6 +4611,7 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
       journeyStatus: 'active',
       returnDo: { $in: [null, '', undefined] },
       isDeleted: false,
+      isCancelled: { $ne: true },
     }).sort({ date: -1 });
 
     if (!matchingFuelRecord) {
