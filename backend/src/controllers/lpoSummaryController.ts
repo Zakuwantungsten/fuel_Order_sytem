@@ -285,9 +285,15 @@ function createFuelUpdateBatch(): FuelUpdateBatch {
 /**
  * Apply all batched fuel-record updates with atomic pipeline increments,
  * then emit live updates and run journey promotion once per affected record.
+ * When `opts.session` is set, the bulkWrite joins that transaction and
+ * emit/promotion are deferred to the caller (post-commit).
  */
-async function flushFuelUpdateBatch(batch: FuelUpdateBatch, username: string): Promise<void> {
-  if (batch.pendingInc.size === 0) return;
+async function flushFuelUpdateBatch(
+  batch: FuelUpdateBatch,
+  username: string,
+  opts?: { session?: ClientSession },
+): Promise<string[]> {
+  if (batch.pendingInc.size === 0) return [];
 
   const ops = Array.from(batch.pendingInc.entries()).map(([id, incs]) => {
     const setExpr: Record<string, any> = {};
@@ -308,14 +314,20 @@ async function flushFuelUpdateBatch(batch: FuelUpdateBatch, username: string): P
     };
   });
 
-  await FuelRecord.bulkWrite(ops as any);
+  await FuelRecord.bulkWrite(ops as any, opts?.session ? { session: opts.session } : {});
   logger.info(`Batched ${ops.length} fuel-record update(s) into a single atomic bulkWrite`);
+
+  const touchedIds = Array.from(batch.pendingInc.keys());
+
+  // Inside a transaction: caller runs emit + journey promotion after commit.
+  if (opts?.session) return touchedIds;
 
   for (const [id, record] of batch.byId) {
     if (!batch.pendingInc.has(id)) continue;
     emitDataChange('fuel_records', 'update', record.toObject ? record.toObject() : record);
     await checkAndPromoteStartedJourney(record, username);
   }
+  return touchedIds;
 }
 
 async function findFuelRecordWithDirection(
@@ -498,6 +510,8 @@ async function updateFuelRecordForLPOEntry(
     // In session/transaction mode emit + journey-promotion are deferred to the
     // caller (post-commit); touched record ids are collected here.
     touchedIds?: Set<string>;
+    // When true (atomic LPO create with deduct ON), missing fuel/field is a hard error.
+    requireSuccess?: boolean;
   }
 ): Promise<void> {
   try {
@@ -524,6 +538,12 @@ async function updateFuelRecordForLPOEntry(
 
     if (!result) {
       logger.warn(`No fuel record found for DO ${doNumber} or truck ${truckNo} to update - possible data inconsistency`);
+      if (opts?.requireSuccess) {
+        throw new ApiError(
+          422,
+          `No fuel record found for DO ${doNumber} / truck ${truckNo}. LPO was not created — fix the fuel record first, or turn off LPO create deduct automation.`,
+        );
+      }
       return;
     }
 
@@ -535,6 +555,9 @@ async function updateFuelRecordForLPOEntry(
     if (opts?.explicitField) {
       if (!FUEL_CHECKPOINT_FIELDS.has(opts.explicitField)) {
         logger.warn(`Rejected invalid explicit checkpoint field "${opts.explicitField}" for truck ${truckNo}`);
+        if (opts?.requireSuccess) {
+          throw new ApiError(422, `Invalid checkpoint field "${opts.explicitField}" for truck ${truckNo}.`);
+        }
         return;
       }
       fieldToUpdate = opts.explicitField;
@@ -545,6 +568,12 @@ async function updateFuelRecordForLPOEntry(
 
     if (!fieldToUpdate) {
       logger.warn(`No valid field to update for station ${station} direction ${direction} cancellationPoint ${cancellationPoint}`);
+      if (opts?.requireSuccess) {
+        throw new ApiError(
+          422,
+          `No fuel checkpoint mapping for station "${station}" (${direction}) on DO ${doNumber} / truck ${truckNo}. LPO was not created — configure the station checkpoint fields, or turn off LPO create deduct automation.`,
+        );
+      }
       return;
     }
 
@@ -607,8 +636,8 @@ async function updateFuelRecordForLPOEntry(
     }
   } catch (error: any) {
     logger.error(`Error updating fuel record for LPO: ${error.message}`);
-    // Inside a transaction the failure must abort the whole operation.
-    if (opts?.session) throw error;
+    // Inside a transaction / requireSuccess the failure must abort the whole operation.
+    if (opts?.session || opts?.requireSuccess || error instanceof ApiError) throw error;
   }
 }
 
@@ -1019,7 +1048,9 @@ async function allocateNextLpoNo(year: number, session?: ClientSession): Promise
 
 /**
  * Create new LPO document (sheet in a workbook)
- * Handles regular entries, cancelled entries, and driver account entries
+ * Handles regular entries, cancelled entries, and driver account entries.
+ * When `lpoCreateDeduct` automation is ON, LPO create + fuel deductions run in
+ * one Mongo transaction (both commit or both roll back).
  */
 export const createLPOSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -1035,7 +1066,6 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
     // Extract year from date
     const dateObj = new Date(data.date);
     const year = dateObj.getFullYear();
-    const month = dateObj.toLocaleString('default', { month: 'long' });
 
     // Ensure workbook exists for this year
     await getOrCreateWorkbook(year);
@@ -1053,53 +1083,43 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       }
     }
 
-    // Create the LPO document with year and createdBy
-    const lpoSummary = await LPOSummary.create({
+    const fuelFlags = await getFuelAutomationFlags();
+    const needsAtomicDeduct = fuelFlags.lpoCreateDeduct;
+    const lpoPayload = {
       ...data,
       currency: data.currency || resolvedCurrency,
       year,
       createdBy: req.user?.username || 'Unknown',
-    });
+    };
 
-    // Per-operation automation toggle: when lpoCreateDeduct is OFF, the LPO is still
-    // created (and driver-account/refer handling still runs) but the fuel-record
-    // deduction is skipped for manual reconciliation.
-    const fuelFlags = await getFuelAutomationFlags();
+    let lpoSummary: any;
     let createDeductionsSkipped = 0;
+    let touchedFuelIds: string[] = [];
 
-    // Batch fuel-record updates into one bulkWrite instead of one round-trip per entry.
-    const fuelBatch = createFuelUpdateBatch();
+    const applyCreateDeductions = async (
+      lpo: any,
+      session?: ClientSession,
+    ): Promise<string[]> => {
+      const fuelBatch = createFuelUpdateBatch();
+      if (!lpo.entries || lpo.entries.length === 0) return [];
 
-    // Update fuel records for each entry (skip cancelled, driver account, and refer entries)
-    if (lpoSummary.entries && lpoSummary.entries.length > 0) {
-      for (const entry of lpoSummary.entries) {
-        // Skip fuel record update for cancelled entries
+      for (const entry of lpo.entries) {
         if (entry.isCancelled) {
           logger.debug(`Skipping fuel record update for cancelled entry: ${entry.truckNo}`);
           continue;
         }
-
-        // Driver account: flag-only on LPOSummary (like REF) — no side-collection write
         if (entry.isDriverAccount) {
           logger.debug(`Skipping fuel record update for DA entry: ${entry.truckNo}`);
           continue;
         }
-
-        // For refer entries: skip fuel record update entirely (partner/third-party trucks)
         if (entry.isRefer) {
           logger.debug(`Skipping fuel record update for REF entry: ${entry.truckNo}`);
           continue;
         }
 
-        // Regular entry - update fuel record
-        // For CASH station entries, pass both checkpoints to update correct fuel fields
-        // Can have going, returning, or both checkpoints for CASH payments
-        // For CUSTOM station entries, pass the custom checkpoint info
-
-        // Automation gate: skip the deduction entirely when disabled.
-        if (!fuelFlags.lpoCreateDeduct) {
+        if (!needsAtomicDeduct) {
           createDeductionsSkipped += 1;
-          logger.debug(`[fuelAutomation] lpoCreateDeduct OFF — skipping fuel deduction for ${entry.truckNo} (LPO ${lpoSummary.lpoNo})`);
+          logger.debug(`[fuelAutomation] lpoCreateDeduct OFF — skipping fuel deduction for ${entry.truckNo} (LPO ${lpo.lpoNo})`);
           continue;
         }
 
@@ -1109,42 +1129,65 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
           customReturnCheckpoint: entry.customReturnCheckpoint,
         } : undefined;
 
-        // Handle going checkpoint if present
+        const deductOpts = session
+          ? { session, requireSuccess: true as const }
+          : undefined;
+
         if (entry.goingCheckpoint) {
           await updateFuelRecordForLPOEntry(
-            entry.doNo, entry.liters, lpoSummary.station, entry.truckNo,
-            entry.goingCheckpoint, customInfo, fuelBatch
+            entry.doNo, entry.liters, lpo.station, entry.truckNo,
+            entry.goingCheckpoint, customInfo, fuelBatch, deductOpts,
           );
         }
-
-        // Handle returning checkpoint if present
         if (entry.returningCheckpoint) {
           await updateFuelRecordForLPOEntry(
-            entry.doNo, entry.liters, lpoSummary.station, entry.truckNo,
-            entry.returningCheckpoint, customInfo, fuelBatch
+            entry.doNo, entry.liters, lpo.station, entry.truckNo,
+            entry.returningCheckpoint, customInfo, fuelBatch, deductOpts,
           );
         }
-
-        // Fallback to old cancellationPoint field for backward compatibility
         if (!entry.goingCheckpoint && !entry.returningCheckpoint && entry.cancellationPoint) {
           await updateFuelRecordForLPOEntry(
-            entry.doNo, entry.liters, lpoSummary.station, entry.truckNo,
-            entry.cancellationPoint, customInfo, fuelBatch
+            entry.doNo, entry.liters, lpo.station, entry.truckNo,
+            entry.cancellationPoint, customInfo, fuelBatch, deductOpts,
           );
         }
-
-        // If no checkpoints specified, use regular station-based mapping
         if (!entry.goingCheckpoint && !entry.returningCheckpoint && !entry.cancellationPoint) {
           await updateFuelRecordForLPOEntry(
-            entry.doNo, entry.liters, lpoSummary.station, entry.truckNo,
-            undefined, customInfo, fuelBatch
+            entry.doNo, entry.liters, lpo.station, entry.truckNo,
+            undefined, customInfo, fuelBatch, deductOpts,
           );
         }
       }
-    }
 
-    // Flush batched fuel-record updates.
-    await flushFuelUpdateBatch(fuelBatch, 'lpo-system');
+      return flushFuelUpdateBatch(fuelBatch, 'lpo-system', session ? { session } : undefined);
+    };
+
+    if (needsAtomicDeduct) {
+      // Atomic path: LPO + fuel deductions succeed or fail together.
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          const created = await LPOSummary.create([lpoPayload], { session });
+          lpoSummary = created[0];
+          touchedFuelIds = await applyCreateDeductions(lpoSummary, session);
+        });
+      } finally {
+        await session.endSession();
+      }
+
+      // Post-commit: live-update + journey promotion (must not run inside the txn).
+      if (touchedFuelIds.length > 0) {
+        const records = await FuelRecord.find({ _id: { $in: touchedFuelIds } });
+        for (const rec of records) {
+          emitDataChange('fuel_records', 'update', rec.toObject());
+          await checkAndPromoteStartedJourney(rec, 'lpo-system');
+        }
+      }
+    } else {
+      // Automation OFF: create LPO only; fuel deductions skipped.
+      lpoSummary = await LPOSummary.create(lpoPayload);
+      await applyCreateDeductions(lpoSummary);
+    }
 
     logger.info(`LPO document created: ${lpoSummary.lpoNo} for year ${year} by ${req.user?.username}`);
 
@@ -1159,8 +1202,6 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       severity: 'medium',
     });
 
-    // Audit breadcrumb when automation suppressed the fuel deduction, so the manual
-    // adjustment owed is traceable.
     if (createDeductionsSkipped > 0) {
       await AuditService.log({
         userId: req.user?.userId,
@@ -1174,18 +1215,19 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       }).catch((err: any) => logger.warn(`Failed to write audit breadcrumb for skipped LPO deduction (LPO ${lpoSummary.lpoNo}): ${err?.message}`));
     }
 
-    // Return with id field for frontend compatibility
     const responseData = lpoSummary.toObject();
     
     res.status(201).json({
       success: true,
-      message: 'LPO document created successfully',
+      message: createDeductionsSkipped > 0
+        ? 'LPO document created. Note: fuel-record deduct automation is disabled — adjust fuel records manually.'
+        : 'LPO document created successfully',
       data: { ...responseData, id: responseData._id },
     });
     emitDataChange('lpo_summaries', 'create', lpoSummary.toObject(), lpoSummary.station);
-    emitDataChange('fuel_records', 'update');
+    // Atomic path already emitted per-record fuel updates above.
+    if (!needsAtomicDeduct) emitDataChange('fuel_records', 'update');
 
-    // Notify station manager / super_manager / drivers (best-effort).
     createLPOCreatedNotification(lpoSummary, req.user?.username || 'system').catch(() => {});
   } catch (error: any) {
     throw error;
