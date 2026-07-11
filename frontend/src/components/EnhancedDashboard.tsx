@@ -181,6 +181,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const [editDoId, setEditDoId] = useState<string | null>(null);
   const [pendingTruckSuffix, setPendingTruckSuffix] = useState<string>('');
   const [pendingDestination, setPendingDestination] = useState<string>('');
+  const [pendingLoadingPoint, setPendingLoadingPoint] = useState<string>('');
   const [, setHighlightParam] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const { logout, toggleTheme, isDark } = useAuth();
@@ -539,7 +540,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       case 'sa_fuel_stations':
         return <SuperAdminDashboard user={user} section="fuel_stations" onNavigate={navigateToTab} />;
       case 'sa_routes':
-        return <SuperAdminDashboard user={user} section="routes" onNavigate={navigateToTab} initialDestination={pendingDestination} onDestinationConsumed={() => setPendingDestination('')} />;
+        return <SuperAdminDashboard user={user} section="routes" onNavigate={navigateToTab} initialDestination={pendingDestination} initialLoadingPoint={pendingLoadingPoint} onDestinationConsumed={() => { setPendingDestination(''); setPendingLoadingPoint(''); }} />;
       case 'sa_system':
         return <SuperAdminDashboard user={user} section="system" onNavigate={navigateToTab} />;
       // sa_config, sa_config_history, sa_config_diff, sa_feature_flags, sa_cron_jobs,
@@ -575,7 +576,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       case 'admin_fuel_prices':
         return <AdminDashboard user={user} section="fuel_prices" />;
       case 'admin_routes':
-        return <AdminDashboard user={user} section="routes" initialDestination={pendingDestination} onDestinationConsumed={() => setPendingDestination('')} />;
+        return <AdminDashboard user={user} section="routes" initialDestination={pendingDestination} initialLoadingPoint={pendingLoadingPoint} onDestinationConsumed={() => { setPendingDestination(''); setPendingLoadingPoint(''); }} />;
       case 'admin_reports':
         return <AdminDashboard user={user} section="reports" />;
       
@@ -830,6 +831,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                   notification.metadata?.destination
                 ) {
                   setPendingDestination(notification.metadata.destination);
+                  setPendingLoadingPoint(notification.metadata.loadingPoint || '');
                   navigateToTab(user.role === 'super_admin' ? 'sa_routes' : 'admin_routes');
                 } else if (notification.metadata?.fuelRecordId) {
                   navigateToTab('fuel_records');
@@ -968,6 +970,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                     notification.metadata?.destination
                   ) {
                     setPendingDestination(notification.metadata.destination);
+                    setPendingLoadingPoint(notification.metadata.loadingPoint || '');
                     navigateToTab(user.role === 'super_admin' ? 'sa_routes' : 'admin_routes');
                   } else if (notification.metadata?.fuelRecordId) {
                     navigateToTab('fuel_records');
@@ -1147,6 +1150,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                 notification.metadata?.destination
               ) {
                 setPendingDestination(notification.metadata.destination);
+                setPendingLoadingPoint(notification.metadata.loadingPoint || '');
                 navigateToTab(user.role === 'super_admin' ? 'sa_routes' : 'admin_routes');
               } else if (notification.metadata?.fuelRecordId) {
                 navigateToTab('fuel_records');

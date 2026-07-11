@@ -120,7 +120,7 @@ function lpoPushData(type: string, metadata: { lpoNo: string; truckNo?: string }
 // Helper: build the clean notification message used for config-missing alerts
 function buildConfigMessage(
   type: 'both' | 'missing_total_liters' | 'missing_extra_fuel',
-  metadata: { doNumber: string; truckNo: string; destination?: string; truckSuffix?: string }
+  metadata: { doNumber: string; truckNo: string; destination?: string; loadingPoint?: string; truckSuffix?: string }
 ): string {
   const actionLine =
     type === 'both'
@@ -143,7 +143,11 @@ function buildConfigMessage(
     `DO: ${metadata.doNumber}`,
     `Truck: ${metadata.truckNo}`,
   ];
-  if (metadata.destination) lines.push(`Destination: ${metadata.destination}`);
+  if (metadata.loadingPoint && metadata.destination) {
+    lines.push(`Route: ${metadata.loadingPoint} → ${metadata.destination}`);
+  } else if (metadata.destination) {
+    lines.push(`Destination: ${metadata.destination}`);
+  }
   if (metadata.truckSuffix) lines.push(`Suffix: ${metadata.truckSuffix}`);
   lines.push(timestamp);
 
@@ -393,6 +397,7 @@ export const createMissingConfigNotification = async (
     doNumber: string;
     truckNo: string;
     destination?: string;
+    loadingPoint?: string;
     truckSuffix?: string;
   },
   createdBy: string,
@@ -421,6 +426,7 @@ export const createMissingConfigNotification = async (
       doNumber: metadata.doNumber,
       truckNo: metadata.truckNo,
       destination: metadata.destination,
+      loadingPoint: metadata.loadingPoint,
       truckSuffix: metadata.truckSuffix,
       missingFields,
       creatorRole: creatorRole || 'unknown',
@@ -658,6 +664,7 @@ export const syncConfigNotifications = async (fuelRecordId: string, resolvedBy: 
         doNumber: meta.doNumber || fuelRecord.goingDo,
         truckNo: meta.truckNo || fuelRecord.truckNo,
         destination: meta.destination || fuelRecord.to,
+        loadingPoint: meta.loadingPoint || fuelRecord.from || fuelRecord.start || '',
         truckSuffix: meta.truckSuffix,
       };
 

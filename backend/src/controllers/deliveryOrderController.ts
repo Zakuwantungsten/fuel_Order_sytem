@@ -299,7 +299,8 @@ const cascadeUpdateToFuelRecord = async (
           `⚠️ Going route not found for ${newLoadingPoint} → ${newDestination} - fuel record locked`
         );
         (updates as any)._needsRouteNotification = {
-          destination: `${newLoadingPoint} → ${newDestination}`,
+          destination: newDestination,
+          loadingPoint: newLoadingPoint,
           doNumber: originalDO.doNumber,
           truckNo: fuelRecord.truckNo,
           fuelRecordId: fuelRecord._id.toString(),
@@ -380,13 +381,14 @@ const cascadeUpdateToFuelRecord = async (
             doNumber: needsRouteNotification.doNumber,
             truckNo: needsRouteNotification.truckNo,
             destination: needsRouteNotification.destination,
+            loadingPoint: needsRouteNotification.loadingPoint,
           },
           username,
           needsRouteNotification.userRole,
           needsRouteNotification.userId
         );
         logger.info(
-          `Notifications created for missing going route: ${needsRouteNotification.destination}`
+          `Notifications created for missing going route: ${needsRouteNotification.loadingPoint || '?'} → ${needsRouteNotification.destination}`
         );
       }
 
@@ -1041,6 +1043,7 @@ type LockedFuelNotif = {
   doNumber: string;
   truckNo: string;
   destination: string;
+  loadingPoint: string;
   truckSuffix: string;
 };
 type UnlinkedExportNotif = {
@@ -1199,6 +1202,7 @@ const applyImportFuelRecords = async (
         doNumber: order.doNumber,
         truckNo: order.truckNo,
         destination: order.destination,
+        loadingPoint: order.loadingPoint || '',
         truckSuffix: (batchMatch.truckSuffix || '').toUpperCase(),
       });
     }
@@ -1411,7 +1415,7 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         for (const n of lockedNotifs) {
           await createMissingConfigNotification(
             n.id, n.missingFields,
-            { doNumber: n.doNumber, truckNo: n.truckNo, destination: n.destination, truckSuffix: n.truckSuffix },
+            { doNumber: n.doNumber, truckNo: n.truckNo, destination: n.destination, loadingPoint: n.loadingPoint, truckSuffix: n.truckSuffix },
             username, userRole, userId,
           ).catch(e => logger.warn(`Missing-config notification failed for ${n.doNumber}: ${e?.message || e}`));
         }
@@ -1743,7 +1747,7 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
 
     for (const n of lockedNotifs) {
       notifJobs.push(
-        createMissingConfigNotification(n.id, n.missingFields, { doNumber: n.doNumber, truckNo: n.truckNo, destination: n.destination, truckSuffix: n.truckSuffix }, username, userRole, userId)
+        createMissingConfigNotification(n.id, n.missingFields, { doNumber: n.doNumber, truckNo: n.truckNo, destination: n.destination, loadingPoint: n.loadingPoint, truckSuffix: n.truckSuffix }, username, userRole, userId)
           .catch(e => logger.warn(`Missing-config notification failed for ${n.doNumber}: ${e?.message || e}`))
       );
     }

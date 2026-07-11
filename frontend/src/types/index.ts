@@ -1167,6 +1167,7 @@ export interface Notification {
     doNumber?: string;
     truckNo?: string;
     destination?: string;
+    loadingPoint?: string;
     truckSuffix?: string;
     missingFields?: string[];
     yardFuelDispenseId?: string;

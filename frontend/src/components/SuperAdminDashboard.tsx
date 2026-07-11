@@ -56,6 +56,7 @@ interface SuperAdminDashboardProps {
   section?: 'overview' | 'database' | 'users' | 'fuel_stations' | 'routes' | 'config' | 'audit' | 'security' | 'backup' | 'analytics' | 'trash' | 'archival' | 'announcements' | 'config_diff' | 'fuel_prices' | 'cron_jobs' | 'data_export' | 'feature_flags' | 'system_health' | 'maintenance' | 'webhooks' | 'rate_limits' | 'activity_heatmap' | 'storage' | 'alert_thresholds' | 'email_logs' | 'performance_metrics' | 'db_indexes' | 'config_history' | 'custom_report' | 'notification_config' | 'siem_export' | 'monitoring' | 'system';
   onNavigate?: (section: string) => void;
   initialDestination?: string;
+  initialLoadingPoint?: string;
   onDestinationConsumed?: () => void;
 }
 
@@ -64,7 +65,7 @@ interface SuperAdminDashboardProps {
 let _overviewCache: { data: OverviewStats; ts: number } | null = null;
 const OVERVIEW_CACHE_TTL = 60_000;
 
-export default function SuperAdminDashboard({ section = 'overview', onNavigate, initialDestination, onDestinationConsumed }: SuperAdminDashboardProps) {
+export default function SuperAdminDashboard({ section = 'overview', onNavigate, initialDestination, initialLoadingPoint, onDestinationConsumed }: SuperAdminDashboardProps) {
   const [loading, setLoading] = useState(() =>
     section === 'overview' && !(_overviewCache && Date.now() - _overviewCache.ts < OVERVIEW_CACHE_TTL)
   );
@@ -211,7 +212,7 @@ export default function SuperAdminDashboard({ section = 'overview', onNavigate, 
               <FuelStationsTab onMessage={showMessage} />
             )}
             {section === 'routes' && (
-              <RoutesTab onMessage={showMessage} initialDestination={initialDestination} onDestinationConsumed={onDestinationConsumed} />
+              <RoutesTab onMessage={showMessage} initialDestination={initialDestination} initialLoadingPoint={initialLoadingPoint} onDestinationConsumed={onDestinationConsumed} />
             )}
             {section === 'system' && (
               <SystemUnifiedTab onMessage={showMessage} onNavigate={onNavigate} />

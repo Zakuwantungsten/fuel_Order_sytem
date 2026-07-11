@@ -686,6 +686,7 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
           doNumber: fuelRecord.goingDo,
           truckNo: fuelRecord.truckNo,
           destination: fuelRecord.to,
+          loadingPoint: fuelRecord.from || fuelRecord.start || '',
           truckSuffix,
         },
         req.user?.username || 'system',

@@ -9,10 +9,37 @@ import UnifiedTabLoader from './common/UnifiedTabLoader';
 interface RoutesTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
   initialDestination?: string;
+  initialLoadingPoint?: string;
   onDestinationConsumed?: () => void;
 }
 
-export default function RoutesTab({ onMessage, initialDestination, onDestinationConsumed }: RoutesTabProps) {
+/** Same origin equality used by backend route matching (e.g. "TANGA TANGA" ↔ "TANGA"). */
+function originsMatch(a?: string, b?: string): boolean {
+  const na = (a || '').toUpperCase().trim();
+  const nb = (b || '').toUpperCase().trim();
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  return na.includes(nb) || nb.includes(na);
+}
+
+/** Parse "ORIGIN → DEST" fallback when older notifications only stored a combined string. */
+function parseRouteHint(destination?: string, loadingPoint?: string): { origin: string; destination: string } {
+  const rawDest = (destination || '').trim();
+  const rawOrigin = (loadingPoint || '').trim();
+  if (rawOrigin) {
+    return { origin: rawOrigin.toUpperCase(), destination: rawDest.toUpperCase() };
+  }
+  const arrowMatch = rawDest.match(/^(.+?)\s*→\s*(.+)$/);
+  if (arrowMatch) {
+    return {
+      origin: arrowMatch[1].trim().toUpperCase(),
+      destination: arrowMatch[2].trim().toUpperCase(),
+    };
+  }
+  return { origin: '', destination: rawDest.toUpperCase() };
+}
+
+export default function RoutesTab({ onMessage, initialDestination, initialLoadingPoint, onDestinationConsumed }: RoutesTabProps) {
   const [routes, setRoutes] = useState<RouteConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRouteModal, setShowRouteModal] = useState(false);
@@ -40,6 +67,7 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
   // ── "Add from notification" chooser: alias of an existing route vs new route ──
   const [showRouteChoice, setShowRouteChoice] = useState(false);
   const [choiceDestination, setChoiceDestination] = useState('');
+  const [choiceOrigin, setChoiceOrigin] = useState('');
   const [aliasRouteId, setAliasRouteId] = useState('');
   const [aliasSearch, setAliasSearch] = useState('');
   const [savingAlias, setSavingAlias] = useState(false);
@@ -49,17 +77,17 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
   }, []);
 
   useEffect(() => {
-    if (!initialDestination) return;
-    // Opened from a "route not configured" notification. Instead of jumping
-    // straight into a blank "Add Route" form, let the admin decide whether this
-    // destination is really just another name (alias) for an existing route or a
-    // brand-new route. Either choice propagates to locked fuel records in realtime.
-    setChoiceDestination(initialDestination.toUpperCase());
+    if (!initialDestination || loading) return;
+    // Opened from a "route not configured" notification. Wait until routes are
+    // loaded so same-origin alias candidates are available immediately.
+    const parsed = parseRouteHint(initialDestination, initialLoadingPoint);
+    setChoiceDestination(parsed.destination);
+    setChoiceOrigin(parsed.origin);
     setAliasRouteId('');
     setAliasSearch('');
     setShowRouteChoice(true);
     onDestinationConsumed?.();
-  }, [initialDestination]);
+  }, [initialDestination, initialLoadingPoint, loading]);
 
   // Click outside detection
   useEffect(() => {
@@ -97,25 +125,41 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
 
   useRealtimeSync('routes', loadData);
 
+  // Same-origin IMPORT routes only — alias is invalid across different starts.
+  const sameOriginRoutes = routes.filter(
+    (r) =>
+      r.isActive !== false &&
+      (!r.routeType || r.routeType === 'IMPORT') &&
+      choiceOrigin &&
+      originsMatch(r.origin, choiceOrigin)
+  );
+
   // Chooser → "Create new route": open the Add Route form prefilled with the
-  // notification's destination.
+  // notification's origin + destination.
   const startCreateFromChoice = () => {
     resetRouteForm();
     setEditingRoute(null);
-    setRouteForm(f => ({ ...f, destination: choiceDestination }));
+    setRouteForm(f => ({
+      ...f,
+      origin: choiceOrigin,
+      destination: choiceDestination,
+    }));
     setShowRouteChoice(false);
     setShowRouteModal(true);
   };
 
-  // Chooser → "Add as alias": append the destination to the selected route's
-  // aliases. The backend re-runs route auto-fill, so locked fuel records whose
-  // destination matches this alias get their totalLts filled and their
-  // notifications resolved/downgraded live.
+  // Chooser → "Add as alias": append the destination to the selected same-origin
+  // route's aliases. Backend auto-fill then applies that route's total liters to
+  // locked fuel records matching origin + this alias.
   const handleAddAlias = async () => {
     if (savingAlias) return;
-    const route = routes.find(r => r._id === aliasRouteId);
+    const route = sameOriginRoutes.find(r => r._id === aliasRouteId);
     if (!route) {
-      onMessage('error', 'Please select the route this destination belongs to');
+      onMessage('error', 'Please select a same-origin route for this alias');
+      return;
+    }
+    if (!originsMatch(route.origin, choiceOrigin)) {
+      onMessage('error', 'Alias can only be added to a route with the same starting point');
       return;
     }
     const dest = choiceDestination.trim().toUpperCase();
@@ -136,7 +180,7 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
         defaultTotalLiters: route.defaultTotalLiters,
         description: route.description,
       });
-      onMessage('success', `Added "${dest}" as an alias of ${route.routeName} — matching fuel records will update automatically`);
+      onMessage('success', `Added "${dest}" as an alias of ${route.routeName} (${route.defaultTotalLiters} L) — matching fuel records will update automatically`);
       setShowRouteChoice(false);
       loadData();
     } catch (error: any) {
@@ -591,9 +635,15 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Configure Destination</h3>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Configure Route</h3>
                   <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    <span className="font-semibold text-blue-600 dark:text-blue-400">{choiceDestination}</span> isn’t configured yet. Is it another name for a route you already have, or a brand-new route?
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">
+                      {choiceOrigin ? `${choiceOrigin} → ${choiceDestination}` : choiceDestination}
+                    </span>
+                    {' '}isn’t configured yet.
+                    {sameOriginRoutes.length > 0
+                      ? ' Is it another name for a same-start route you already have, or a brand-new route?'
+                      : ' No existing route shares this starting point — create a new route.'}
                   </p>
                 </div>
                 <button onClick={() => setShowRouteChoice(false)} className="text-gray-500 hover:text-gray-700 flex-shrink-0">
@@ -601,83 +651,86 @@ export default function RoutesTab({ onMessage, initialDestination, onDestination
                 </button>
               </div>
 
-              {/* Option 1: alias of an existing route */}
-              <div className="border dark:border-gray-700 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Add as an alias of an existing route</h4>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  Use this when “{choiceDestination}” is just a different spelling/name for a destination you already configured. It inherits that route’s liters.
-                </p>
+              {/* Option 1: alias — only when same-origin routes exist */}
+              {sameOriginRoutes.length > 0 && (
+                <>
+                  <div className="border dark:border-gray-700 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Add as an alias of an existing route</h4>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      Only routes that start at <span className="font-medium">{choiceOrigin}</span> are listed. “{choiceDestination}” will inherit that route’s liters.
+                    </p>
 
-                <input
-                  type="text"
-                  value={aliasSearch}
-                  onChange={(e) => setAliasSearch(e.target.value)}
-                  placeholder="Search routes by name or destination…"
-                  className="mt-3 w-full px-3 py-2 text-sm border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                />
+                    <input
+                      type="text"
+                      value={aliasSearch}
+                      onChange={(e) => setAliasSearch(e.target.value)}
+                      placeholder="Search same-origin routes…"
+                      className="mt-3 w-full px-3 py-2 text-sm border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                    />
 
-                <div className="mt-2 max-h-48 overflow-y-auto border dark:border-gray-700 rounded-lg divide-y dark:divide-gray-700">
-                  {routes
-                    .filter(r => {
-                      const q = aliasSearch.trim().toLowerCase();
-                      if (!q) return true;
-                      return (
-                        r.routeName.toLowerCase().includes(q) ||
-                        r.destination.toLowerCase().includes(q) ||
-                        (r.origin || '').toLowerCase().includes(q) ||
-                        (r.destinationAliases || []).some(a => a.toLowerCase().includes(q))
-                      );
-                    })
-                    .map(r => (
-                      <button
-                        key={String(r._id)}
-                        type="button"
-                        onClick={() => setAliasRouteId(r._id)}
-                        className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors ${
-                          aliasRouteId === r._id
-                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                            : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-900 dark:text-gray-100'
-                        }`}
-                      >
-                        <span className="min-w-0">
-                          <span className="font-medium">{r.routeName}</span>
-                          <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {r.origin ? `${r.origin} → ` : ''}{r.destination} · {r.defaultTotalLiters} L
-                          </span>
-                        </span>
-                        {aliasRouteId === r._id && <Check className="w-4 h-4 flex-shrink-0" />}
-                      </button>
-                    ))}
-                  {routes.length === 0 && (
-                    <div className="px-3 py-4 text-center text-xs text-gray-500 dark:text-gray-400">No routes configured yet.</div>
-                  )}
-                </div>
+                    <div className="mt-2 max-h-48 overflow-y-auto border dark:border-gray-700 rounded-lg divide-y dark:divide-gray-700">
+                      {sameOriginRoutes
+                        .filter(r => {
+                          const q = aliasSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            r.routeName.toLowerCase().includes(q) ||
+                            r.destination.toLowerCase().includes(q) ||
+                            (r.origin || '').toLowerCase().includes(q) ||
+                            (r.destinationAliases || []).some(a => a.toLowerCase().includes(q))
+                          );
+                        })
+                        .map(r => (
+                          <button
+                            key={String(r._id)}
+                            type="button"
+                            onClick={() => setAliasRouteId(r._id)}
+                            className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors ${
+                              aliasRouteId === r._id
+                                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                                : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 text-gray-900 dark:text-gray-100'
+                            }`}
+                          >
+                            <span className="min-w-0">
+                              <span className="font-medium">{r.routeName}</span>
+                              <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">
+                                {r.origin ? `${r.origin} → ` : ''}{r.destination} · {r.defaultTotalLiters} L
+                              </span>
+                            </span>
+                            {aliasRouteId === r._id && <Check className="w-4 h-4 flex-shrink-0" />}
+                          </button>
+                        ))}
+                    </div>
 
-                <button
-                  onClick={handleAddAlias}
-                  disabled={savingAlias || !aliasRouteId}
-                  className="mt-3 w-full px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {savingAlias ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Plus className="w-4 h-4" />
-                  )}
-                  {savingAlias ? 'Adding alias…' : 'Add as alias'}
-                </button>
-              </div>
+                    <button
+                      onClick={handleAddAlias}
+                      disabled={savingAlias || !aliasRouteId}
+                      className="mt-3 w-full px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {savingAlias ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
+                      {savingAlias ? 'Adding alias…' : 'Add as alias'}
+                    </button>
+                  </div>
 
-              <div className="flex items-center gap-3 my-4">
-                <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-                <span className="text-xs font-medium text-gray-400">OR</span>
-                <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-              </div>
+                  <div className="flex items-center gap-3 my-4">
+                    <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                    <span className="text-xs font-medium text-gray-400">OR</span>
+                    <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                  </div>
+                </>
+              )}
 
               {/* Option 2: create a new route */}
               <div className="border dark:border-gray-700 rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Create a new route</h4>
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  Use this when “{choiceDestination}” is a genuinely new destination with its own liters allocation.
+                  {sameOriginRoutes.length > 0
+                    ? `Use this when “${choiceDestination}” is a genuinely new destination with its own liters allocation.`
+                    : `Create ${choiceOrigin ? `${choiceOrigin} → ${choiceDestination}` : choiceDestination} with its own liters allocation.`}
                 </p>
                 <button
                   onClick={startCreateFromChoice}
