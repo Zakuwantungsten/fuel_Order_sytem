@@ -177,6 +177,14 @@ const cascadeUpdateToFuelRecord = async (
     
     if (!fuelRecord) {
       logger.info(`No fuel record found for DO ${originalDO.doNumber}`);
+      // When running inside a transaction (amend cascade automation ON), missing
+      // fuel must fail the whole update — otherwise the DO changes alone.
+      if (session) {
+        throw new ApiError(
+          422,
+          `Cannot update delivery order ${originalDO.doNumber}: no linked fuel record found to cascade changes. Create/fix the fuel record first, or turn off amend cascade automation.`,
+        );
+      }
       return { updated: false };
     }
     
@@ -413,6 +421,8 @@ const cascadeUpdateToFuelRecord = async (
     return { updated: false };
   } catch (error: any) {
     logger.error(`Error cascading update to fuel record: ${error.message}`);
+    // Inside a transaction, rethrow so the DO update rolls back with the fuel failure.
+    if (session || error instanceof ApiError) throw error;
     return { updated: false };
   }
 };
@@ -571,6 +581,8 @@ const cascadeCancelFuelRecord = async (
     return { cancelled: false };
   } catch (error: any) {
     logger.error(`Error cascading cancel to fuel record: ${error.message}`);
+    // Inside a transaction, rethrow so the DO cancel rolls back with the fuel failure.
+    if (session || error instanceof ApiError) throw error;
     return { cancelled: false };
   }
 };
@@ -1094,13 +1106,50 @@ const loadFuelConfig = async (): Promise<{ routes: RouteLike[]; truckBatches: Re
   };
 };
 
+type FuelYardLinkTarget = { id: string; truckNo: string; doNumber: string; date: string };
+
+type FuelSideEffectOpts = {
+  session?: ClientSession;
+  /**
+   * Auto-link pending yard fuel after fuel rows are written.
+   * Default: true when no session (legacy), false when a session is provided
+   * (caller must run linking after the transaction commits).
+   */
+  linkYardFuel?: boolean;
+};
+
+/** Yard-fuel linking is best-effort and must run after a successful DO+fuel commit. */
+const linkYardFuelAfterCommit = async (
+  linkTargets: FuelYardLinkTarget[],
+  username: string,
+): Promise<void> => {
+  if (linkTargets.length === 0) return;
+  try {
+    const { linkPendingYardFuelDirect } = await import('./yardFuelController');
+    await Promise.all(
+      linkTargets.map(t =>
+        linkPendingYardFuelDirect(t.id, t.truckNo, t.doNumber, t.date, username).catch(e => {
+          logger.warn(`Yard-fuel auto-link failed for ${t.truckNo}: ${e?.message || e}`);
+          return { linkedCount: 0 };
+        })
+      )
+    );
+  } catch (e: any) {
+    logger.warn('Yard-fuel auto-link step skipped:', e?.message || e);
+  }
+};
+
 /**
  * Build + insert going-journey fuel records for a set of IMPORT delivery orders.
  * Trucks with an existing active journey are queued (with a contiguous queueOrder);
  * records missing route/batch config are locked. Pending yard-fuel entries are
- * auto-linked. Returns the queued count and the locked-record notifications to
- * dispatch (the caller owns notification side-effects). Single create passes a
- * 1-element array — same path as the bulk endpoint, no duplicated logic.
+ * auto-linked (unless deferred via opts). Returns the queued count and the
+ * locked-record notifications to dispatch (the caller owns notification
+ * side-effects). Single create passes a 1-element array — same path as the bulk
+ * endpoint, no duplicated logic.
+ *
+ * When `opts.session` is set, writes participate in that transaction and any
+ * insert failure is rethrown so the caller can roll back the DO(s).
  */
 const applyImportFuelRecords = async (
   importDOs: any[],
@@ -1108,16 +1157,37 @@ const applyImportFuelRecords = async (
   truckBatches: Record<string, any>,
   username: string,
   batchDestinationRules: Record<string, any> = {},
-): Promise<{ queuedCount: number; lockedNotifs: LockedFuelNotif[]; createdFuelDates: string[]; createdFuelIds: string[] }> => {
+  opts: FuelSideEffectOpts = {},
+): Promise<{
+  queuedCount: number;
+  lockedNotifs: LockedFuelNotif[];
+  createdFuelDates: string[];
+  createdFuelIds: string[];
+  linkTargets: FuelYardLinkTarget[];
+}> => {
   let queuedCount = 0;
   const lockedNotifs: LockedFuelNotif[] = [];
-  if (importDOs.length === 0) return { queuedCount, lockedNotifs, createdFuelDates: [], createdFuelIds: [] };
+  if (importDOs.length === 0) {
+    return { queuedCount, lockedNotifs, createdFuelDates: [], createdFuelIds: [], linkTargets: [] };
+  }
 
+  const session = opts.session;
   const importTrucks = [...new Set(importDOs.map((o: any) => o.truckNo))];
-  const [activeRecords, queuedRecords] = await Promise.all([
-    FuelRecord.find({ truckNo: { $in: importTrucks }, journeyStatus: 'active', isDeleted: false }).select('_id truckNo').lean(),
-    FuelRecord.find({ truckNo: { $in: importTrucks }, journeyStatus: 'queued', isDeleted: false }).select('truckNo').lean(),
-  ]);
+  const activeQuery = FuelRecord.find({
+    truckNo: { $in: importTrucks },
+    journeyStatus: 'active',
+    isDeleted: false,
+  }).select('_id truckNo').lean();
+  const queuedQuery = FuelRecord.find({
+    truckNo: { $in: importTrucks },
+    journeyStatus: 'queued',
+    isDeleted: false,
+  }).select('truckNo').lean();
+  if (session) {
+    activeQuery.session(session);
+    queuedQuery.session(session);
+  }
+  const [activeRecords, queuedRecords] = await Promise.all([activeQuery, queuedQuery]);
 
   // Per-truck journey state, seeded from the DB and updated as we build the batch
   const truckState = new Map<string, { activeId: string | null; queuedCount: number }>();
@@ -1132,7 +1202,7 @@ const applyImportFuelRecords = async (
   }
 
   const fuelRecordsToInsert: any[] = [];
-  const linkTargets: Array<{ id: string; truckNo: string; doNumber: string; date: string }> = [];
+  const linkTargets: FuelYardLinkTarget[] = [];
 
   for (const order of importDOs) {
     const routeMatch = matchRouteLiters(routes, order.loadingPoint || '', order.destination);
@@ -1175,25 +1245,22 @@ const applyImportFuelRecords = async (
     }
   }
 
+  // With a session: ordered + rethrow so DO+fuel commit/abort together.
+  // Without a session: ordered:false is safer for bulk partial writes, but still
+  // rethrow so callers never silently keep a DO without its fuel rows.
   try {
-    await FuelRecord.insertMany(fuelRecordsToInsert, { ordered: false });
+    await FuelRecord.insertMany(fuelRecordsToInsert, {
+      ordered: !!session,
+      ...(session ? { session } : {}),
+    });
   } catch (err: any) {
     logger.error('Fuel record insert had errors:', err?.message || err);
+    throw err;
   }
 
-  // Auto-link any pending yard fuel entries, parallelized
-  try {
-    const { linkPendingYardFuelDirect } = await import('./yardFuelController');
-    await Promise.all(
-      linkTargets.map(t =>
-        linkPendingYardFuelDirect(t.id, t.truckNo, t.doNumber, t.date, username).catch(e => {
-          logger.warn(`Yard-fuel auto-link failed for ${t.truckNo}: ${e?.message || e}`);
-          return { linkedCount: 0 };
-        })
-      )
-    );
-  } catch (e: any) {
-    logger.warn('Yard-fuel auto-link step skipped:', e?.message || e);
+  const shouldLinkYard = opts.linkYardFuel ?? !session;
+  if (shouldLinkYard) {
+    await linkYardFuelAfterCommit(linkTargets, username);
   }
 
   const createdFuelDates = fuelRecordsToInsert
@@ -1205,7 +1272,7 @@ const applyImportFuelRecords = async (
     .filter((idv: any) => idv != null)
     .map((idv: any) => String(idv));
 
-  return { queuedCount, lockedNotifs, createdFuelDates, createdFuelIds };
+  return { queuedCount, lockedNotifs, createdFuelDates, createdFuelIds, linkTargets };
 };
 
 /**
@@ -1213,16 +1280,21 @@ const applyImportFuelRecords = async (
  * Each export matches the most recent going record for its truck that has no
  * return DO yet; unmatched exports are returned for notification. Returns the
  * unlinked exports the caller should notify on.
+ *
+ * When `opts.session` is set, updates participate in that transaction and any
+ * bulkWrite failure is rethrown so the caller can roll back the DO(s).
  */
 const applyExportFuelUpdates = async (
   exportDOs: any[],
   routes: RouteLike[],
+  opts: FuelSideEffectOpts = {},
 ): Promise<{ unlinkedExports: UnlinkedExportNotif[]; updatedFuelIds: string[] }> => {
   const unlinkedExports: UnlinkedExportNotif[] = [];
   if (exportDOs.length === 0) return { unlinkedExports, updatedFuelIds: [] };
 
+  const session = opts.session;
   const exportTrucks = [...new Set(exportDOs.map((o: any) => o.truckNo))];
-  const goingRecords = await FuelRecord.find({
+  const goingQuery = FuelRecord.find({
     truckNo: { $in: exportTrucks },
     journeyStatus: 'active',
     isDeleted: false,
@@ -1230,6 +1302,8 @@ const applyExportFuelUpdates = async (
   })
     .sort({ date: -1 })
     .lean();
+  if (session) goingQuery.session(session);
+  const goingRecords = await goingQuery;
 
   // Most recent unmatched going record per truck
   const recordByTruck = new Map<string, any>();
@@ -1253,9 +1327,13 @@ const applyExportFuelUpdates = async (
 
   if (bulkOps.length > 0) {
     try {
-      await FuelRecord.bulkWrite(bulkOps, { ordered: false });
+      await FuelRecord.bulkWrite(bulkOps, {
+        ordered: !!session,
+        ...(session ? { session } : {}),
+      });
     } catch (err: any) {
       logger.error('Fuel record update (export) had errors:', err?.message || err);
+      throw err;
     }
   }
 
@@ -1263,7 +1341,10 @@ const applyExportFuelUpdates = async (
 };
 
 /**
- * Create new delivery order
+ * Create new delivery order.
+ * When fuel automation is ON for this DO (import create / export update), the DO
+ * write and fuel side-effect run in one Mongo transaction — both commit or both
+ * roll back. Notifications and yard-fuel linking run after a successful commit.
  */
 export const createDeliveryOrder = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -1299,73 +1380,94 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         payload.totalAmount = payload.ratePerTon || 0;
       }
     }
-    
-    const deliveryOrder = await DeliveryOrder.create(payload);
 
-    logger.info(`Delivery order created: ${deliveryOrder.doNumber} by ${req.user?.username}`);
-
-    // ── Server-side fuel-record side-effects (previously done in the browser) ──
-    // IMPORT → create a going-journey fuel record. EXPORT → fill the return leg of
-    // the matched going record. SDO → nothing. Each gated by its automation toggle.
     const userId = req.user?.userId || 'system';
     const userRole = req.user?.role;
-    const order = deliveryOrder.toObject() as any;
     let fuelAutomationSkipped: string | null = null;
-    // Fuel-record side-effect ids captured for a precise realtime broadcast.
     let newFuelId: string | undefined;
     let updatedFuelId: string | undefined;
+    let lockedNotifs: LockedFuelNotif[] = [];
+    let yardLinkTargets: FuelYardLinkTarget[] = [];
+    let deliveryOrder: any;
 
-    if (order.doType === 'DO' && (order.importOrExport === 'IMPORT' || order.importOrExport === 'EXPORT')) {
-      const fuelFlags = await getFuelAutomationFlags();
+    const isDoType = payload.doType === 'DO'
+      && (payload.importOrExport === 'IMPORT' || payload.importOrExport === 'EXPORT');
+    const fuelFlags = isDoType ? await getFuelAutomationFlags() : null;
+    const needsImportFuel = !!fuelFlags?.doImportCreate && payload.importOrExport === 'IMPORT';
+    const needsExportFuel = !!fuelFlags?.doExportUpdate && payload.importOrExport === 'EXPORT';
+    const needsAtomicFuel = needsImportFuel || needsExportFuel;
+
+    if (isDoType && !needsImportFuel && payload.importOrExport === 'IMPORT') {
+      fuelAutomationSkipped = 'doImportCreate';
+    } else if (isDoType && !needsExportFuel && payload.importOrExport === 'EXPORT') {
+      fuelAutomationSkipped = 'doExportUpdate';
+    }
+
+    if (needsAtomicFuel) {
+      // Atomic path: DO + fuel succeed or fail together.
+      const session = await mongoose.startSession();
       try {
-        if (order.importOrExport === 'IMPORT') {
-          if (fuelFlags.doImportCreate) {
+        await session.withTransaction(async () => {
+          const created = await DeliveryOrder.create([payload], { session });
+          deliveryOrder = created[0];
+          const order = deliveryOrder.toObject() as any;
+
+          if (needsImportFuel) {
             const { routes, truckBatches, batchDestinationRules: bdr } = await loadFuelConfig();
-            const { lockedNotifs, createdFuelIds } = await applyImportFuelRecords([order], routes, truckBatches, username, bdr);
-            newFuelId = createdFuelIds[0];
-            if (lockedNotifs.length > 0) {
-              const { createMissingConfigNotification } = await import('./notificationController');
-              for (const n of lockedNotifs) {
-                await createMissingConfigNotification(n.id, n.missingFields, { doNumber: n.doNumber, truckNo: n.truckNo, destination: n.destination, truckSuffix: n.truckSuffix }, username, userRole, userId)
-                  .catch(e => logger.warn(`Missing-config notification failed for ${n.doNumber}: ${e?.message || e}`));
-              }
-            }
-          } else {
-            fuelAutomationSkipped = 'doImportCreate';
-          }
-        } else {
-          if (fuelFlags.doExportUpdate) {
+            const importResult = await applyImportFuelRecords(
+              [order], routes, truckBatches, username, bdr, { session },
+            );
+            newFuelId = importResult.createdFuelIds[0];
+            lockedNotifs = importResult.lockedNotifs;
+            yardLinkTargets = importResult.linkTargets;
+          } else if (needsExportFuel) {
             const { routes } = await loadFuelConfig();
-            const { unlinkedExports, updatedFuelIds } = await applyExportFuelUpdates([order], routes);
-            updatedFuelId = updatedFuelIds[0];
-            if (unlinkedExports.length > 0) {
-              const { createUnlinkedExportDONotification } = await import('./notificationController');
-              for (const u of unlinkedExports) {
-                await createUnlinkedExportDONotification(u.id, { doNumber: u.doNumber, truckNo: u.truckNo, destination: u.destination, loadingPoint: u.loadingPoint }, username)
-                  .catch(e => logger.warn(`Unlinked-export notification failed for ${u.doNumber}: ${e?.message || e}`));
-              }
+            const exportResult = await applyExportFuelUpdates([order], routes, { session });
+            if (exportResult.unlinkedExports.length > 0) {
+              // Roll back the DO — automation is on, so an unlinked export is a hard failure.
+              throw new ApiError(
+                422,
+                `Cannot create export DO ${order.doNumber}: no matching active going fuel record for truck ${order.truckNo}. Create/link the going journey first, or turn off export fuel automation.`,
+              );
             }
-          } else {
-            fuelAutomationSkipped = 'doExportUpdate';
+            updatedFuelId = exportResult.updatedFuelIds[0];
           }
-        }
-      } catch (e: any) {
-        // Fuel side-effects must not fail the DO creation; the DO is already saved.
-        logger.error(`Fuel-record side-effect failed for DO ${order.doNumber}: ${e?.message || e}`);
+        });
+      } finally {
+        await session.endSession();
       }
 
+      logger.info(`Delivery order created (atomic fuel): ${deliveryOrder.doNumber} by ${username}`);
+
+      // Post-commit best-effort side-effects (must not undo the committed DO+fuel).
+      await linkYardFuelAfterCommit(yardLinkTargets, username);
+      if (lockedNotifs.length > 0) {
+        const { createMissingConfigNotification } = await import('./notificationController');
+        for (const n of lockedNotifs) {
+          await createMissingConfigNotification(
+            n.id, n.missingFields,
+            { doNumber: n.doNumber, truckNo: n.truckNo, destination: n.destination, truckSuffix: n.truckSuffix },
+            username, userRole, userId,
+          ).catch(e => logger.warn(`Missing-config notification failed for ${n.doNumber}: ${e?.message || e}`));
+        }
+      }
+    } else {
+      // Non-atomic path: automation off (or SDO) — DO only.
+      deliveryOrder = await DeliveryOrder.create(payload);
+      logger.info(`Delivery order created: ${deliveryOrder.doNumber} by ${username}`);
+
       if (fuelAutomationSkipped) {
-        logger.info(`[fuelAutomation] ${fuelAutomationSkipped} OFF — skipping fuel-record side-effect for DO ${order.doNumber}`);
+        logger.info(`[fuelAutomation] ${fuelAutomationSkipped} OFF — skipping fuel-record side-effect for DO ${deliveryOrder.doNumber}`);
         await AuditService.log({
           userId: req.user?.userId,
           username,
-          action: order.importOrExport === 'IMPORT' ? 'CREATE' : 'UPDATE',
+          action: payload.importOrExport === 'IMPORT' ? 'CREATE' : 'UPDATE',
           resourceType: 'FuelRecord',
-          resourceId: order.doNumber,
-          details: `Fuel-record automation SKIPPED for DO ${order.doNumber} — '${fuelAutomationSkipped}' is disabled. Manual fuel-record management required.`,
+          resourceId: deliveryOrder.doNumber,
+          details: `Fuel-record automation SKIPPED for DO ${deliveryOrder.doNumber} — '${fuelAutomationSkipped}' is disabled. Manual fuel-record management required.`,
           ipAddress: req.ip,
           severity: 'high',
-        }).catch((err: any) => logger.warn(`Failed to write audit breadcrumb for skipped fuel automation (DO ${order.doNumber}): ${err?.message}`));
+        }).catch((err: any) => logger.warn(`Failed to write audit breadcrumb for skipped fuel automation (DO ${deliveryOrder.doNumber}): ${err?.message}`));
       }
     }
 
@@ -1501,40 +1603,21 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
     return;
   }
 
-  // ── 3. Insert the delivery orders (one batch write) ────────────────────────
-  let createdDOs: any[] = [];
-  try {
-    createdDOs = await DeliveryOrder.insertMany(normalized, { ordered: false });
-  } catch (err: any) {
-    // ordered:false → valid docs still inserted; collect what failed
-    createdDOs = err.insertedDocs || [];
-    const insertedNumbers = new Set(createdDOs.map((d: any) => d.doNumber));
-    const writeErrors = err.writeErrors || err.result?.result?.writeErrors || [];
-    for (const we of writeErrors) {
-      const failedDoc = we?.err?.op || we?.getOperation?.() || {};
-      failedReasons.push({ truck: `${failedDoc.doType || 'DO'}-${failedDoc.doNumber || '?'} (${failedDoc.truckNo || '?'})`, reason: we?.errmsg || 'Insert failed' });
-    }
-    // Any normalized order not inserted and not already accounted for
-    for (const o of normalized) {
-      if (!insertedNumbers.has(o.doNumber) && !failedReasons.some(f => f.truck.includes(o.doNumber))) {
-        failedReasons.push({ truck: `${o.doType}-${o.doNumber} (${o.truckNo})`, reason: 'Insert failed' });
-      }
-    }
-  }
-
-  // ── 4. Load shared config ONCE (routes + truck batches) ────────────────────
-  const importDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'IMPORT');
-  const exportDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'EXPORT');
-
-  // Per-operation automation toggles. When OFF, the DOs are still created but the
-  // fuel-record build (import) / return-leg update (export) is skipped.
+  // Per-operation automation toggles. When ON, DO writes + fuel side-effects
+  // run in one transaction (both commit or both roll back).
   const fuelFlags = await getFuelAutomationFlags();
   const automationSkips: string[] = [];
+
+  const pendingImport = normalized.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'IMPORT');
+  const pendingExport = normalized.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'EXPORT');
+  const needsImportFuel = pendingImport.length > 0 && fuelFlags.doImportCreate;
+  const needsExportFuel = pendingExport.length > 0 && fuelFlags.doExportUpdate;
+  const needsAtomicFuel = needsImportFuel || needsExportFuel;
 
   let routes: RouteLike[] = [];
   let truckBatches: Record<string, any> = {};
   let batchDestinationRules: Record<string, any> = {};
-  if ((importDOs.length > 0 && fuelFlags.doImportCreate) || (exportDOs.length > 0 && fuelFlags.doExportUpdate)) {
+  if (needsAtomicFuel) {
     const { SystemConfig } = await import('../models/SystemConfig');
     const [routeDocs, batchConfig] = await Promise.all([
       RouteConfig.find({ isActive: true }).lean(),
@@ -1545,34 +1628,145 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
     batchDestinationRules = (batchConfig?.batchDestinationRules as Record<string, any>) || {};
   }
 
+  // When export fuel automation is ON, drop exports that cannot be linked before
+  // the transaction — they become failedReasons instead of orphan DOs.
+  if (needsExportFuel) {
+    const exportTrucks = [...new Set(pendingExport.map((o: any) => o.truckNo))];
+    const goingRecords = await FuelRecord.find({
+      truckNo: { $in: exportTrucks },
+      journeyStatus: 'active',
+      isDeleted: false,
+      $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
+    })
+      .sort({ date: -1 })
+      .select('_id truckNo')
+      .lean();
+    const availableByTruck = new Map<string, string[]>();
+    for (const r of goingRecords) {
+      const list = availableByTruck.get(r.truckNo) || [];
+      list.push(String(r._id));
+      availableByTruck.set(r.truckNo, list);
+    }
+    const claimedIds = new Set<string>();
+    for (let i = normalized.length - 1; i >= 0; i--) {
+      const o = normalized[i];
+      if (!(o.doType === 'DO' && o.importOrExport === 'EXPORT')) continue;
+      const list = availableByTruck.get(o.truckNo) || [];
+      const matchId = list.find(id => !claimedIds.has(id));
+      if (!matchId) {
+        failedReasons.push({
+          truck: `${o.doType}-${o.doNumber} (${o.truckNo})`,
+          reason: 'No matching active going fuel record — DO not created (export fuel automation is on)',
+        });
+        normalized.splice(i, 1);
+      } else {
+        claimedIds.add(matchId);
+      }
+    }
+  }
+
+  if (normalized.length === 0) {
+    res.status(400).json({
+      success: false,
+      message: 'No valid delivery orders to create',
+      data: { createdOrders: [], summary: { totalAttempted: incoming.length, successCount: 0, failedCount: failedReasons.length, queuedCount: 0, failedReasons } },
+    });
+    return;
+  }
+
+  let createdDOs: any[] = [];
   let queuedCount = 0;
   const lockedNotifs: LockedFuelNotif[] = [];
   const unlinkedExports: UnlinkedExportNotif[] = [];
-  // Fuel-record side-effects captured for the realtime broadcast: newly-created
-  // going records (drive the "new records" pill) and export-updated going
-  // records (patched in place on other clients).
   let createdFuelDates: string[] = [];
   let updatedFuelIds: string[] = [];
+  let yardLinkTargets: FuelYardLinkTarget[] = [];
 
-  // ── 5. IMPORT: build + insert going-journey fuel records (shared helper) ────
-  if (importDOs.length > 0 && fuelFlags.doImportCreate) {
-    const importResult = await applyImportFuelRecords(importDOs, routes, truckBatches, username, batchDestinationRules);
-    queuedCount = importResult.queuedCount;
-    lockedNotifs.push(...importResult.lockedNotifs);
-    createdFuelDates = importResult.createdFuelDates;
-  } else if (importDOs.length > 0) {
-    automationSkips.push(`doImportCreate (${importDOs.length} import DO${importDOs.length === 1 ? '' : 's'} — no fuel records created)`);
-    logger.info(`[fuelAutomation] doImportCreate OFF — skipping fuel-record creation for ${importDOs.length} import DO(s)`);
+  if (needsAtomicFuel) {
+    // ── 3–6. Atomic: insert DOs + fuel side-effects in one transaction ───────
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        createdDOs = await DeliveryOrder.insertMany(normalized, { ordered: true, session });
+
+        const importDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'IMPORT');
+        const exportDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'EXPORT');
+
+        if (importDOs.length > 0 && fuelFlags.doImportCreate) {
+          const importResult = await applyImportFuelRecords(
+            importDOs, routes, truckBatches, username, batchDestinationRules, { session },
+          );
+          queuedCount = importResult.queuedCount;
+          lockedNotifs.push(...importResult.lockedNotifs);
+          createdFuelDates = importResult.createdFuelDates;
+          yardLinkTargets = importResult.linkTargets;
+        }
+
+        if (exportDOs.length > 0 && fuelFlags.doExportUpdate) {
+          const exportResult = await applyExportFuelUpdates(exportDOs, routes, { session });
+          if (exportResult.unlinkedExports.length > 0) {
+            // Should be rare after pre-check; fail hard so nothing is left half-written.
+            const sample = exportResult.unlinkedExports
+              .slice(0, 3)
+              .map(u => `${u.doNumber} (${u.truckNo})`)
+              .join(', ');
+            throw new ApiError(
+              422,
+              `Export fuel link failed for ${exportResult.unlinkedExports.length} DO(s) (e.g. ${sample}). Entire batch rolled back.`,
+            );
+          }
+          updatedFuelIds = exportResult.updatedFuelIds;
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    // Post-commit best-effort yard linking
+    await linkYardFuelAfterCommit(yardLinkTargets, username);
+  } else {
+    // ── 3. Non-atomic: automation off (or SDO-only) — DO inserts only ────────
+    try {
+      createdDOs = await DeliveryOrder.insertMany(normalized, { ordered: false });
+    } catch (err: any) {
+      createdDOs = err.insertedDocs || [];
+      const insertedNumbers = new Set(createdDOs.map((d: any) => d.doNumber));
+      const writeErrors = err.writeErrors || err.result?.result?.writeErrors || [];
+      for (const we of writeErrors) {
+        const failedDoc = we?.err?.op || we?.getOperation?.() || {};
+        failedReasons.push({ truck: `${failedDoc.doType || 'DO'}-${failedDoc.doNumber || '?'} (${failedDoc.truckNo || '?'})`, reason: we?.errmsg || 'Insert failed' });
+      }
+      for (const o of normalized) {
+        if (!insertedNumbers.has(o.doNumber) && !failedReasons.some(f => f.truck.includes(o.doNumber))) {
+          failedReasons.push({ truck: `${o.doType}-${o.doNumber} (${o.truckNo})`, reason: 'Insert failed' });
+        }
+      }
+    }
+
+    const importDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'IMPORT');
+    const exportDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'EXPORT');
+    if (importDOs.length > 0) {
+      automationSkips.push(`doImportCreate (${importDOs.length} import DO${importDOs.length === 1 ? '' : 's'} — no fuel records created)`);
+      logger.info(`[fuelAutomation] doImportCreate OFF — skipping fuel-record creation for ${importDOs.length} import DO(s)`);
+    }
+    if (exportDOs.length > 0) {
+      automationSkips.push(`doExportUpdate (${exportDOs.length} export DO${exportDOs.length === 1 ? '' : 's'} — return leg not applied)`);
+      logger.info(`[fuelAutomation] doExportUpdate OFF — skipping return-leg fuel update for ${exportDOs.length} export DO(s)`);
+    }
   }
 
-  // ── 6. EXPORT: update the matching going records with return-leg fuel ───────
-  if (exportDOs.length > 0 && fuelFlags.doExportUpdate) {
-    const exportResult = await applyExportFuelUpdates(exportDOs, routes);
-    unlinkedExports.push(...exportResult.unlinkedExports);
-    updatedFuelIds = exportResult.updatedFuelIds;
-  } else if (exportDOs.length > 0) {
-    automationSkips.push(`doExportUpdate (${exportDOs.length} export DO${exportDOs.length === 1 ? '' : 's'} — return leg not applied)`);
-    logger.info(`[fuelAutomation] doExportUpdate OFF — skipping return-leg fuel update for ${exportDOs.length} export DO(s)`);
+  // Track skipped automation when atomic path only covered one direction
+  if (needsAtomicFuel) {
+    const importDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'IMPORT');
+    const exportDOs = createdDOs.filter((o: any) => o.doType === 'DO' && o.importOrExport === 'EXPORT');
+    if (importDOs.length > 0 && !fuelFlags.doImportCreate) {
+      automationSkips.push(`doImportCreate (${importDOs.length} import DO${importDOs.length === 1 ? '' : 's'} — no fuel records created)`);
+      logger.info(`[fuelAutomation] doImportCreate OFF — skipping fuel-record creation for ${importDOs.length} import DO(s)`);
+    }
+    if (exportDOs.length > 0 && !fuelFlags.doExportUpdate) {
+      automationSkips.push(`doExportUpdate (${exportDOs.length} export DO${exportDOs.length === 1 ? '' : 's'} — return leg not applied)`);
+      logger.info(`[fuelAutomation] doExportUpdate OFF — skipping return-leg fuel update for ${exportDOs.length} export DO(s)`);
+    }
   }
 
   // ── 7. Notifications (parallel; failures are non-fatal) ────────────────────
