@@ -161,16 +161,11 @@ function ipInRange(ip: string, range: string): boolean {
 }
 
 /**
- * Resolve the real client IP.
- *
- * Trusts Express's proxy-aware `req.ip` (the app sets `trust proxy`), which
- * derives the client address from the trusted hop in X-Forwarded-For. The
- * previous code read `req.headers['x-forwarded-for'].split(',')[0]` — the
- * *left-most*, fully client-controlled value — which let an attacker spoof
- * their source IP to satisfy/evade IP-based conditional-access policies.
+ * Resolve the real client IP (Cloudflare Tunnel + nginx).
+ * Prefers CF-Connecting-IP, then trusted proxy-aware resolution via getClientIP.
  */
 function getClientIp(req: Request): string {
-  return req.ip || req.socket?.remoteAddress || 'unknown';
+  return resolveBlocklistIP(req);
 }
 
 // Extend Express Request type

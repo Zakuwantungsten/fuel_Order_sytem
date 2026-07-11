@@ -1,6 +1,7 @@
 import { AuditLog } from '../models/AuditLog';
 import { AuthRequest } from '../middleware/auth';
 import { Request } from 'express';
+import { getClientIP } from './getClientIP';
 
 interface AuditLogOptions {
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'PERMANENT_DELETE' | 'LOGIN' | 'LOGOUT' | 'FAILED_LOGIN' | 'PASSWORD_RESET' | 'CONFIG_CHANGE' | 'BULK_OPERATION' | 'EXPORT' | 'APPROVE' | 'REJECT';
@@ -24,12 +25,7 @@ export const logAudit = async (
     const authReq = req as AuthRequest;
     const user = authReq.user;
 
-    // Extract IP address
-    const ipAddress = 
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      (req.headers['x-real-ip'] as string) ||
-      req.socket?.remoteAddress ||
-      'unknown';
+    const ipAddress = getClientIP(req);
 
     // Extract user agent
     const userAgent = req.headers['user-agent'] || 'unknown';

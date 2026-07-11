@@ -36,6 +36,7 @@ import { runFirewallSeed } from './scripts/seedFirewallDefaults';
 import { backfillFuelMonthKeys } from './scripts/backfillFuelMonthKeys';
 import databaseMonitor from './utils/databaseMonitor';
 import { isPrimaryWorker, getWorkerInstanceId } from './utils/workerRole';
+import { getClientIP } from './utils/getClientIP';
 
 // Validate environment variables
 try {
@@ -51,10 +52,28 @@ try {
 // Create Express app
 const app: Application = express();
 
-app.set('trust proxy', 1);
+// Production hop chain is typically: client → Cloudflare → cloudflared → nginx → Node.
+// Trust 2 hops so Express can peel nginx + cloudflared off X-Forwarded-For.
+// CF-Connecting-IP is still preferred below (Express never reads that header).
+app.set('trust proxy', 2);
 
 // Create HTTP server
 const httpServer = createServer(app);
+
+// Make req.ip reflect the real client behind Cloudflare Tunnel.
+// Without this, audit logs / rate limits / sessions see 127.0.0.1 because
+// cloudflared (and often nginx) connect to Node on localhost.
+app.use((req, _res, next) => {
+  const realIP = getClientIP(req);
+  if (realIP && realIP !== 'unknown') {
+    Object.defineProperty(req, 'ip', {
+      configurable: true,
+      enumerable: true,
+      get: () => realIP,
+    });
+  }
+  next();
+});
 
 // Security middleware
 app.use(helmet({

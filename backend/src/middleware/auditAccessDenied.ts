@@ -18,6 +18,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from './auth';
 import AuditService from '../utils/auditService';
 import logger from '../utils/logger';
+import { getClientIP } from '../utils/getClientIP';
 
 /** Routes that we intentionally skip (e.g. auth login — handled explicitly). */
 const SKIP_PATHS = new Set([
@@ -33,11 +34,7 @@ export function auditAccessDenied(req: Request, res: Response, next: NextFunctio
     if ((status === 401 || status === 403) && !SKIP_PATHS.has(req.path)) {
       const authReq    = req as AuthRequest;
       const user       = authReq.user;
-      const ipAddress  =
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-        (req.headers['x-real-ip'] as string) ||
-        req.socket?.remoteAddress ||
-        'unknown';
+      const ipAddress = getClientIP(req);
 
       // Derive a coarse resource type from the URL path (e.g. /api/v1/admin/users → admin)
       const pathParts   = req.path.replace(/^\/api\/(v\d+\/)?/, '').split('/');
