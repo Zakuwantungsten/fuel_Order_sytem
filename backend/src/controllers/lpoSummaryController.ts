@@ -1224,7 +1224,10 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
         : 'LPO document created successfully',
       data: { ...responseData, id: responseData._id },
     });
-    emitDataChange('lpo_summaries', 'create', lpoSummary.toObject(), lpoSummary.station);
+    emitDataChange('lpo_summaries', 'create', lpoSummary.toObject(), lpoSummary.station, undefined, {
+      id: req.user?.userId,
+      username: req.user?.username,
+    });
     // Atomic path already emitted per-record fuel updates above.
     if (!needsAtomicDeduct) emitDataChange('fuel_records', 'update');
 
@@ -2750,7 +2753,10 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
         entriesForwarded: forwardedEntries.length,
       },
     });
-    emitDataChange('lpo_summaries', 'create');
+    emitDataChange('lpo_summaries', 'create', undefined, undefined, undefined, {
+      id: req.user?.userId,
+      username: req.user?.username,
+    });
     emitDataChange('fuel_records', 'update');
   });
 };
@@ -3029,7 +3035,14 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
     }
   }
   emitDataChange('lpo_summaries', 'update');
-  emitDataChange('lpo_summaries', 'create', createdLpo?.toObject?.() ?? createdLpo, createdLpo?.station);
+  emitDataChange(
+    'lpo_summaries',
+    'create',
+    createdLpo?.toObject?.() ?? createdLpo,
+    createdLpo?.station,
+    undefined,
+    { id: req.user?.userId, username: req.user?.username },
+  );
   if (createdLpo) {
     createLPOCreatedNotification(createdLpo, req.user?.username || 'system').catch(() => {});
   }

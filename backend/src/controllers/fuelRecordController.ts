@@ -728,7 +728,10 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
         : 'Fuel record created successfully',
       data: fuelRecord,
     });
-    emitDataChange('fuel_records', 'create', fuelRecord.toObject());
+    emitDataChange('fuel_records', 'create', fuelRecord.toObject(), undefined, undefined, {
+      id: req.user?.userId,
+      username: req.user?.username,
+    });
   } catch (error: any) {
     throw error;
   }

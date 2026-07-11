@@ -27,7 +27,15 @@ let _sessionEventCallback: ((event: any) => void) | null = null;
 let _maintenanceEventCallback: ((event: any) => void) | null = null;
 let _settingsEventCallback: ((event: any) => void) | null = null;
 let _securityEventCallback: ((event: any) => void) | null = null;
-const _dataChangedCallbacks = new Map<string, (event: { collection: string; action: string; timestamp: number; record?: any }) => void>();
+const _dataChangedCallbacks = new Map<string, (event: {
+  collection: string;
+  action: string;
+  timestamp: number;
+  record?: any;
+  meta?: any;
+  actorId?: string | null;
+  actorUsername?: string | null;
+}) => void>();
 const _lockChangedCallbacks = new Map<string, (event: LockChangeEvent) => void>();
 let _announcementEventCallback: ((event: { action: string; announcement: any; timestamp: number }) => void) | null = null;
 // Fired whenever the socket successfully reconnects so subscribers can reload stale data

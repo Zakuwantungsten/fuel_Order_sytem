@@ -15,7 +15,7 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import QueryErrorState from '../components/QueryErrorState';
 import { exportToXLSXMultiSheet } from '../utils/csvParser';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
-import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useRealtimeSync, isOwnDataChange } from '../hooks/useRealtimeSync';
 import { useEditLockSync } from '../hooks/useEditLockSync';
 import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
 import { NewRecordsPill } from '../components/NewRecordsPill';
@@ -564,6 +564,8 @@ const FuelRecords = () => {
   useRealtimeSync('fuel_records', (event) => {
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
     if (event?.action === 'create') {
+      // Creator already refreshed on mutation success — don't offer "click to load".
+      if (isOwnDataChange(event, user?.id)) return;
       const relevant = countRelevantNewRecords(
         event,
         { visibleRows: records, sortField: 'date', sortOrder: 'desc', page: currentPage, totalPages },

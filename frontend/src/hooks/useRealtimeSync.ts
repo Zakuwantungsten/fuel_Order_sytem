@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { subscribeToDataChanges, unsubscribeFromDataChanges } from '../services/websocket';
+import { useAuth } from '../contexts/AuthContext';
 import { lpoKeys } from './useLPOs';
 import { deliveryOrderKeys } from './useDeliveryOrders';
 import { fuelRecordKeys } from './useFuelRecords';
@@ -31,6 +32,18 @@ export interface DataChangeEvent {
   timestamp: number;
   record?: any;
   meta?: BulkChangeMeta | null;
+  /** Mongo userId of whoever triggered the change (when known). */
+  actorId?: string | null;
+  actorUsername?: string | null;
+}
+
+/** True when this event was caused by the signed-in user (creator echo). */
+export function isOwnDataChange(
+  event: Pick<DataChangeEvent, 'actorId'> | null | undefined,
+  userId: string | number | null | undefined,
+): boolean {
+  if (!event?.actorId || userId == null || userId === '') return false;
+  return String(event.actorId) === String(userId);
 }
 
 /**
@@ -177,10 +190,15 @@ export function useRealtimeSync(
   options?: string | { id?: string; deferCreates?: boolean }
 ) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const refreshRef = useRef(onRefresh);
+  const userIdRef = useRef(user?.id);
   useEffect(() => {
     refreshRef.current = onRefresh;
   });
+  useEffect(() => {
+    userIdRef.current = user?.id;
+  }, [user?.id]);
 
   const opts = typeof options === 'string' ? { id: options } : (options || {});
   const deferCreates = opts.deferCreates === true;
@@ -193,6 +211,8 @@ export function useRealtimeSync(
       if (!cols.includes(event.collection)) return;
 
       const keyFactory = COLLECTION_QUERY_KEYS[event.collection];
+      const typedEvent = event as DataChangeEvent;
+      const isOwn = isOwnDataChange(typedEvent, userIdRef.current);
 
       if (event.action === 'update' && event.record) {
         // A cross-entity cascade may touch several rows at once, so the payload
@@ -231,13 +251,20 @@ export function useRealtimeSync(
           );
         }
 
-        refreshRef.current(event as DataChangeEvent);
+        refreshRef.current(typedEvent);
         return;
       }
 
       // create / delete.
       if (keyFactory) {
-        if (deferCreates) {
+        if (deferCreates && isOwn) {
+          // Own create/delete: the originating tab already invalidated on mutation
+          // success. Still schedule a coalesced refetch so *other tabs of the same
+          // user* pick up the rows without needing the "click to load" pill.
+          keyFactory().forEach((key: ReadonlyArray<unknown>) =>
+            scheduleInvalidate(queryClient, key)
+          );
+        } else if (deferCreates) {
           // Don't disturb the active table: mark every matching cache stale
           // (so switching filter/page/month later loads fresh) but refetch
           // nothing now. The page's onRefresh decides whether to show a
@@ -263,7 +290,7 @@ export function useRealtimeSync(
         }
       }
 
-      refreshRef.current(event as DataChangeEvent);
+      refreshRef.current(typedEvent);
     }, subId);
 
     return () => {

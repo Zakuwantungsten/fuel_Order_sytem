@@ -343,20 +343,40 @@ export interface BulkChangeMeta {
   doType?: string[];             // distinct DO/SDO values present (delivery orders)
 }
 
+/** Who triggered the change — clients use this to skip the "click to load" pill for their own creates. */
+export type DataChangeActor =
+  | string
+  | { id?: string | null; username?: string | null }
+  | null
+  | undefined;
+
+function resolveActor(actor?: DataChangeActor): { actorId: string | null; actorUsername: string | null } {
+  if (!actor) return { actorId: null, actorUsername: null };
+  if (typeof actor === 'string') return { actorId: actor, actorUsername: null };
+  return {
+    actorId: actor.id != null && actor.id !== '' ? String(actor.id) : null,
+    actorUsername: actor.username ?? null,
+  };
+}
+
 export const emitDataChange = (
   collection: string,
   action: 'create' | 'update' | 'delete' = 'update',
   changedDocument?: Record<string, any>,
   station?: string,
-  meta?: BulkChangeMeta
+  meta?: BulkChangeMeta,
+  actor?: DataChangeActor
 ): void => {
   if (!io) return;
+  const { actorId, actorUsername } = resolveActor(actor);
   io.emit('data_changed', {
     collection,
     action,
     timestamp: Date.now(),
     record: changedDocument ?? null,
     meta: meta ?? null,
+    actorId,
+    actorUsername,
     station: station ?? changedDocument?.station ?? null,
     isCustomStation:
       changedDocument?.isCustomStation === true ||

@@ -19,7 +19,7 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import QueryErrorState from '../components/QueryErrorState';
 import { useTruckBatches } from '../hooks/useTruckBatches';
 import { useRoutes } from '../hooks/useRoutes';
-import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useRealtimeSync, isOwnDataChange } from '../hooks/useRealtimeSync';
 import { useEditLockSync } from '../hooks/useEditLockSync';
 import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
 import { NewRecordsPill } from '../components/NewRecordsPill';
@@ -473,6 +473,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('DO') });
     queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('SDO') });
     if (activeTab !== 'list') return; // pill only applies to the list table
+    // Creator already refreshed on mutation success — don't offer "click to load".
+    if (isOwnDataChange(event, authUser?.id)) return;
     const relevant = countRelevantNewRecords(
       event,
       { visibleRows: orders, sortField: 'date', sortOrder: 'desc', page: currentPage, totalPages },

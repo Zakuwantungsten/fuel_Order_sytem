@@ -1524,13 +1524,14 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         : 'Delivery order created successfully',
       data: deliveryOrder,
     });
-    emitDataChange('delivery_orders', 'create', deliveryOrder.toObject());
+    const actor = { id: req.user?.userId, username };
+    emitDataChange('delivery_orders', 'create', deliveryOrder.toObject(), undefined, undefined, actor);
     // IMPORT created a new going fuel record → 'create' so viewers can offer to
     // load it. EXPORT updated an existing record → patch it in place silently.
     if (newFuelId) {
       try {
         const rec = await FuelRecord.findById(newFuelId).lean();
-        if (rec) emitDataChange('fuel_records', 'create', rec as Record<string, any>);
+        if (rec) emitDataChange('fuel_records', 'create', rec as Record<string, any>, undefined, undefined, actor);
       } catch { /* non-fatal */ }
     } else if (updatedFuelId) {
       await emitFuelRecordChange(updatedFuelId);
@@ -1859,11 +1860,13 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
 
   // New DOs → 'create' with scope meta so viewers can show a precise
   // "N new records — click to load" affordance instead of a silent refetch.
-  emitDataChange('delivery_orders', 'create', undefined, undefined, buildBulkMeta(createdDOs));
+  // Tag the actor so the creator's own tab(s) skip the pill (they already refetch).
+  const actor = { id: userId, username };
+  emitDataChange('delivery_orders', 'create', undefined, undefined, buildBulkMeta(createdDOs), actor);
 
   // New going fuel records (import) → 'create' with date scope meta.
   if (createdFuelDates.length > 0) {
-    emitDataChange('fuel_records', 'create', undefined, undefined, buildBulkMeta(createdFuelDates.map(date => ({ date }))));
+    emitDataChange('fuel_records', 'create', undefined, undefined, buildBulkMeta(createdFuelDates.map(date => ({ date }))), actor);
   }
   // Export return-leg updates hit existing rows → patch them in place silently.
   if (updatedFuelIds.length > 0) {

@@ -1280,12 +1280,13 @@ export const importExcel = async (req: ImportRequest, res: Response): Promise<vo
         return acc;
       }, {} as Record<string, { inserted: number; updated: number }>);
 
+      const emitActor = { id: req.user?.userId, username: req.user?.username };
       const emitFor = (collection: string, type: SheetType) => {
         const stats = byType[type];
         if (!stats) return;
         if (stats.inserted > 0) {
           const meta: BulkChangeMeta = { bulk: true, count: stats.inserted };
-          emitDataChange(collection, 'create', undefined, undefined, meta);
+          emitDataChange(collection, 'create', undefined, undefined, meta, emitActor);
         } else if (stats.updated > 0) {
           emitDataChange(collection, 'update');
         }

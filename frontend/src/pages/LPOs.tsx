@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2, Truck } from 'lucide-react';
-import { useRealtimeSync } from '../hooks/useRealtimeSync';
+import { useRealtimeSync, isOwnDataChange } from '../hooks/useRealtimeSync';
 import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
 import { NewRecordsPill } from '../components/NewRecordsPill';
 import { countRelevantNewRecords } from '../utils/realtimeRelevance';
@@ -513,6 +513,8 @@ const LPOs = () => {
     queryClient.invalidateQueries({ queryKey: lpoKeys.availableFilters() });
     queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
     if (event?.action !== 'create') return;
+    // Creator already refreshed on mutation success — don't offer "click to load".
+    if (isOwnDataChange(event, user?.id)) return;
     const dr = periodsToDateRange(selectedPeriods);
     const fromT = dr.dateFrom ? new Date(dr.dateFrom).getTime() : -Infinity;
     const toT = dr.dateTo ? new Date(dr.dateTo).getTime() : Infinity;
