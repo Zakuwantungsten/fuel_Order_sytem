@@ -62,51 +62,58 @@ export function determineJourneyStart(loadingPoint?: string): 'TANGA' | 'DAR' {
   return (loadingPoint || '').toLowerCase().includes('tanga') ? 'TANGA' : 'DAR';
 }
 
+/**
+ * Origin equality for route matching.
+ * Exact match, or either string contains the other (e.g. "TANGA TANGA" ↔ "TANGA").
+ */
+export function originsMatch(a?: string, b?: string): boolean {
+  const na = (a || '').toUpperCase().trim();
+  const nb = (b || '').toUpperCase().trim();
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  return na.includes(nb) || nb.includes(na);
+}
+
+function destinationMatchesRoute(route: RouteLike, normalizedDest: string): 'exact' | 'alias' | null {
+  if (route.destination.toUpperCase().trim() === normalizedDest) return 'exact';
+  if (route.destinationAliases?.some((alias) => alias.toUpperCase().trim() === normalizedDest)) {
+    return 'alias';
+  }
+  return null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// IMPORT (going) total-liters matching — ports getTotalLitersFromRoutes()
-// Destination-only matching: exact → alias → partial. No routeType filtering,
-// matching the original client behaviour exactly.
+// IMPORT (going) total-liters matching
+// Requires origin + destination (or origin + destination alias). No dest-only,
+// partial, or fuzzy fallback — unmatched routes leave liters unset/locked.
 // ─────────────────────────────────────────────────────────────────────────────
 export function matchRouteLiters(
   routes: RouteLike[] | undefined,
+  origin: string,
   destination: string
 ): { liters: number; matched: boolean; matchType?: string; routeName?: string } {
   if (!routes || routes.length === 0) return { liters: 0, matched: false };
 
+  const normalizedOrig = (origin || '').toUpperCase().trim();
   const normalizedDest = (destination || '').toUpperCase().trim();
+  if (!normalizedOrig || !normalizedDest) return { liters: 0, matched: false };
 
-  // Exact destination match
-  const exactMatch = routes.find(
-    (route) => route.isActive && route.destination.toUpperCase() === normalizedDest
-  );
-  if (exactMatch) {
-    return { liters: exactMatch.defaultTotalLiters, matched: true, matchType: 'exact', routeName: exactMatch.destination };
-  }
+  const match = routes.find((route) => {
+    if (route.isActive === false) return false;
+    if (route.routeType && route.routeType !== 'IMPORT') return false;
+    if (!originsMatch(route.origin, normalizedOrig)) return false;
+    return destinationMatchesRoute(route, normalizedDest) !== null;
+  });
 
-  // Alias match
-  for (const route of routes) {
-    if (route.isActive && route.destinationAliases) {
-      const aliasMatch = route.destinationAliases.find(
-        (alias) => alias.toUpperCase() === normalizedDest
-      );
-      if (aliasMatch) {
-        return { liters: route.defaultTotalLiters, matched: true, matchType: 'alias', routeName: route.destination };
-      }
-    }
-  }
+  if (!match) return { liters: 0, matched: false };
 
-  // Partial match (either contains the other)
-  const partialMatch = routes.find(
-    (route) =>
-      route.isActive &&
-      (route.destination.toUpperCase().includes(normalizedDest) ||
-        normalizedDest.includes(route.destination.toUpperCase()))
-  );
-  if (partialMatch) {
-    return { liters: partialMatch.defaultTotalLiters, matched: true, matchType: 'partial', routeName: partialMatch.destination };
-  }
-
-  return { liters: 0, matched: false };
+  const matchType = destinationMatchesRoute(match, normalizedDest) || 'exact';
+  return {
+    liters: match.defaultTotalLiters,
+    matched: true,
+    matchType,
+    routeName: `${match.origin || normalizedOrig} → ${match.destination}`,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,90 +247,36 @@ export function buildImportFuelRecord(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXPORT (return) route matching — ports getTotalLitersByRoute(...,'EXPORT')
-// Origin+destination matching with exact → dest-only → partial → fuzzy → default.
+// EXPORT (return) route matching
+// Requires origin + destination (or origin + destination alias). No dest-only,
+// partial, fuzzy, or default-liters fallback.
 // ─────────────────────────────────────────────────────────────────────────────
-function levenshteinDistance(str1: string, str2: string): number {
-  const len1 = str1.length;
-  const len2 = str2.length;
-  const matrix: number[][] = [];
-  for (let i = 0; i <= len1; i++) matrix[i] = [i];
-  for (let j = 0; j <= len2; j++) matrix[0][j] = j;
-  for (let i = 1; i <= len1; i++) {
-    for (let j = 1; j <= len2; j++) {
-      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
-    }
-  }
-  return matrix[len1][len2];
-}
-
-function calculateSimilarity(str1: string, str2: string): number {
-  const maxLength = Math.max(str1.length, str2.length);
-  if (maxLength === 0) return 1.0;
-  return 1 - levenshteinDistance(str1, str2) / maxLength;
-}
-
 export function matchExportRouteLiters(
   routes: RouteLike[] | undefined,
   origin: string,
   destination: string
-): { liters: number; matched: boolean; matchType: 'exact' | 'partial' | 'fuzzy' | 'default'; matchedRoute?: string } {
+): { liters: number; matched: boolean; matchType: 'exact' | 'alias' | 'none'; matchedRoute?: string } {
   const dbRoutes = (routes || []).filter((r) => r.routeType === 'EXPORT');
   const orig = (origin || '').toUpperCase().trim();
   const dest = (destination || '').toUpperCase().trim();
 
-  if (!dest) return { liters: 0, matched: false, matchType: 'default' };
+  if (!orig || !dest) return { liters: 0, matched: false, matchType: 'none' };
 
-  // 1. Exact: origin AND destination
-  if (orig) {
-    const exactMatch = dbRoutes.find(
-      (route) =>
-        route.isActive &&
-        route.origin?.toUpperCase().trim() === orig &&
-        (route.destination.toUpperCase().trim() === dest ||
-          route.destinationAliases?.some((alias) => alias.toUpperCase().trim() === dest))
-    );
-    if (exactMatch) {
-      return { liters: exactMatch.defaultTotalLiters, matched: true, matchType: 'exact', matchedRoute: `${exactMatch.origin} → ${exactMatch.destination}` };
-    }
-  }
+  const match = dbRoutes.find((route) => {
+    if (route.isActive === false) return false;
+    if (!originsMatch(route.origin, orig)) return false;
+    return destinationMatchesRoute(route, dest) !== null;
+  });
 
-  // 2. Destination-only
-  const destMatch = dbRoutes.find(
-    (route) =>
-      route.isActive &&
-      (route.destination.toUpperCase().trim() === dest ||
-        route.destinationAliases?.some((alias) => alias.toUpperCase().trim() === dest))
-  );
-  if (destMatch) {
-    return { liters: destMatch.defaultTotalLiters, matched: true, matchType: orig ? 'partial' : 'exact', matchedRoute: destMatch.destination };
-  }
+  if (!match) return { liters: 0, matched: false, matchType: 'none' };
 
-  // 3. Partial: destination contains route name
-  const partialMatch = dbRoutes.find(
-    (route) => route.isActive && dest.includes(route.destination.toUpperCase().trim())
-  );
-  if (partialMatch) {
-    return { liters: partialMatch.defaultTotalLiters, matched: true, matchType: 'partial', matchedRoute: partialMatch.destination };
-  }
-
-  // 4. Fuzzy (>= 0.6 similarity)
-  const suggestions: Array<{ route: string; liters: number; similarity: number }> = [];
-  for (const route of dbRoutes) {
-    if (!route.isActive) continue;
-    const similarity = calculateSimilarity(dest, route.destination.toUpperCase());
-    if (similarity >= 0.6) {
-      suggestions.push({ route: route.destination, liters: route.defaultTotalLiters, similarity });
-    }
-  }
-  suggestions.sort((a, b) => b.similarity - a.similarity);
-  if (suggestions.length > 0) {
-    return { liters: suggestions[0].liters, matched: true, matchType: 'fuzzy', matchedRoute: suggestions[0].route };
-  }
-
-  // 5. Default fallback
-  return { liters: 0, matched: false, matchType: 'default' };
+  const matchType = destinationMatchesRoute(match, dest) || 'exact';
+  return {
+    liters: match.defaultTotalLiters,
+    matched: true,
+    matchType,
+    matchedRoute: `${match.origin} → ${match.destination}`,
+  };
 }
 
 /**

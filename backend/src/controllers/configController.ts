@@ -10,6 +10,7 @@ import { FuelPriceHistory } from '../models/FuelPrice';
 import { emitDataChange } from '../services/websocket';
 import { syncConfigNotifications } from './notificationController';
 import logger from '../utils/logger';
+import { originsMatch } from '../utils/fuelRecordCalculator';
 
 /**
  * Add cache-busting headers to force immediate frontend refresh
@@ -55,6 +56,7 @@ async function autoFillFuelRecordsForRoute(route: any, username: string): Promis
     if (!route.isActive || !route.defaultTotalLiters) return;
 
     const destination = route.destination.toUpperCase();
+    const routeOrigin = route.origin || '';
 
     // Find locked fuel records waiting for this route's totalLiters
     const lockedRecords = await FuelRecord.find({
@@ -68,13 +70,13 @@ async function autoFillFuelRecordsForRoute(route: any, username: string): Promis
 
     for (const record of lockedRecords) {
       const recordDest = (record.to || '').toUpperCase().trim();
+      const recordOrigin = record.from || record.start || '';
 
-      // Match by exact destination, alias, or partial match (same logic as frontend)
-      const isMatch =
+      // Require origin + destination (or alias). No dest-only / partial fallback.
+      const destMatch =
         recordDest === destination ||
-        (route.destinationAliases || []).some((alias: string) => alias.toUpperCase() === recordDest) ||
-        destination.includes(recordDest) ||
-        recordDest.includes(destination);
+        (route.destinationAliases || []).some((alias: string) => alias.toUpperCase() === recordDest);
+      const isMatch = destMatch && originsMatch(recordOrigin, routeOrigin);
 
       if (!isMatch) continue;
 
@@ -125,7 +127,7 @@ async function autoFillFuelRecordsForRoute(route: any, username: string): Promis
 
     if (updatedCount > 0) {
       emitDataChange('fuel_records', 'update');
-      logger.info(`Route "${route.destination}" configured — auto-filled ${updatedCount} locked fuel record(s)`);
+      logger.info(`Route "${route.origin} → ${route.destination}" configured — auto-filled ${updatedCount} locked fuel record(s)`);
     }
   } catch (error) {
     logger.error('Failed to auto-fill fuel records for route:', error);
@@ -568,28 +570,39 @@ export const getRoutes = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Find route by destination or alias
- * GET /api/system-admin/config/routes/find/:destination
+ * Find route by origin + destination (or alias)
+ * GET /api/system-admin/config/routes/find/:destination?origin=TANGA
  */
 export const findRouteByDestination = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { destination } = req.params;
+    const origin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
     const normalizedDest = destination.trim().toUpperCase();
-    
-    // Try to find by destination or alias
-    const route = await RouteConfig.findOne({
+
+    if (!origin) {
+      res.status(400).json({
+        success: false,
+        message: 'Query parameter "origin" is required for route lookup',
+      });
+      return;
+    }
+
+    const candidates = await RouteConfig.find({
       $or: [
         { destination: normalizedDest },
         { destinationAliases: normalizedDest }
       ],
       isActive: true
     }).lean();
+
+    const route = candidates.find((r) => originsMatch(r.origin, origin));
     
     if (!route) {
       res.status(404).json({
         success: false,
         message: 'Route not found',
       });
+      return;
     }
     
     res.json({

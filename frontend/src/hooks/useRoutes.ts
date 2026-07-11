@@ -116,11 +116,12 @@ export function useDeleteRoute() {
 }
 
 /**
- * Helper function to get total liters from routes data
- * Replaces FuelConfigService.getTotalLitersByRoute()
+ * Helper function to get total liters from routes data.
+ * Requires origin + destination (or origin + destination alias). No dest-only fallback.
  */
 export function getTotalLitersFromRoutes(
   routes: any[] | undefined,
+  origin: string,
   destination: string
 ): {
   liters: number;
@@ -132,58 +133,44 @@ export function getTotalLitersFromRoutes(
     return { liters: 0, matched: false };
   }
 
-  const normalizedDest = destination.toUpperCase().trim();
-
-  // Try exact match first
-  const exactMatch = routes.find(
-    route => route.isActive && route.destination.toUpperCase() === normalizedDest
-  );
-
-  if (exactMatch) {
-    return {
-      liters: exactMatch.defaultTotalLiters,
-      matched: true,
-      matchType: 'exact',
-      routeName: exactMatch.destination,
-    };
+  const normalizedOrig = (origin || '').toUpperCase().trim();
+  const normalizedDest = (destination || '').toUpperCase().trim();
+  if (!normalizedOrig || !normalizedDest) {
+    return { liters: 0, matched: false };
   }
 
-  // Try alias match
-  for (const route of routes) {
-    if (route.isActive && route.destinationAliases) {
-      const aliasMatch = route.destinationAliases.find(
-        (alias: string) => alias.toUpperCase() === normalizedDest
-      );
-      if (aliasMatch) {
-        return {
-          liters: route.defaultTotalLiters,
-          matched: true,
-          matchType: 'alias',
-          routeName: route.destination,
-        };
-      }
-    }
+  const originsMatch = (a?: string, b?: string): boolean => {
+    const na = (a || '').toUpperCase().trim();
+    const nb = (b || '').toUpperCase().trim();
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    return na.includes(nb) || nb.includes(na);
+  };
+
+  const match = routes.find((route) => {
+    if (route.isActive === false) return false;
+    if (route.routeType && route.routeType !== 'IMPORT') return false;
+    if (!originsMatch(route.origin, normalizedOrig)) return false;
+    const destExact = route.destination.toUpperCase().trim() === normalizedDest;
+    const destAlias = route.destinationAliases?.some(
+      (alias: string) => alias.toUpperCase().trim() === normalizedDest
+    );
+    return destExact || destAlias;
+  });
+
+  if (!match) {
+    return { liters: 0, matched: false };
   }
 
-  // Try partial match
-  const partialMatch = routes.find(
-    route => 
-      route.isActive &&
-      (route.destination.toUpperCase().includes(normalizedDest) ||
-       normalizedDest.includes(route.destination.toUpperCase()))
-  );
+  const matchType =
+    match.destination.toUpperCase().trim() === normalizedDest ? 'exact' : 'alias';
 
-  if (partialMatch) {
-    return {
-      liters: partialMatch.defaultTotalLiters,
-      matched: true,
-      matchType: 'partial',
-      routeName: partialMatch.destination,
-    };
-  }
-
-  // Not found
-  return { liters: 0, matched: false };
+  return {
+    liters: match.defaultTotalLiters,
+    matched: true,
+    matchType,
+    routeName: `${match.origin || normalizedOrig} → ${match.destination}`,
+  };
 }
 
 /**
@@ -192,13 +179,14 @@ export function getTotalLitersFromRoutes(
  */
 export function getDoConfiguration(params: {
   destination: string;
+  loadingPoint: string;
   truckNo: string;
   routes: any[] | undefined;
   batches: any | undefined;
 }) {
-  const { destination, truckNo, routes, batches } = params;
+  const { destination, loadingPoint, truckNo, routes, batches } = params;
 
-  const routeInfo = getTotalLitersFromRoutes(routes, destination);
+  const routeInfo = getTotalLitersFromRoutes(routes, loadingPoint, destination);
   
   // Import getExtraFuelFromBatches to avoid circular dependency
   const truckSuffix = truckNo.toLowerCase().split(' ').pop() || '';

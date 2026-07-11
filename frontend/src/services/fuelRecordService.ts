@@ -437,16 +437,10 @@ export async function updateFuelRecordWithReturnDO(
   // Based on the loading point (from) to the final destination using database routes
   // Filter by EXPORT routes only to get the correct return journey fuel allocation
   const destinationMatch = await FuelConfigService.getTotalLitersByRoute(returnLoadingPoint, finalDestination, 'EXPORT');
-  const exportRouteLiters = destinationMatch.liters;
+  const exportRouteLiters = destinationMatch.matched ? destinationMatch.liters : 0;
   
-  // Log if destination was not found or fuzzy matched
   if (!destinationMatch.matched) {
-    console.warn(`⚠️ EXPORT route "${returnLoadingPoint} → ${finalDestination}" not in configured routes. Using default ${exportRouteLiters}L`);
-    if (destinationMatch.suggestions && destinationMatch.suggestions.length > 0) {
-      console.log('  Suggestions:', destinationMatch.suggestions.map(s => `${s.route} (${s.liters}L)`).join(', '));
-    }
-  } else if (destinationMatch.matchType === 'fuzzy') {
-    console.log(`🔍 Fuzzy matched EXPORT route "${returnLoadingPoint} → ${finalDestination}" → "${destinationMatch.matchedRoute}" (${exportRouteLiters}L)`);
+    console.warn(`⚠️ EXPORT route "${returnLoadingPoint} → ${finalDestination}" not in configured routes. No liters added.`);
   } else {
     console.log(`✓ Found EXPORT route "${returnLoadingPoint} → ${finalDestination}": ${exportRouteLiters}L`);
   }

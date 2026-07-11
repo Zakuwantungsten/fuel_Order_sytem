@@ -195,20 +195,19 @@ const cascadeUpdateToFuelRecord = async (
         updates.to = updatedData.destination;
         changes.push(`Destination (to): ${originalDO.destination} â†’ ${updatedData.destination}`);
         
-        // Recalculate totalLts for the new route (from â†’ new destination)
-        const newRoute = await RouteConfig.findOne({
-          destination: { $regex: new RegExp(`^${updatedData.destination}$`, 'i') },
-          isActive: true,
-        });
+        // Recalculate totalLts for the new route (origin + new destination — no dest-only fallback)
+        const importOrigin = updatedData.loadingPoint || originalDO.loadingPoint || fuelRecord.from || '';
+        const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
+        const routeMatch = matchRouteLiters(activeRoutes, importOrigin, updatedData.destination);
         
-        if (newRoute) {
+        if (routeMatch.matched) {
           const oldTotalLts = fuelRecord.totalLts || 0;
-          updates.totalLts = newRoute.defaultTotalLiters;
+          updates.totalLts = routeMatch.liters;
           updates.isLocked = false; // Unlock if route is now found
           updates.pendingConfigReason = null;
           
           // Recalculate balance with new totalLts
-          const totalFuel = newRoute.defaultTotalLiters + (fuelRecord.extra || 0);
+          const totalFuel = routeMatch.liters + (fuelRecord.extra || 0);
           const totalCheckpoints = (
             Math.abs(fuelRecord.mmsaYard || 0) +
             Math.abs(fuelRecord.tangaYard || 0) +
@@ -229,21 +228,21 @@ const cascadeUpdateToFuelRecord = async (
           );
           updates.balance = totalFuel - totalCheckpoints;
           
-          changes.push(`Total Liters: ${oldTotalLts}L â†’ ${newRoute.defaultTotalLiters}L (route updated)`);
+          changes.push(`Total Liters: ${oldTotalLts}L → ${routeMatch.liters}L (route updated)`);
           changes.push(`Balance recalculated: ${updates.balance}L`);
-          logger.info(`Recalculated totalLts and balance for IMPORT DO ${originalDO.doNumber}: ${oldTotalLts}L â†’ ${newRoute.defaultTotalLiters}L, balance: ${updates.balance}L`);
+          logger.info(`Recalculated totalLts and balance for IMPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${routeMatch.liters}L, balance: ${updates.balance}L`);
         } else {
           // Route not found - set totalLts to null and lock the record
           const oldTotalLts = fuelRecord.totalLts || 0;
           updates.totalLts = null;
           updates.isLocked = true;
           updates.pendingConfigReason = 'missing_total_liters';
-          changes.push(`Total Liters: ${oldTotalLts}L â†’ NULL (route not found in database)`);
-          logger.warn(`âš ï¸ Route not found for destination "${updatedData.destination}" - fuel record locked, notification will be created`);
+          changes.push(`Total Liters: ${oldTotalLts}L → NULL (route not found in database)`);
+          logger.warn(`⚠️ Route not found for ${importOrigin} → ${updatedData.destination} - fuel record locked, notification will be created`);
           
           // Mark that we need to create notification (will be handled in the main update function)
           (updates as any)._needsRouteNotification = {
-            destination: updatedData.destination,
+            destination: `${importOrigin} → ${updatedData.destination}`,
             doNumber: originalDO.doNumber,
             truckNo: fuelRecord.truckNo,
             fuelRecordId: fuelRecord._id.toString(),
@@ -253,25 +252,20 @@ const cascadeUpdateToFuelRecord = async (
         }
       } else {
         updates.from = updatedData.destination;
-        changes.push(`Destination (from): ${originalDO.destination} â†’ ${updatedData.destination}`);
+        changes.push(`Destination (from): ${originalDO.destination} → ${updatedData.destination}`);
         
-        // For EXPORT, recalculate return journey totalLts (new destination â†’ to)
-        const returnRoute = await RouteConfig.findOne({
-          $or: [
-            { origin: { $regex: new RegExp(`^${updatedData.destination}$`, 'i') }, destination: { $regex: new RegExp(`^${fuelRecord.to}$`, 'i') } },
-            { destination: { $regex: new RegExp(`^${fuelRecord.to}$`, 'i') } } // Fallback to destination-only match
-          ],
-          isActive: true,
-        });
+        // For EXPORT, recalculate return journey totalLts (new origin → to) — no dest-only fallback
+        const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
+        const returnMatch = matchExportRouteLiters(activeRoutes, updatedData.destination, fuelRecord.to || '');
         
-        if (returnRoute) {
+        if (returnMatch.matched) {
           const oldTotalLts = fuelRecord.totalLts || 0;
-          updates.totalLts = returnRoute.defaultTotalLiters;
+          updates.totalLts = returnMatch.liters;
           updates.isLocked = false; // Unlock if route is now found
           updates.pendingConfigReason = null;
           
           // Recalculate balance with new totalLts
-          const totalFuel = returnRoute.defaultTotalLiters + (fuelRecord.extra || 0);
+          const totalFuel = returnMatch.liters + (fuelRecord.extra || 0);
           const totalCheckpoints = (
             Math.abs(fuelRecord.mmsaYard || 0) +
             Math.abs(fuelRecord.tangaYard || 0) +
@@ -292,21 +286,21 @@ const cascadeUpdateToFuelRecord = async (
           );
           updates.balance = totalFuel - totalCheckpoints;
           
-          changes.push(`Total Liters: ${oldTotalLts}L â†’ ${returnRoute.defaultTotalLiters}L (return route updated)`);
+          changes.push(`Total Liters: ${oldTotalLts}L → ${returnMatch.liters}L (return route updated)`);
           changes.push(`Balance recalculated: ${updates.balance}L`);
-          logger.info(`Recalculated totalLts and balance for EXPORT DO ${originalDO.doNumber}: ${oldTotalLts}L â†’ ${returnRoute.defaultTotalLiters}L, balance: ${updates.balance}L`);
+          logger.info(`Recalculated totalLts and balance for EXPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${returnMatch.liters}L, balance: ${updates.balance}L`);
         } else {
           // Return route not found - set totalLts to null and lock the record
           const oldTotalLts = fuelRecord.totalLts || 0;
           updates.totalLts = null;
           updates.isLocked = true;
           updates.pendingConfigReason = 'missing_total_liters';
-          changes.push(`Total Liters: ${oldTotalLts}L â†’ NULL (return route not found in database)`);
-          logger.warn(`âš ï¸ Return route not found from "${updatedData.destination}" to "${fuelRecord.to}" - fuel record locked, notification will be created`);
+          changes.push(`Total Liters: ${oldTotalLts}L → NULL (return route not found in database)`);
+          logger.warn(`⚠️ Return route not found from "${updatedData.destination}" to "${fuelRecord.to}" - fuel record locked, notification will be created`);
           
           // Mark that we need to create notification
           (updates as any)._needsRouteNotification = {
-            destination: `${updatedData.destination} â†’ ${fuelRecord.to}`,
+            destination: `${updatedData.destination} → ${fuelRecord.to}`,
             doNumber: originalDO.doNumber,
             truckNo: fuelRecord.truckNo,
             fuelRecordId: fuelRecord._id.toString(),
@@ -322,25 +316,21 @@ const cascadeUpdateToFuelRecord = async (
     if (updatedData.loadingPoint && updatedData.loadingPoint !== originalDO.loadingPoint) {
       if (originalDO.importOrExport === 'IMPORT') {
         updates.from = updatedData.loadingPoint;
-        changes.push(`Loading Point (from): ${originalDO.loadingPoint} â†’ ${updatedData.loadingPoint}`);
+        changes.push(`Loading Point (from): ${originalDO.loadingPoint} → ${updatedData.loadingPoint}`);
         
-        // Recalculate totalLts for new route (new loading point â†’ destination)
-        const newRoute = await RouteConfig.findOne({
-          $or: [
-            { origin: { $regex: new RegExp(`^${updatedData.loadingPoint}$`, 'i') }, destination: { $regex: new RegExp(`^${fuelRecord.to}$`, 'i') } },
-            { destination: { $regex: new RegExp(`^${fuelRecord.to}$`, 'i') } } // Fallback to destination-only match
-          ],
-          isActive: true,
-        });
+        // Recalculate totalLts for new route (new loading point → destination) — no dest-only fallback
+        const importDest = updatedData.destination || originalDO.destination || fuelRecord.to || '';
+        const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
+        const routeMatch = matchRouteLiters(activeRoutes, updatedData.loadingPoint, importDest);
         
-        if (newRoute) {
+        if (routeMatch.matched) {
           const oldTotalLts = fuelRecord.totalLts || 0;
-          updates.totalLts = newRoute.defaultTotalLiters;
+          updates.totalLts = routeMatch.liters;
           updates.isLocked = false; // Unlock if route is now found
           updates.pendingConfigReason = null;
           
           // Recalculate balance with new totalLts
-          const totalFuel = newRoute.defaultTotalLiters + (fuelRecord.extra || 0);
+          const totalFuel = routeMatch.liters + (fuelRecord.extra || 0);
           const totalCheckpoints = (
             Math.abs(fuelRecord.mmsaYard || 0) +
             Math.abs(fuelRecord.tangaYard || 0) +
@@ -361,21 +351,21 @@ const cascadeUpdateToFuelRecord = async (
           );
           updates.balance = totalFuel - totalCheckpoints;
           
-          changes.push(`Total Liters: ${oldTotalLts}L â†’ ${newRoute.defaultTotalLiters}L (route updated with new origin)`);
+          changes.push(`Total Liters: ${oldTotalLts}L → ${routeMatch.liters}L (route updated with new origin)`);
           changes.push(`Balance recalculated: ${updates.balance}L`);
-          logger.info(`Recalculated totalLts and balance for IMPORT DO ${originalDO.doNumber} with new loading point: ${oldTotalLts}L â†’ ${newRoute.defaultTotalLiters}L, balance: ${updates.balance}L`);
+          logger.info(`Recalculated totalLts and balance for IMPORT DO ${originalDO.doNumber} with new loading point: ${oldTotalLts}L → ${routeMatch.liters}L, balance: ${updates.balance}L`);
         } else {
           // Route not found - set totalLts to null and lock the record
           const oldTotalLts = fuelRecord.totalLts || 0;
           updates.totalLts = null;
           updates.isLocked = true;
           updates.pendingConfigReason = 'missing_total_liters';
-          changes.push(`Total Liters: ${oldTotalLts}L â†’ NULL (route not found in database)`);
-          logger.warn(`âš ï¸ Route not found from "${updatedData.loadingPoint}" to "${fuelRecord.to}" - fuel record locked, notification will be created`);
+          changes.push(`Total Liters: ${oldTotalLts}L → NULL (route not found in database)`);
+          logger.warn(`⚠️ Route not found from "${updatedData.loadingPoint}" to "${importDest}" - fuel record locked, notification will be created`);
           
           // Mark that we need to create notification
           (updates as any)._needsRouteNotification = {
-            destination: `${updatedData.loadingPoint} â†’ ${fuelRecord.to}`,
+            destination: `${updatedData.loadingPoint} → ${importDest}`,
             doNumber: originalDO.doNumber,
             truckNo: fuelRecord.truckNo,
             fuelRecordId: fuelRecord._id.toString(),
@@ -515,24 +505,15 @@ const cascadeCancelFuelRecord = async (
       
       // Look up the EXPORT route to find how many liters were added when this DO was linked
       let exportRouteLiters = 0;
-      const exportRoute = await RouteConfig.findOne({
-        $or: [
-          {
-            origin: { $regex: new RegExp(`^${deliveryOrder.loadingPoint}$`, 'i') },
-            destination: { $regex: new RegExp(`^${deliveryOrder.destination}$`, 'i') },
-            routeType: 'EXPORT',
-            isActive: true,
-          },
-          {
-            destination: { $regex: new RegExp(`^${deliveryOrder.destination}$`, 'i') },
-            routeType: 'EXPORT',
-            isActive: true,
-          },
-        ],
-      });
+      const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
+      const exportMatch = matchExportRouteLiters(
+        activeRoutes,
+        deliveryOrder.loadingPoint || '',
+        deliveryOrder.destination || ''
+      );
 
-      if (exportRoute) {
-        exportRouteLiters = exportRoute.defaultTotalLiters;
+      if (exportMatch.matched) {
+        exportRouteLiters = exportMatch.liters;
       }
 
       // Deduct the export route liters from totalLts
@@ -1154,7 +1135,7 @@ const applyImportFuelRecords = async (
   const linkTargets: Array<{ id: string; truckNo: string; doNumber: string; date: string }> = [];
 
   for (const order of importDOs) {
-    const routeMatch = matchRouteLiters(routes, order.destination);
+    const routeMatch = matchRouteLiters(routes, order.loadingPoint || '', order.destination);
     const totalLiters = routeMatch.matched ? routeMatch.liters : null;
 
     const batchMatch = matchExtraFuel(order.truckNo, truckBatches, order.destination, batchDestinationRules);
@@ -4400,34 +4381,25 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
     const originalGoingTo = matchingFuelRecord.originalGoingTo || matchingFuelRecord.to;
 
     // Find the EXPORT route to get the fuel liters for the return journey
-    // Try to match route with origin (loading point) and destination
-    let exportRoute = await RouteConfig.findOne({
-      $or: [
-        {
-          origin: { $regex: new RegExp(`^${deliveryOrder.loadingPoint}$`, 'i') },
-          destination: { $regex: new RegExp(`^${deliveryOrder.destination}$`, 'i') },
-          routeType: 'EXPORT',
-          isActive: true,
-        },
-        {
-          destination: { $regex: new RegExp(`^${deliveryOrder.destination}$`, 'i') },
-          routeType: 'EXPORT',
-          isActive: true,
-        },
-      ],
-    });
+    // Origin + destination only — no dest-only fallback
+    const { routes: exportRoutes } = await loadFuelConfig();
+    const exportMatch = matchExportRouteLiters(
+      exportRoutes,
+      deliveryOrder.loadingPoint || '',
+      deliveryOrder.destination || ''
+    );
 
     // Calculate new totalLts by ADDING export route liters to existing totalLts
     const originalTotalLts = matchingFuelRecord.totalLts || 0;
     let newTotalLts = originalTotalLts;
     let exportRouteLiters = 0;
 
-    if (exportRoute) {
-      exportRouteLiters = exportRoute.defaultTotalLiters;
+    if (exportMatch.matched) {
+      exportRouteLiters = exportMatch.liters;
       newTotalLts = originalTotalLts + exportRouteLiters;
       logger.info(`Adding EXPORT route fuel: ${originalTotalLts}L + ${exportRouteLiters}L = ${newTotalLts}L`);
     } else {
-      logger.warn(`âš ï¸ EXPORT route not found for ${deliveryOrder.loadingPoint} â†’ ${deliveryOrder.destination}. Total liters will not be updated.`);
+      logger.warn(`⚠️ EXPORT route not found for ${deliveryOrder.loadingPoint} → ${deliveryOrder.destination}. Total liters will not be updated.`);
     }
 
     // Update the fuel record with return DO info
@@ -4441,7 +4413,7 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
     };
 
     // Only update totalLts if export route was found
-    if (exportRoute) {
+    if (exportMatch.matched) {
       updateData.totalLts = newTotalLts;
       updateData.balance = (matchingFuelRecord.balance || 0) + exportRouteLiters; // Also update balance
     }
@@ -4452,14 +4424,14 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
     const { resolveUnlinkedDONotification } = await import('./notificationController');
     await resolveUnlinkedDONotification(id, username);
 
-    logger.info(`Re-linked EXPORT DO ${deliveryOrder.doNumber} to fuel record ${matchingFuelRecord._id} by ${username}${exportRoute ? `, added ${exportRouteLiters}L from export route` : ''}`);
+    logger.info(`Re-linked EXPORT DO ${deliveryOrder.doNumber} to fuel record ${matchingFuelRecord._id} by ${username}${exportMatch.matched ? `, added ${exportRouteLiters}L from export route` : ''}`);
 
     // Fetch the updated fuel record
     const updatedFuelRecord = await FuelRecord.findById(matchingFuelRecord._id);
 
     res.status(200).json({
       success: true,
-      message: `Successfully linked DO-${deliveryOrder.doNumber} to fuel record for truck ${deliveryOrder.truckNo}${exportRoute ? `. Added ${exportRouteLiters}L from export route (${originalTotalLts}L â†’ ${newTotalLts}L)` : ''}`,
+      message: `Successfully linked DO-${deliveryOrder.doNumber} to fuel record for truck ${deliveryOrder.truckNo}${exportMatch.matched ? `. Added ${exportRouteLiters}L from export route (${originalTotalLts}L → ${newTotalLts}L)` : ''}`,
       data: {
         deliveryOrder,
         fuelRecord: updatedFuelRecord,
@@ -4468,7 +4440,7 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
           from: originalGoingFrom,
           to: originalGoingTo,
         },
-        fuelUpdates: exportRoute ? {
+        fuelUpdates: exportMatch.matched ? {
           originalTotalLts,
           exportRouteLiters,
           newTotalLts,

@@ -1786,6 +1786,7 @@ export const driverAccountAPI = {
 };
 
 export interface RouteConfig {
+  origin?: string;
   destination: string;
   routeType?: 'IMPORT' | 'EXPORT';
   totalLiters: number;

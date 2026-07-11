@@ -45,10 +45,10 @@ export class AdminConfigSyncService {
           isActive: station.isActive,
         })),
         
-        // Map routes to routeTotalLiters
+        // Map routes to routeTotalLiters keyed by origin→destination
         routeTotalLiters: backendConfig.routes.reduce((acc, route) => {
-          if (route.isActive) {
-            acc[route.destination] = route.totalLiters;
+          if (route.isActive && route.origin && route.destination) {
+            acc[`${route.origin}→${route.destination}`] = route.totalLiters;
           }
           return acc;
         }, {} as Record<string, number>),
@@ -100,13 +100,22 @@ export class AdminConfigSyncService {
         }
       }
 
-      // Update routes
-      for (const [destination, totalLiters] of Object.entries(config.routeTotalLiters)) {
+      // Update routes (keys are origin→destination)
+      for (const [routeKey, totalLiters] of Object.entries(config.routeTotalLiters)) {
         try {
-          await adminAPI.updateRoute(destination, { totalLiters });
+          const [origin, destination] = routeKey.includes('→')
+            ? routeKey.split('→')
+            : ['', routeKey];
+          await adminAPI.updateRoute(destination, { totalLiters, ...(origin ? { origin } : {}) });
         } catch {
-          // Route might not exist, try adding it
-          await adminAPI.addRoute({ destination, totalLiters });
+          const [origin, destination] = routeKey.includes('→')
+            ? routeKey.split('→')
+            : ['', routeKey];
+          await adminAPI.addRoute({
+            destination,
+            totalLiters,
+            ...(origin ? { origin } : {}),
+          });
         }
       }
 

@@ -301,20 +301,21 @@ export class FuelConfigService {
     try {
       const dbRoutes = await configService.getRoutes();
       
-      // Build routeTotalLiters from database routes
+      // Build routeTotalLiters from database routes keyed by origin→destination
       const config = this.loadConfig();
       config.routeTotalLiters = {};
       
       dbRoutes.forEach(route => {
-        if (route.isActive && route.destination) {
-          const key = route.destination.toUpperCase();
-          config.routeTotalLiters[key] = route.defaultTotalLiters;
+        if (route.isActive && route.destination && route.origin) {
+          const originKey = route.origin.toUpperCase();
+          const destKey = route.destination.toUpperCase();
+          config.routeTotalLiters[`${originKey}→${destKey}`] = route.defaultTotalLiters;
           
           // Also add aliases if they exist
           if (route.destinationAliases && route.destinationAliases.length > 0) {
             route.destinationAliases.forEach(alias => {
               const aliasKey = alias.toUpperCase();
-              config.routeTotalLiters[aliasKey] = route.defaultTotalLiters;
+              config.routeTotalLiters[`${originKey}→${aliasKey}`] = route.defaultTotalLiters;
             });
           }
         }
@@ -512,7 +513,8 @@ export class FuelConfigService {
   }
 
   /**
-   * Get total liters for a route (origin + destination) with smart matching from database
+   * Get total liters for a route (origin + destination) with exact matching from database.
+   * No dest-only, partial, fuzzy, or default-liters fallback.
    * @param routeType - Optional filter by 'IMPORT' or 'EXPORT' route type
    */
   static async getTotalLitersByRoute(
@@ -522,7 +524,7 @@ export class FuelConfigService {
   ): Promise<{ 
     liters: number; 
     matched: boolean; 
-    matchType: 'exact' | 'partial' | 'fuzzy' | 'default';
+    matchType: 'exact' | 'alias' | 'none';
     matchedRoute?: string;
     suggestions?: Array<{ route: string; liters: number; similarity: number }>;
   }> {
@@ -533,104 +535,58 @@ export class FuelConfigService {
       const orig = origin?.toUpperCase().trim() || '';
       const dest = destination?.toUpperCase().trim() || '';
       
-      if (!dest) {
+      if (!orig || !dest) {
         return { 
-          liters: 2200, 
+          liters: 0, 
           matched: false, 
-          matchType: 'default',
+          matchType: 'none',
           suggestions: [] 
         };
       }
+
+      const originsMatch = (a?: string, b?: string): boolean => {
+        const na = (a || '').toUpperCase().trim();
+        const nb = (b || '').toUpperCase().trim();
+        if (!na || !nb) return false;
+        if (na === nb) return true;
+        return na.includes(nb) || nb.includes(na);
+      };
       
-      // 1. Exact match: origin AND destination match
-      if (orig) {
-        const exactMatch = dbRoutes.find(route => 
-          route.isActive &&
-          route.origin?.toUpperCase().trim() === orig &&
-          (route.destination.toUpperCase().trim() === dest ||
-           route.destinationAliases?.some(alias => alias.toUpperCase().trim() === dest))
+      const match = dbRoutes.find(route => {
+        if (route.isActive === false) return false;
+        if (!originsMatch(route.origin, orig)) return false;
+        const destExact = route.destination.toUpperCase().trim() === dest;
+        const destAlias = route.destinationAliases?.some(
+          alias => alias.toUpperCase().trim() === dest
         );
+        return destExact || !!destAlias;
+      });
         
-        if (exactMatch) {
-          return { 
-            liters: exactMatch.defaultTotalLiters, 
-            matched: true, 
-            matchType: 'exact',
-            matchedRoute: `${exactMatch.origin} → ${exactMatch.destination}` 
-          };
-        }
-      }
-      
-      // 2. Destination-only match (if origin not provided or no origin match)
-      const destMatch = dbRoutes.find(route =>
-        route.isActive &&
-        (route.destination.toUpperCase().trim() === dest ||
-         route.destinationAliases?.some(alias => alias.toUpperCase().trim() === dest))
-      );
-      
-      if (destMatch) {
+      if (match) {
+        const matchType =
+          match.destination.toUpperCase().trim() === dest ? 'exact' : 'alias';
         return { 
-          liters: destMatch.defaultTotalLiters, 
+          liters: match.defaultTotalLiters, 
           matched: true, 
-          matchType: orig ? 'partial' : 'exact',
-          matchedRoute: destMatch.destination 
+          matchType,
+          matchedRoute: `${match.origin} → ${match.destination}` 
         };
       }
       
-      // 3. Partial match: destination contains route name
-      const partialMatch = dbRoutes.find(route =>
-        route.isActive &&
-        dest.includes(route.destination.toUpperCase().trim())
-      );
-      
-      if (partialMatch) {
-        return { 
-          liters: partialMatch.defaultTotalLiters, 
-          matched: true, 
-          matchType: 'partial',
-          matchedRoute: partialMatch.destination 
-        };
-      }
-      
-      // 4. Fuzzy match with suggestions
-      const suggestions: Array<{ route: string; liters: number; similarity: number }> = [];
-      
-      for (const route of dbRoutes) {
-        if (!route.isActive) continue;
-        
-        const similarity = this.calculateSimilarity(dest, route.destination.toUpperCase());
-        if (similarity >= 0.6) {
-          suggestions.push({
-            route: route.destination,
-            liters: route.defaultTotalLiters,
-            similarity
-          });
-        }
-      }
-      
-      suggestions.sort((a, b) => b.similarity - a.similarity);
-      
-      if (suggestions.length > 0) {
-        return {
-          liters: suggestions[0].liters,
-          matched: true,
-          matchType: 'fuzzy',
-          matchedRoute: suggestions[0].route,
-          suggestions: suggestions.slice(0, 3)
-        };
-      }
-      
-      // 5. Default fallback
       return { 
-        liters: 2200, 
+        liters: 0, 
         matched: false, 
-        matchType: 'default',
+        matchType: 'none',
         suggestions: [] 
       };
     } catch (error) {
       console.error('Failed to fetch routes for matching:', error);
-      // Fallback to localStorage/hardcoded method
-      return this.getTotalLitersByDestination(destination);
+      return { 
+        liters: 0, 
+        matched: false, 
+        matchType: 'none',
+        suggestions: [] 
+      };
     }
   }
 
