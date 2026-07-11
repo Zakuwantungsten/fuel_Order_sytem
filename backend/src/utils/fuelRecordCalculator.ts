@@ -279,10 +279,87 @@ export function matchExportRouteLiters(
   };
 }
 
+/** Checkpoint fields that reduce remaining balance. */
+export const FUEL_CHECKPOINT_FIELDS = [
+  'mmsaYard',
+  'tangaYard',
+  'darYard',
+  'tangaGoing',
+  'darGoing',
+  'moroGoing',
+  'mbeyaGoing',
+  'tdmGoing',
+  'zambiaGoing',
+  'congoFuel',
+  'zambiaReturn',
+  'tundumaReturn',
+  'mbeyaReturn',
+  'moroReturn',
+  'darReturn',
+  'tangaReturn',
+] as const;
+
+export function sumFuelCheckpoints(record: Record<string, any>): number {
+  return FUEL_CHECKPOINT_FIELDS.reduce((sum, field) => sum + Math.abs(record[field] || 0), 0);
+}
+
+/**
+ * Recalculate balance from a new totalLts (and extra), not by patching outbound onto balance.
+ * Missing total → balance 0 (locked / pending config).
+ */
+export function recalculateBalanceFromTotal(
+  totalLts: number | null | undefined,
+  extra: number | null | undefined,
+  record: Record<string, any>
+): number {
+  if (totalLts === null || totalLts === undefined) return 0;
+  return totalLts + (extra || 0) - sumFuelCheckpoints(record);
+}
+
+/**
+ * Stored outbound (EXPORT route) contribution on a fuel record.
+ * Prefer explicit `outboundLiters`; otherwise optional legacy route-match fallback.
+ */
+export function resolveStoredOutboundLiters(
+  record: Record<string, any>,
+  fallbackRouteLiters?: number
+): number {
+  if (typeof record.outboundLiters === 'number' && !Number.isNaN(record.outboundLiters)) {
+    return Math.max(0, record.outboundLiters);
+  }
+  if (typeof fallbackRouteLiters === 'number' && fallbackRouteLiters > 0) {
+    return fallbackRouteLiters;
+  }
+  return 0;
+}
+
+/**
+ * Move outbound contribution from previousOutbound → newOutbound on totalLts,
+ * then recalculate balance from the new total.
+ */
+export function applyOutboundLitersToTotals(
+  record: Record<string, any>,
+  previousOutbound: number,
+  newOutbound: number
+): { totalLts: number; outboundLiters: number; balance: number; delta: number } {
+  const prev = Math.max(0, previousOutbound || 0);
+  const next = Math.max(0, newOutbound || 0);
+  const delta = next - prev;
+  const currentTotal = typeof record.totalLts === 'number' ? record.totalLts : 0;
+  const totalLts = Math.max(0, currentTotal + delta);
+  return {
+    totalLts,
+    outboundLiters: next,
+    balance: recalculateBalanceFromTotal(totalLts, record.extra, record),
+    delta,
+  };
+}
+
 /**
  * Build the update for an existing going record when a return (EXPORT) DO arrives.
- * Ports updateFuelRecordWithReturnDO(): preserves original going from/to, sets the
- * current from/to to the return leg, and adds the export route liters to totals.
+ * Preserves original going from/to, sets live from/to to the return leg, and adds
+ * outbound route liters to totalLts only when matched (> 0). Balance is recalculated
+ * from the new total — never patched as a separate outbound add.
  */
 export function buildReturnUpdate(
   existingRecord: Record<string, any>,
@@ -296,8 +373,9 @@ export function buildReturnUpdate(
   const finalDestination = returnDeliveryOrder.destination || '';
 
   const originalTotalLiters = existingRecord.totalLts || 0;
-  const additionalFuelNeeded = exportRouteLiters;
-  const newTotalLiters = originalTotalLiters + additionalFuelNeeded;
+  const additionalFuelNeeded = Math.max(0, exportRouteLiters || 0);
+  const newTotalLiters =
+    additionalFuelNeeded > 0 ? originalTotalLiters + additionalFuelNeeded : originalTotalLiters;
 
   const update: Record<string, any> = {
     returnDo: returnDeliveryOrder.doNumber,
@@ -305,16 +383,21 @@ export function buildReturnUpdate(
     originalGoingTo,
     from: returnLoadingPoint,
     to: finalDestination,
-    totalLts: newTotalLiters,
+    outboundLiters: additionalFuelNeeded,
   };
 
   if (additionalFuelNeeded > 0) {
-    update.balance = (existingRecord.balance || 0) + additionalFuelNeeded;
+    update.totalLts = newTotalLiters;
+    update.balance = recalculateBalanceFromTotal(
+      newTotalLiters,
+      existingRecord.extra,
+      existingRecord
+    );
   }
 
   const info = {
     originalTotalLiters,
-    exportRouteLiters,
+    exportRouteLiters: additionalFuelNeeded,
     totalAdditionalFuel: additionalFuelNeeded,
     newTotalLiters,
     returnLoadingPoint,

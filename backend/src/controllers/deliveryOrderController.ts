@@ -29,6 +29,10 @@ import {
   buildImportFuelRecord,
   matchExportRouteLiters,
   buildReturnUpdate,
+  determineJourneyStart,
+  recalculateBalanceFromTotal,
+  resolveStoredOutboundLiters,
+  applyOutboundLitersToTotals,
   type RouteLike,
   type DeliveryOrderLike,
 } from '../utils/fuelRecordCalculator';
@@ -137,10 +141,18 @@ const emitFuelRecordChange = async (fuelRecordId?: string): Promise<void> => {
 };
 
 /**
- * Helper: Cascade updates to related fuel records when DO is edited
- * Updates truck number, destination (to/from), loading point, and recalculates totalLts based on new route
- * If route is not found, sets totalLts to null, locks the record, and creates a notification for admin
- * Note: SDO orders are excluded - they don't interact with fuel records
+ * Cascade DO edits onto the linked fuel record.
+ *
+ * IMPORT (going):
+ *  - No return DO: update live from/to; set totalLts to IMPORT route liters; notify if missing.
+ *  - Has return DO: do NOT change live from/to; update originalGoing*; total = newGoing + outbound.
+ *
+ * EXPORT (outbound):
+ *  - Always update live from/to to match export LP/dest.
+ *  - Adjust totalLts by outbound delta (add/minus/full rollback if new route missing).
+ *  - Recalculate balance from new totalLts. Never notify for missing outbound route.
+ *
+ * SDO: no fuel interaction.
  */
 const cascadeUpdateToFuelRecord = async (
   originalDO: any,
@@ -150,35 +162,28 @@ const cascadeUpdateToFuelRecord = async (
 ): Promise<{ updated: boolean; fuelRecordId?: string; changes?: string[]; routeNotificationCreated?: boolean }> => {
   const changes: string[] = [];
   const opts = session ? { session } : {};
-  
+
   try {
-    // Skip cascade for SDO - they don't interact with fuel records
     if (originalDO.doType === 'SDO') {
       logger.info(`Skipping fuel record cascade for SDO ${originalDO.doNumber}`);
       return { updated: false };
     }
-    
-    // Find fuel record linked to this DO
+
     let fuelRecord = null;
-    
     if (originalDO.importOrExport === 'IMPORT') {
-      // Find fuel record where this DO is the goingDo
       fuelRecord = await FuelRecord.findOne({
         goingDo: originalDO.doNumber,
         isDeleted: false,
       }).session(session || null);
     } else if (originalDO.importOrExport === 'EXPORT') {
-      // Find fuel record where this DO is the returnDo
       fuelRecord = await FuelRecord.findOne({
         returnDo: originalDO.doNumber,
         isDeleted: false,
       }).session(session || null);
     }
-    
+
     if (!fuelRecord) {
       logger.info(`No fuel record found for DO ${originalDO.doNumber}`);
-      // When running inside a transaction (amend cascade automation ON), missing
-      // fuel must fail the whole update — otherwise the DO changes alone.
       if (session) {
         throw new ApiError(
           422,
@@ -187,217 +192,185 @@ const cascadeUpdateToFuelRecord = async (
       }
       return { updated: false };
     }
-    
+
     const updates: any = {};
-    
-    // Track truck number changes
+    const destChanged =
+      !!updatedData.destination && updatedData.destination !== originalDO.destination;
+    const lpChanged =
+      !!updatedData.loadingPoint && updatedData.loadingPoint !== originalDO.loadingPoint;
+
     if (updatedData.truckNo && updatedData.truckNo !== originalDO.truckNo) {
       updates.truckNo = updatedData.truckNo;
-      changes.push(`Truck: ${originalDO.truckNo} â†’ ${updatedData.truckNo}`);
+      changes.push(`Truck: ${originalDO.truckNo} → ${updatedData.truckNo}`);
     }
-    
-    // Track destination changes (affects 'to' field for IMPORT, 'from' for EXPORT)
-    // AND recalculate totalLts based on new route
-    if (updatedData.destination && updatedData.destination !== originalDO.destination) {
-      if (originalDO.importOrExport === 'IMPORT') {
-        updates.to = updatedData.destination;
-        changes.push(`Destination (to): ${originalDO.destination} â†’ ${updatedData.destination}`);
-        
-        // Recalculate totalLts for the new route (origin + new destination — no dest-only fallback)
-        const importOrigin = updatedData.loadingPoint || originalDO.loadingPoint || fuelRecord.from || '';
-        const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
-        const routeMatch = matchRouteLiters(activeRoutes, importOrigin, updatedData.destination);
-        
-        if (routeMatch.matched) {
-          const oldTotalLts = fuelRecord.totalLts || 0;
-          updates.totalLts = routeMatch.liters;
-          updates.isLocked = false; // Unlock if route is now found
-          updates.pendingConfigReason = null;
-          
-          // Recalculate balance with new totalLts
-          const totalFuel = routeMatch.liters + (fuelRecord.extra || 0);
-          const totalCheckpoints = (
-            Math.abs(fuelRecord.mmsaYard || 0) +
-            Math.abs(fuelRecord.tangaYard || 0) +
-            Math.abs(fuelRecord.darYard || 0) +
-            Math.abs(fuelRecord.tangaGoing || 0) +
-            Math.abs(fuelRecord.darGoing || 0) +
-            Math.abs(fuelRecord.moroGoing || 0) +
-            Math.abs(fuelRecord.mbeyaGoing || 0) +
-            Math.abs(fuelRecord.tdmGoing || 0) +
-            Math.abs(fuelRecord.zambiaGoing || 0) +
-            Math.abs(fuelRecord.congoFuel || 0) +
-            Math.abs(fuelRecord.zambiaReturn || 0) +
-            Math.abs(fuelRecord.tundumaReturn || 0) +
-            Math.abs(fuelRecord.mbeyaReturn || 0) +
-            Math.abs(fuelRecord.moroReturn || 0) +
-            Math.abs(fuelRecord.darReturn || 0) +
-            Math.abs(fuelRecord.tangaReturn || 0)
-          );
-          updates.balance = totalFuel - totalCheckpoints;
-          
-          changes.push(`Total Liters: ${oldTotalLts}L → ${routeMatch.liters}L (route updated)`);
-          changes.push(`Balance recalculated: ${updates.balance}L`);
-          logger.info(`Recalculated totalLts and balance for IMPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${routeMatch.liters}L, balance: ${updates.balance}L`);
-        } else {
-          // Route not found - set totalLts to null and lock the record
-          const oldTotalLts = fuelRecord.totalLts || 0;
-          updates.totalLts = null;
-          updates.isLocked = true;
-          updates.pendingConfigReason = 'missing_total_liters';
-          changes.push(`Total Liters: ${oldTotalLts}L → NULL (route not found in database)`);
-          logger.warn(`⚠️ Route not found for ${importOrigin} → ${updatedData.destination} - fuel record locked, notification will be created`);
-          
-          // Mark that we need to create notification (will be handled in the main update function)
-          (updates as any)._needsRouteNotification = {
-            destination: `${importOrigin} → ${updatedData.destination}`,
-            doNumber: originalDO.doNumber,
-            truckNo: fuelRecord.truckNo,
-            fuelRecordId: fuelRecord._id.toString(),
-            userRole: (updatedData as any).userRole,
-            userId: (updatedData as any).userId,
-          };
+
+    if (originalDO.importOrExport === 'IMPORT' && (destChanged || lpChanged)) {
+      const newLoadingPoint = updatedData.loadingPoint || originalDO.loadingPoint || '';
+      const newDestination = updatedData.destination || originalDO.destination || '';
+      const goingStart = determineJourneyStart(newLoadingPoint);
+      const hasReturn = !!(fuelRecord.returnDo && String(fuelRecord.returnDo).trim());
+
+      if (hasReturn) {
+        // Case B: return already linked — keep live from/to; update stored going details only
+        if (lpChanged || destChanged) {
+          updates.originalGoingFrom = goingStart;
+          updates.originalGoingTo = newDestination;
+          updates.start = goingStart;
+          if (lpChanged) {
+            changes.push(
+              `Going loading point (stored): ${originalDO.loadingPoint} → ${newLoadingPoint}`
+            );
+          }
+          if (destChanged) {
+            changes.push(
+              `Going destination (stored): ${originalDO.destination} → ${newDestination}`
+            );
+          }
         }
       } else {
-        updates.from = updatedData.destination;
-        changes.push(`Destination (from): ${originalDO.destination} → ${updatedData.destination}`);
-        
-        // For EXPORT, recalculate return journey totalLts (new origin → to) — no dest-only fallback
-        const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
-        const returnMatch = matchExportRouteLiters(activeRoutes, updatedData.destination, fuelRecord.to || '');
-        
-        if (returnMatch.matched) {
-          const oldTotalLts = fuelRecord.totalLts || 0;
-          updates.totalLts = returnMatch.liters;
-          updates.isLocked = false; // Unlock if route is now found
-          updates.pendingConfigReason = null;
-          
-          // Recalculate balance with new totalLts
-          const totalFuel = returnMatch.liters + (fuelRecord.extra || 0);
-          const totalCheckpoints = (
-            Math.abs(fuelRecord.mmsaYard || 0) +
-            Math.abs(fuelRecord.tangaYard || 0) +
-            Math.abs(fuelRecord.darYard || 0) +
-            Math.abs(fuelRecord.tangaGoing || 0) +
-            Math.abs(fuelRecord.darGoing || 0) +
-            Math.abs(fuelRecord.moroGoing || 0) +
-            Math.abs(fuelRecord.mbeyaGoing || 0) +
-            Math.abs(fuelRecord.tdmGoing || 0) +
-            Math.abs(fuelRecord.zambiaGoing || 0) +
-            Math.abs(fuelRecord.congoFuel || 0) +
-            Math.abs(fuelRecord.zambiaReturn || 0) +
-            Math.abs(fuelRecord.tundumaReturn || 0) +
-            Math.abs(fuelRecord.mbeyaReturn || 0) +
-            Math.abs(fuelRecord.moroReturn || 0) +
-            Math.abs(fuelRecord.darReturn || 0) +
-            Math.abs(fuelRecord.tangaReturn || 0)
-          );
-          updates.balance = totalFuel - totalCheckpoints;
-          
-          changes.push(`Total Liters: ${oldTotalLts}L → ${returnMatch.liters}L (return route updated)`);
-          changes.push(`Balance recalculated: ${updates.balance}L`);
-          logger.info(`Recalculated totalLts and balance for EXPORT DO ${originalDO.doNumber}: ${oldTotalLts}L → ${returnMatch.liters}L, balance: ${updates.balance}L`);
-        } else {
-          // Return route not found - set totalLts to null and lock the record
-          const oldTotalLts = fuelRecord.totalLts || 0;
-          updates.totalLts = null;
-          updates.isLocked = true;
-          updates.pendingConfigReason = 'missing_total_liters';
-          changes.push(`Total Liters: ${oldTotalLts}L → NULL (return route not found in database)`);
-          logger.warn(`⚠️ Return route not found from "${updatedData.destination}" to "${fuelRecord.to}" - fuel record locked, notification will be created`);
-          
-          // Mark that we need to create notification
-          (updates as any)._needsRouteNotification = {
-            destination: `${updatedData.destination} → ${fuelRecord.to}`,
-            doNumber: originalDO.doNumber,
-            truckNo: fuelRecord.truckNo,
-            fuelRecordId: fuelRecord._id.toString(),
-            userRole: (updatedData as any).userRole,
-            userId: (updatedData as any).userId,
-          };
+        // Case A: no return — update live journey fields
+        if (lpChanged) {
+          updates.from = goingStart;
+          updates.start = goingStart;
+          changes.push(`Loading Point (from): ${originalDO.loadingPoint} → ${newLoadingPoint}`);
+        }
+        if (destChanged) {
+          updates.to = newDestination;
+          changes.push(`Destination (to): ${originalDO.destination} → ${newDestination}`);
         }
       }
-    }
-    
-    // Track loading point changes (affects 'from' field for IMPORT, 'to' for EXPORT)
-    // AND recalculate totalLts based on new route if applicable
-    if (updatedData.loadingPoint && updatedData.loadingPoint !== originalDO.loadingPoint) {
-      if (originalDO.importOrExport === 'IMPORT') {
-        updates.from = updatedData.loadingPoint;
-        changes.push(`Loading Point (from): ${originalDO.loadingPoint} → ${updatedData.loadingPoint}`);
-        
-        // Recalculate totalLts for new route (new loading point → destination) — no dest-only fallback
-        const importDest = updatedData.destination || originalDO.destination || fuelRecord.to || '';
-        const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
-        const routeMatch = matchRouteLiters(activeRoutes, updatedData.loadingPoint, importDest);
-        
-        if (routeMatch.matched) {
-          const oldTotalLts = fuelRecord.totalLts || 0;
-          updates.totalLts = routeMatch.liters;
-          updates.isLocked = false; // Unlock if route is now found
-          updates.pendingConfigReason = null;
-          
-          // Recalculate balance with new totalLts
-          const totalFuel = routeMatch.liters + (fuelRecord.extra || 0);
-          const totalCheckpoints = (
-            Math.abs(fuelRecord.mmsaYard || 0) +
-            Math.abs(fuelRecord.tangaYard || 0) +
-            Math.abs(fuelRecord.darYard || 0) +
-            Math.abs(fuelRecord.tangaGoing || 0) +
-            Math.abs(fuelRecord.darGoing || 0) +
-            Math.abs(fuelRecord.moroGoing || 0) +
-            Math.abs(fuelRecord.mbeyaGoing || 0) +
-            Math.abs(fuelRecord.tdmGoing || 0) +
-            Math.abs(fuelRecord.zambiaGoing || 0) +
-            Math.abs(fuelRecord.congoFuel || 0) +
-            Math.abs(fuelRecord.zambiaReturn || 0) +
-            Math.abs(fuelRecord.tundumaReturn || 0) +
-            Math.abs(fuelRecord.mbeyaReturn || 0) +
-            Math.abs(fuelRecord.moroReturn || 0) +
-            Math.abs(fuelRecord.darReturn || 0) +
-            Math.abs(fuelRecord.tangaReturn || 0)
+
+      const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
+      const routeMatch = matchRouteLiters(activeRoutes, newLoadingPoint, newDestination);
+
+      let previousOutbound = resolveStoredOutboundLiters(fuelRecord);
+      if (
+        hasReturn &&
+        typeof (fuelRecord as any).outboundLiters !== 'number' &&
+        previousOutbound === 0
+      ) {
+        // Legacy records: infer outbound from the linked EXPORT DO route
+        const exportDO = await DeliveryOrder.findOne({
+          doNumber: fuelRecord.returnDo,
+          isDeleted: false,
+        })
+          .session(session || null)
+          .lean();
+        if (exportDO) {
+          const legacyMatch = matchExportRouteLiters(
+            activeRoutes,
+            (exportDO as any).loadingPoint || '',
+            (exportDO as any).destination || ''
           );
-          updates.balance = totalFuel - totalCheckpoints;
-          
-          changes.push(`Total Liters: ${oldTotalLts}L → ${routeMatch.liters}L (route updated with new origin)`);
-          changes.push(`Balance recalculated: ${updates.balance}L`);
-          logger.info(`Recalculated totalLts and balance for IMPORT DO ${originalDO.doNumber} with new loading point: ${oldTotalLts}L → ${routeMatch.liters}L, balance: ${updates.balance}L`);
-        } else {
-          // Route not found - set totalLts to null and lock the record
-          const oldTotalLts = fuelRecord.totalLts || 0;
-          updates.totalLts = null;
-          updates.isLocked = true;
-          updates.pendingConfigReason = 'missing_total_liters';
-          changes.push(`Total Liters: ${oldTotalLts}L → NULL (route not found in database)`);
-          logger.warn(`⚠️ Route not found from "${updatedData.loadingPoint}" to "${importDest}" - fuel record locked, notification will be created`);
-          
-          // Mark that we need to create notification
-          (updates as any)._needsRouteNotification = {
-            destination: `${updatedData.loadingPoint} → ${importDest}`,
-            doNumber: originalDO.doNumber,
-            truckNo: fuelRecord.truckNo,
-            fuelRecordId: fuelRecord._id.toString(),
-            userRole: (updatedData as any).userRole,
-            userId: (updatedData as any).userId,
-          };
+          if (legacyMatch.matched) previousOutbound = legacyMatch.liters;
         }
+      }
+
+      const oldTotalLts = fuelRecord.totalLts;
+      if (routeMatch.matched) {
+        const newTotalLts = hasReturn
+          ? routeMatch.liters + previousOutbound
+          : routeMatch.liters;
+        updates.totalLts = newTotalLts;
+        updates.isLocked = false;
+        updates.pendingConfigReason = null;
+        if (hasReturn) updates.outboundLiters = previousOutbound;
+        updates.balance = recalculateBalanceFromTotal(newTotalLts, fuelRecord.extra, fuelRecord);
+        changes.push(
+          `Total Liters: ${oldTotalLts ?? 'NULL'}L → ${newTotalLts}L` +
+            (hasReturn && previousOutbound > 0
+              ? ` (going ${routeMatch.liters}L + outbound ${previousOutbound}L)`
+              : ' (going route updated)')
+        );
+        changes.push(`Balance recalculated: ${updates.balance}L`);
+        logger.info(
+          `IMPORT amend ${originalDO.doNumber}: totalLts ${oldTotalLts} → ${newTotalLts}` +
+            (hasReturn ? ` (outbound preserved ${previousOutbound}L)` : '')
+        );
       } else {
-        updates.to = updatedData.loadingPoint;
-        changes.push(`Loading Point (to): ${originalDO.loadingPoint} â†’ ${updatedData.loadingPoint}`);
+        updates.totalLts = null;
+        updates.isLocked = true;
+        updates.pendingConfigReason = 'missing_total_liters';
+        updates.balance = recalculateBalanceFromTotal(null, fuelRecord.extra, fuelRecord);
+        changes.push(
+          `Total Liters: ${oldTotalLts ?? 'NULL'}L → NULL (going route not found in database)`
+        );
+        logger.warn(
+          `⚠️ Going route not found for ${newLoadingPoint} → ${newDestination} - fuel record locked`
+        );
+        (updates as any)._needsRouteNotification = {
+          destination: `${newLoadingPoint} → ${newDestination}`,
+          doNumber: originalDO.doNumber,
+          truckNo: fuelRecord.truckNo,
+          fuelRecordId: fuelRecord._id.toString(),
+          userRole: (updatedData as any).userRole,
+          userId: (updatedData as any).userId,
+        };
       }
     }
-    
-    // Apply updates if any
+
+    if (originalDO.importOrExport === 'EXPORT' && (destChanged || lpChanged)) {
+      // Case C: update return-leg fields; adjust outbound liters by delta (or full rollback)
+      const newLoadingPoint = updatedData.loadingPoint || originalDO.loadingPoint || '';
+      const newDestination = updatedData.destination || originalDO.destination || '';
+
+      updates.from = newLoadingPoint;
+      updates.to = newDestination;
+      if (destChanged) {
+        changes.push(`Export destination (to): ${originalDO.destination} → ${newDestination}`);
+      }
+      if (lpChanged) {
+        changes.push(`Export loading point (from): ${originalDO.loadingPoint} → ${newLoadingPoint}`);
+      }
+
+      const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
+      const oldRouteMatch = matchExportRouteLiters(
+        activeRoutes,
+        originalDO.loadingPoint || '',
+        originalDO.destination || ''
+      );
+      const previousOutbound = resolveStoredOutboundLiters(
+        fuelRecord,
+        oldRouteMatch.matched ? oldRouteMatch.liters : 0
+      );
+
+      const newRouteMatch = matchExportRouteLiters(activeRoutes, newLoadingPoint, newDestination);
+      const newOutbound = newRouteMatch.matched ? newRouteMatch.liters : 0;
+
+      const applied = applyOutboundLitersToTotals(fuelRecord, previousOutbound, newOutbound);
+      const oldTotalLts = fuelRecord.totalLts || 0;
+
+      if (applied.delta !== 0 || typeof (fuelRecord as any).outboundLiters !== 'number') {
+        updates.totalLts = applied.totalLts;
+        updates.outboundLiters = applied.outboundLiters;
+        updates.balance = applied.balance;
+        if (applied.delta > 0) {
+          changes.push(
+            `Total Liters: ${oldTotalLts}L → ${applied.totalLts}L (+${applied.delta}L outbound)`
+          );
+        } else if (applied.delta < 0) {
+          changes.push(
+            `Total Liters: ${oldTotalLts}L → ${applied.totalLts}L (${applied.delta}L outbound)`
+          );
+        } else {
+          changes.push(`Outbound liters unchanged at ${applied.outboundLiters}L`);
+        }
+        changes.push(`Balance recalculated: ${updates.balance}L`);
+        logger.info(
+          `EXPORT amend ${originalDO.doNumber}: outbound ${previousOutbound}L → ${newOutbound}L` +
+            (newRouteMatch.matched ? '' : ' (no outbound route — rolled back previous outbound)')
+        );
+      }
+      // Missing outbound route: silent — no lock, no notification
+    }
+
     if (Object.keys(updates).length > 0) {
-      // Extract notification metadata before deleting it
       const needsRouteNotification = (updates as any)._needsRouteNotification;
       delete (updates as any)._needsRouteNotification;
-      
-      // Update fuel record
+
       await FuelRecord.findByIdAndUpdate(fuelRecord._id, updates, opts);
       logger.info(`Fuel record ${fuelRecord._id} updated due to DO changes: ${changes.join(', ')}`);
-      
-      // Create notification if route was not found
+
       if (needsRouteNotification) {
         const { createMissingConfigNotification } = await import('./notificationController');
         await createMissingConfigNotification(
@@ -412,16 +385,22 @@ const cascadeUpdateToFuelRecord = async (
           needsRouteNotification.userRole,
           needsRouteNotification.userId
         );
-        logger.info(`ðŸ“¢ Notifications created for missing route: ${needsRouteNotification.destination} (creator: ${username}, role: ${needsRouteNotification.userRole})`);
+        logger.info(
+          `Notifications created for missing going route: ${needsRouteNotification.destination}`
+        );
       }
-      
-      return { updated: true, fuelRecordId: fuelRecord._id.toString(), changes, routeNotificationCreated: !!needsRouteNotification };
+
+      return {
+        updated: true,
+        fuelRecordId: fuelRecord._id.toString(),
+        changes,
+        routeNotificationCreated: !!needsRouteNotification,
+      };
     }
-    
+
     return { updated: false };
   } catch (error: any) {
     logger.error(`Error cascading update to fuel record: ${error.message}`);
-    // Inside a transaction, rethrow so the DO update rolls back with the fuel failure.
     if (session || error instanceof ApiError) throw error;
     return { updated: false };
   }
@@ -513,43 +492,22 @@ const cascadeCancelFuelRecord = async (
         }
       }
       
-      // Look up the EXPORT route to find how many liters were added when this DO was linked
-      let exportRouteLiters = 0;
-      const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
-      const exportMatch = matchExportRouteLiters(
-        activeRoutes,
-        deliveryOrder.loadingPoint || '',
-        deliveryOrder.destination || ''
-      );
-
-      if (exportMatch.matched) {
-        exportRouteLiters = exportMatch.liters;
+      // Prefer stored outboundLiters; fall back to matching the cancelled EXPORT DO route (legacy)
+      let exportRouteLiters = resolveStoredOutboundLiters(fuelRecord);
+      if (typeof (fuelRecord as any).outboundLiters !== 'number') {
+        const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
+        const exportMatch = matchExportRouteLiters(
+          activeRoutes,
+          deliveryOrder.loadingPoint || '',
+          deliveryOrder.destination || ''
+        );
+        if (exportMatch.matched) exportRouteLiters = exportMatch.liters;
       }
 
       // Deduct the export route liters from totalLts
       const originalTotalLts = fuelRecord.totalLts || 0;
       const newTotalLts = Math.max(0, originalTotalLts - exportRouteLiters);
-
-      // Recalculate balance: (totalLts + extra) - sum of all checkpoint allocations
-      const totalFuel = newTotalLts + (fuelRecord.extra || 0);
-      const totalCheckpoints = (
-        Math.abs(fuelRecord.mmsaYard || 0) +
-        Math.abs(fuelRecord.tangaYard || 0) +
-        Math.abs(fuelRecord.darYard || 0) +
-        Math.abs(fuelRecord.darGoing || 0) +
-        Math.abs(fuelRecord.moroGoing || 0) +
-        Math.abs(fuelRecord.mbeyaGoing || 0) +
-        Math.abs(fuelRecord.tdmGoing || 0) +
-        Math.abs(fuelRecord.zambiaGoing || 0) +
-        Math.abs(fuelRecord.congoFuel || 0) +
-        Math.abs(fuelRecord.zambiaReturn || 0) +
-        Math.abs(fuelRecord.tundumaReturn || 0) +
-        Math.abs(fuelRecord.mbeyaReturn || 0) +
-        Math.abs(fuelRecord.moroReturn || 0) +
-        Math.abs(fuelRecord.darReturn || 0) +
-        Math.abs(fuelRecord.tangaReturn || 0)
-      );
-      const newBalance = totalFuel - totalCheckpoints;
+      const newBalance = recalculateBalanceFromTotal(newTotalLts, fuelRecord.extra, fuelRecord);
 
       // Clear all return fuel allocations and deduct export fuel
       const updateData: any = {
@@ -559,6 +517,7 @@ const cascadeCancelFuelRecord = async (
         // Clear original going values since there's no return DO now
         originalGoingFrom: null,
         originalGoingTo: null,
+        outboundLiters: 0,
         // Deduct export route liters from totalLts and recalculate balance
         totalLts: newTotalLts,
         balance: newBalance,
@@ -1321,7 +1280,13 @@ const applyExportFuelUpdates = async (
     }
     usedRecordIds.add(String(match._id));
     const routeMatch = matchExportRouteLiters(routes, order.loadingPoint || '', order.destination || '');
-    const { update } = buildReturnUpdate(match, order as unknown as DeliveryOrderLike, routeMatch.liters);
+    const exportLiters = routeMatch.matched ? routeMatch.liters : 0;
+    if (!routeMatch.matched) {
+      logger.warn(
+        `EXPORT route not found for ${order.loadingPoint} → ${order.destination}. Linking without adding liters.`
+      );
+    }
+    const { update } = buildReturnUpdate(match, order as unknown as DeliveryOrderLike, exportLiters);
     bulkOps.push({ updateOne: { filter: { _id: match._id }, update: { $set: update } } });
   }
 
@@ -4569,48 +4534,31 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
       return;
     }
 
-    // Link the DO to the fuel record
-    // Store original going journey locations before changing
+    // Link via shared helper — stores outboundLiters and recalculates balance from new total
     const originalGoingFrom = matchingFuelRecord.originalGoingFrom || matchingFuelRecord.from;
     const originalGoingTo = matchingFuelRecord.originalGoingTo || matchingFuelRecord.to;
-
-    // Find the EXPORT route to get the fuel liters for the return journey
-    // Origin + destination only — no dest-only fallback
     const { routes: exportRoutes } = await loadFuelConfig();
     const exportMatch = matchExportRouteLiters(
       exportRoutes,
       deliveryOrder.loadingPoint || '',
       deliveryOrder.destination || ''
     );
-
-    // Calculate new totalLts by ADDING export route liters to existing totalLts
-    const originalTotalLts = matchingFuelRecord.totalLts || 0;
-    let newTotalLts = originalTotalLts;
-    let exportRouteLiters = 0;
-
-    if (exportMatch.matched) {
-      exportRouteLiters = exportMatch.liters;
-      newTotalLts = originalTotalLts + exportRouteLiters;
-      logger.info(`Adding EXPORT route fuel: ${originalTotalLts}L + ${exportRouteLiters}L = ${newTotalLts}L`);
+    const exportRouteLiters = exportMatch.matched ? exportMatch.liters : 0;
+    if (!exportMatch.matched) {
+      logger.warn(
+        `⚠️ EXPORT route not found for ${deliveryOrder.loadingPoint} → ${deliveryOrder.destination}. Total liters will not be updated.`
+      );
     } else {
-      logger.warn(`⚠️ EXPORT route not found for ${deliveryOrder.loadingPoint} → ${deliveryOrder.destination}. Total liters will not be updated.`);
+      logger.info(
+        `Adding EXPORT route fuel: ${(matchingFuelRecord.totalLts || 0)}L + ${exportRouteLiters}L`
+      );
     }
 
-    // Update the fuel record with return DO info
-    const updateData: any = {
-      returnDo: deliveryOrder.doNumber,
-      originalGoingFrom: originalGoingFrom,
-      originalGoingTo: originalGoingTo,
-      // Update from/to for return journey
-      from: deliveryOrder.loadingPoint, // Return journey: load from EXPORT loadingPoint (POL)
-      to: deliveryOrder.destination, // Return journey: going to EXPORT destination
-    };
-
-    // Only update totalLts if export route was found
-    if (exportMatch.matched) {
-      updateData.totalLts = newTotalLts;
-      updateData.balance = (matchingFuelRecord.balance || 0) + exportRouteLiters; // Also update balance
-    }
+    const { update: updateData, info } = buildReturnUpdate(
+      matchingFuelRecord.toObject(),
+      deliveryOrder as unknown as DeliveryOrderLike,
+      exportRouteLiters
+    );
 
     await FuelRecord.findByIdAndUpdate(matchingFuelRecord._id, updateData);
 
@@ -4625,7 +4573,7 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
 
     res.status(200).json({
       success: true,
-      message: `Successfully linked DO-${deliveryOrder.doNumber} to fuel record for truck ${deliveryOrder.truckNo}${exportMatch.matched ? `. Added ${exportRouteLiters}L from export route (${originalTotalLts}L → ${newTotalLts}L)` : ''}`,
+      message: `Successfully linked DO-${deliveryOrder.doNumber} to fuel record for truck ${deliveryOrder.truckNo}${exportMatch.matched ? `. Added ${exportRouteLiters}L from export route (${info.originalTotalLiters}L → ${info.newTotalLiters}L)` : ''}`,
       data: {
         deliveryOrder,
         fuelRecord: updatedFuelRecord,
@@ -4635,9 +4583,9 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
           to: originalGoingTo,
         },
         fuelUpdates: exportMatch.matched ? {
-          originalTotalLts,
+          originalTotalLts: info.originalTotalLiters,
           exportRouteLiters,
-          newTotalLts,
+          newTotalLts: info.newTotalLiters,
         } : null,
       },
     });

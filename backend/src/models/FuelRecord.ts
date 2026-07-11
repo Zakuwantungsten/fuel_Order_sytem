@@ -208,6 +208,13 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
       type: String,
       trim: true,
     },
+    // EXPORT (outbound) route liters currently included in totalLts (0 if none matched).
+    // No default — missing means legacy record (infer from route when needed).
+    outboundLiters: {
+      type: Number,
+      min: [0, 'Outbound liters cannot be negative'],
+      required: false,
+    },
     // Cancellation fields
     isCancelled: {
       type: Boolean,

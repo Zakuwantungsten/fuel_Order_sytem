@@ -536,6 +536,8 @@ export interface IFuelRecord {
   // Original going journey locations (stored before EXPORT DO changes them)
   originalGoingFrom?: string;
   originalGoingTo?: string;
+  /** EXPORT route liters currently included in totalLts (0 if none matched) */
+  outboundLiters?: number;
   // Cancellation fields
   isCancelled?: boolean;
   cancelledAt?: Date;
