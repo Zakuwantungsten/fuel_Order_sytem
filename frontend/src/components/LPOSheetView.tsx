@@ -35,10 +35,19 @@ interface RowLookupState {
   fuelRecord: FuelRecord | null;
   message?: string;
   warningType?: TruckFetchResult['warningType'];
+  /** True when Return is selected but the journey has no return DO yet. */
+  returnDoMissing?: boolean;
   allJourneys?: { active: FuelRecord | null; queued: FuelRecord[] };
   selectedJourneyType?: 'active' | 'queued';
   selectedJourneyIndex?: number; // -1 active, 0+ queued
 }
+
+/** Real DO string only — treats NIL / N/A / empty as missing (Detail Form parity). */
+const usableDo = (value?: string | null): string => {
+  const s = (value || '').trim().toUpperCase();
+  if (!s || s === 'NIL' || s === 'N/A' || s === 'PENDING') return '';
+  return s;
+};
 
 interface LPOSheetViewProps {
   sheet: LPOSheet;
@@ -1259,15 +1268,24 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       const fr = result.fuelRecord;
       if (!fr) return;
 
-      // Match LPODetailForm: always replace DO from journey — never keep the previous row DO.
+      const goingDo = usableDo(result.goingDo) || usableDo(fr.goingDo);
+      const returnDo = usableDo(result.returnDo) || usableDo(fr.returnDo);
+      const returnDoMissing = !returnDo;
+
+      // Going → going DO. Returning with no return DO → leave DO empty (Detail Form parity).
+      // Returning with return DO → use it. Never write the literal "NIL" placeholder as DO.
       const doNumber =
-        direction === 'going'
-          ? result.goingDo || fr.goingDo || ''
-          : result.returnDo || fr.returnDo || result.goingDo || fr.goingDo || '';
+        direction === 'going' ? goingDo : returnDoMissing ? '' : returnDo;
+
       const dest =
         direction === 'going'
           ? result.goingDestination || fr.originalGoingTo || fr.to || 'NIL'
           : result.destination || fr.to || 'NIL';
+
+      const statusMessage =
+        direction === 'returning' && returnDoMissing
+          ? `⚠️ No return DO yet — Going DO ${goingDo || '—'}. Toggle to Going to fill.`
+          : result.message;
 
       setEditedSheet((prev) => {
         const updatedEntries = [...prev.entries];
@@ -1279,7 +1297,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         updatedEntries[index] = {
           ...cur,
           truckNo,
-          doNo: String(doNumber).toUpperCase(),
+          doNo: doNumber,
           dest,
           amount: cur.liters * cur.rate,
         };
@@ -1299,8 +1317,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           fetched: true,
           direction,
           fuelRecord: fr,
-          message: result.message,
-          warningType: result.warningType || null,
+          message: statusMessage,
+          warningType:
+            direction === 'returning' && returnDoMissing
+              ? 'no_active_record'
+              : result.warningType || null,
+          returnDoMissing: direction === 'returning' ? returnDoMissing : false,
           allJourneys: result.allJourneys,
           selectedJourneyType: isQueued ? 'queued' : 'active',
           selectedJourneyIndex: isQueued ? queuedIdx : -1,
@@ -1350,7 +1372,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         { ...result, direction },
         { direction, preserveTruck: true }
       );
-      toast.success(result.message || 'Truck journey loaded');
+      const retMissing = !usableDo(result.returnDo) && !usableDo(result.fuelRecord.returnDo);
+      if (direction === 'returning' && retMissing) {
+        toast.info(`Journey loaded — no return DO yet. Toggle to Going to fill DO ${usableDo(result.goingDo) || ''}.`.trim());
+      } else {
+        toast.success(result.message || 'Truck journey loaded');
+      }
     },
     [applyJourneyToRow, entryDirections, lpoTruckLookupMonths]
   );
@@ -1435,8 +1462,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       index,
       {
         fuelRecord: selected,
-        goingDo: selected.goingDo || 'NIL',
-        returnDo: selected.returnDo || 'NIL',
+        goingDo: selected.goingDo || '',
+        returnDo: selected.returnDo || '',
         destination: selected.to || 'NIL',
         goingDestination: selected.originalGoingTo || selected.to || 'NIL',
         balance: selected.balance || 0,
@@ -1466,13 +1493,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       toast.info('Loading journey… try again in a moment.');
       return;
     }
-    if (direction === 'returning') {
-      const rd = (fr.returnDo || '').trim().toUpperCase();
-      if (!rd || rd === 'NIL' || rd === 'N/A') {
-        toast.error('This journey has no return DO yet — cannot switch to returning.');
-        return;
-      }
-    }
+    // Allow Return even with no return DO — DO stays empty + Status warns (Detail Form parity).
     // Updates DO/dest for the toggled direction; liters/rate stay as the user left them
     // so save reverts old checkpoint liters and deducts current (possibly edited) liters
     // onto the new direction checkpoint.
@@ -1480,8 +1501,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       index,
       {
         fuelRecord: fr,
-        goingDo: fr.goingDo || 'NIL',
-        returnDo: fr.returnDo || 'NIL',
+        goingDo: fr.goingDo || '',
+        returnDo: fr.returnDo || '',
         destination: fr.to || 'NIL',
         goingDestination: fr.originalGoingTo || fr.to || 'NIL',
         balance: fr.balance || 0,
@@ -1676,7 +1697,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   const renderDirectionCell = (entry: LPODetail, index: number) => {
     const special = specialModeLabel(entry);
-    if (special) {
+    // Empty DO while a journey is loaded = return-DO-missing, not NIL mode — keep Dir toggle.
+    const treatAsNilMode = special === 'NIL' && !rowLookup[index]?.fuelRecord;
+    if (special && (special !== 'NIL' || treatAsNilMode)) {
       const color =
         special === 'DA'
           ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300'
@@ -1695,6 +1718,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     const canToggle = editing && !!rowLookup[index]?.fuelRecord;
 
     if (canToggle) {
+      const returnDoMissing = !!rowLookup[index]?.returnDoMissing;
       return (
         <div className="inline-flex items-center justify-center rounded overflow-hidden border border-gray-300 dark:border-gray-600 text-[11px] leading-none mx-auto">
           <button
@@ -1711,9 +1735,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           <button
             type="button"
             onClick={() => handleDirectionToggle(index, 'returning')}
+            title={returnDoMissing ? 'No return DO on this journey yet' : undefined}
             className={`px-1.5 py-1 font-medium transition-colors border-l border-gray-300 dark:border-gray-600 ${
               dir === 'returning'
-                ? 'bg-blue-500 text-white'
+                ? returnDoMissing
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-blue-500 text-white'
                 : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
             }`}
           >
@@ -1740,19 +1767,21 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   };
 
   const renderStatusCell = (entry: LPODetail, index: number) => {
-    if (specialModeLabel(entry)) {
+    const lookup = rowLookup[index];
+    // Empty DO with a loaded journey is return-DO-missing, not a NIL special row
+    if (specialModeLabel(entry) && !(lookup?.fuelRecord && isSpecialDo(entry.doNo || ''))) {
       return <span className="font-medium text-gray-400 dark:text-gray-500">—</span>;
     }
-    const lookup = rowLookup[index];
     if (editingRow === index && lookup?.loading) {
       return <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 mx-auto" />;
     }
     // Prefer journey lookup message in Status (e.g. Found: DO …, Balance: …)
     if (editingRow === index && lookup?.message) {
+      const isReturnMissing = !!lookup.returnDoMissing;
       return (
         <span
           className={`block w-full max-w-full truncate whitespace-nowrap text-[11px] font-medium text-center ${
-            lookup.warningType
+            isReturnMissing || lookup.warningType
               ? 'text-amber-700 dark:text-amber-300'
               : 'text-green-700 dark:text-green-400'
           }`}
@@ -2480,7 +2509,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         type="text"
                         value={entry.doNo}
                         onChange={(e) => handleEntryEdit(originalIndex, 'doNo', e.target.value)}
-                        className={`w-full px-1 py-0.5 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-center ${sheetCellText}`}
+                        placeholder={rowLookup[originalIndex]?.returnDoMissing ? 'No return DO' : 'DO No.'}
+                        className={`w-full px-1 py-0.5 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-center ${sheetCellText} ${
+                          rowLookup[originalIndex]?.returnDoMissing
+                            ? 'border-amber-400 dark:border-amber-500 placeholder:text-amber-600 dark:placeholder:text-amber-400'
+                            : ''
+                        }`}
                       />
                     ) : (
                       <span
