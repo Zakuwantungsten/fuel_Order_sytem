@@ -6,10 +6,15 @@ import { validate } from '../utils/validate';
 import { createEditLockHandlers } from '../controllers/editLockController';
 import { TangaLPODocument } from '../models/TangaLPODocument';
 import * as tangaLPOController from '../controllers/tangaLPOController';
+import { exportRateLimiter } from '../middleware/rateLimiters';
 
 const router = Router();
 
 const WRITE_ROLES = ['super_admin', 'admin', 'manager', 'supervisor', 'tanga_yard'] as const;
+const EXPORT_ROLES = [
+  'super_admin', 'admin', 'manager', 'super_manager', 'supervisor',
+  'fuel_order_maker', 'boss', 'tanga_yard',
+] as const;
 
 router.use(authenticate);
 
@@ -17,6 +22,18 @@ router.use(authenticate);
 router.get('/next-number',       asyncHandler(tangaLPOController.getNextTangaLPONumber));
 router.get('/years',             asyncHandler(tangaLPOController.getTangaAvailableYears));
 router.get('/filter-options',    asyncHandler(tangaLPOController.getTangaFilterOptions));
+router.get(
+  '/summary-export/month',
+  exportRateLimiter,
+  authorize(...EXPORT_ROLES),
+  asyncHandler(tangaLPOController.exportTangaSummaryMonth)
+);
+router.get(
+  '/summary-export/year',
+  exportRateLimiter,
+  authorize(...EXPORT_ROLES),
+  asyncHandler(tangaLPOController.exportTangaSummaryYear)
+);
 router.get('/workbooks/:year/:month/pdf', asyncHandler(tangaLPOController.downloadTangaMonthPDF));
 router.get('/workbooks/:year',   asyncHandler(tangaLPOController.getTangaWorkbookByYear));
 router.get('/lpo/:lpoNo',        asyncHandler(tangaLPOController.getTangaLPOByLPONo));

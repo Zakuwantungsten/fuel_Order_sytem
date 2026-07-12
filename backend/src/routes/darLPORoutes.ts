@@ -6,10 +6,15 @@ import { validate } from '../utils/validate';
 import { createEditLockHandlers } from '../controllers/editLockController';
 import { DarLPODocument } from '../models/DarLPODocument';
 import * as darLPOController from '../controllers/darLPOController';
+import { exportRateLimiter } from '../middleware/rateLimiters';
 
 const router = Router();
 
 const WRITE_ROLES = ['super_admin', 'admin', 'manager', 'supervisor', 'dar_yard'] as const;
+const EXPORT_ROLES = [
+  'super_admin', 'admin', 'manager', 'super_manager', 'supervisor',
+  'fuel_order_maker', 'boss', 'dar_yard',
+] as const;
 
 router.use(authenticate);
 
@@ -17,6 +22,18 @@ router.use(authenticate);
 router.get('/next-number',       asyncHandler(darLPOController.getNextDarLPONumber));
 router.get('/years',             asyncHandler(darLPOController.getDarAvailableYears));
 router.get('/filter-options',    asyncHandler(darLPOController.getDarFilterOptions));
+router.get(
+  '/summary-export/month',
+  exportRateLimiter,
+  authorize(...EXPORT_ROLES),
+  asyncHandler(darLPOController.exportDarSummaryMonth)
+);
+router.get(
+  '/summary-export/year',
+  exportRateLimiter,
+  authorize(...EXPORT_ROLES),
+  asyncHandler(darLPOController.exportDarSummaryYear)
+);
 router.get('/workbooks/:year/:month/pdf', asyncHandler(darLPOController.downloadDarMonthPDF));
 router.get('/workbooks/:year',   asyncHandler(darLPOController.getDarWorkbookByYear));
 router.get('/lpo/:lpoNo',        asyncHandler(darLPOController.getDarLPOByLPONo));

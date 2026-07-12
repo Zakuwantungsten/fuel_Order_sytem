@@ -254,4 +254,93 @@ export function addLpoYearSummarySheet(
   }
 }
 
+/**
+ * Dar / Tanga yard LPO summary month sheet — same layout as main LPO but without Currency/Type.
+ */
+export function addYardLpoSummaryMonthSheet(
+  workbook: ExcelJS.Workbook,
+  sheetName: string,
+  entries: any[]
+): void {
+  const headers = [
+    'S/N', 'Date', 'LPO No.', 'Diesel At', 'DO/SDO',
+    'Truck No.', 'Liters', 'Price per Liter', 'Total Amount', 'Destinations',
+  ];
+
+  const sheet = workbook.addWorksheet(sheetName.slice(0, 31));
+  sheet.columns = [
+    { width: 6 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 12 },
+    { width: 14 }, { width: 10 }, { width: 14 }, { width: 14 }, { width: 18 },
+  ];
+
+  const headerRow = sheet.getRow(1);
+  headerRow.values = headers;
+  styleHeaderRow(headerRow, headers.length);
+
+  entries.forEach((entry, index) => {
+    const liters = entry.liters ?? entry.ltrs ?? 0;
+    const rate = entry.rate ?? entry.pricePerLtr ?? 0;
+    const amount = entry.amount != null ? entry.amount : liters * rate;
+    const row = sheet.getRow(index + 2);
+    row.values = [
+      index + 1,
+      entry.date,
+      entry.lpoNo,
+      entry.dieselAt || entry.station || '',
+      entry.doSdo || entry.doNo || 'NIL',
+      entry.truckNo,
+      liters,
+      rate,
+      amount,
+      entry.destinations || entry.dest || '',
+    ];
+    styleDataRow(row, headers.length, !!entry.isCancelled);
+  });
+}
+
+/** Year rollup for Dar / Tanga yard LPO exports (single currency). */
+export function addYardLpoYearSummarySheet(
+  workbook: ExcelJS.Workbook,
+  year: number,
+  byMonth: Map<string, any[]>
+): void {
+  const headers = [
+    'Month', 'Total Entries', 'Total Liters', 'Total Amount', 'Average Price/Liter',
+  ];
+
+  const sheet = workbook.addWorksheet(`${year}_Summary`.slice(0, 31));
+  sheet.columns = [
+    { width: 10 }, { width: 14 }, { width: 12 }, { width: 14 }, { width: 16 },
+  ];
+
+  const headerRow = sheet.getRow(1);
+  headerRow.values = headers;
+  styleHeaderRow(headerRow, headers.length);
+
+  let rowNum = 2;
+  for (const month of MONTH_ABBR) {
+    const monthEntries = byMonth.get(month);
+    if (!monthEntries || monthEntries.length === 0) continue;
+
+    let totalLiters = 0;
+    let totalAmount = 0;
+    for (const e of monthEntries) {
+      const liters = e.liters ?? e.ltrs ?? 0;
+      const rate = e.rate ?? e.pricePerLtr ?? 0;
+      totalLiters += liters;
+      totalAmount += e.amount != null ? e.amount : liters * rate;
+    }
+
+    const row = sheet.getRow(rowNum++);
+    row.values = [
+      month,
+      monthEntries.length,
+      totalLiters,
+      totalAmount,
+      totalLiters > 0 ? Number((totalAmount / totalLiters).toFixed(2)) : 0,
+    ];
+    styleDataRow(row, headers.length);
+  }
+}
+
 export { MONTH_ABBR };

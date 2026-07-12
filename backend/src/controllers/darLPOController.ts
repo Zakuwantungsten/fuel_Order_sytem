@@ -9,6 +9,7 @@ import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sa
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
+import { createYardSummaryExportHandlers } from '../utils/yardLpoSummaryExport';
 
 // ── Balance recalculation ──────────────────────────────────────────────────────
 
@@ -948,3 +949,14 @@ export const downloadDarMonthPDF = async (req: AuthRequest, res: Response): Prom
 
   logger.info(`Dar month PDF downloaded: ${monthName} ${year} (${lpos.length} LPOs) by ${req.user?.username}`);
 };
+
+const darSummaryExport = createYardSummaryExportHandlers({
+  Model: DarLPODocument,
+  dieselAt: 'Dar Yard',
+  filePrefix: 'Dar_LPO',
+  resourceType: 'DarLPOSummary',
+  label: 'Dar LPO',
+});
+
+export const exportDarSummaryMonth = darSummaryExport.exportSummaryMonth;
+export const exportDarSummaryYear = darSummaryExport.exportSummaryYear;

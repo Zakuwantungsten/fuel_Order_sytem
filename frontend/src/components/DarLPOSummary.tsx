@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart2, Droplets, TrendingUp, Truck, FileText, Download } from 'lucide-react';
+import { BarChart2, Droplets, TrendingUp, Truck, FileText, Download, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { useDarWorkbook, useDarYears } from '../hooks/useDarLPOs';
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 import { darLPOAPI } from '../services/api';
@@ -10,6 +10,8 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 interface MonthSummary {
   month: number;
@@ -38,6 +40,8 @@ export default function DarLPOSummary() {
     return s ? parseInt(s, 10) : currentYear;
   });
   const [downloadingMonth, setDownloadingMonth] = useState<number | null>(null);
+  const [exportingMonth, setExportingMonth] = useState<number | null>(null);
+  const [isExportingYear, setIsExportingYear] = useState(false);
 
   const handleDownloadMonth = async (month: number) => {
     setDownloadingMonth(month);
@@ -48,6 +52,35 @@ export default function DarLPOSummary() {
       toast.error('Failed to generate PDF');
     } finally {
       setDownloadingMonth(null);
+    }
+  };
+
+  const handleExportMonth = async (month: number) => {
+    if (exportingMonth != null || isExportingYear) return;
+    setExportingMonth(month);
+    try {
+      await darLPOAPI.exportSummaryMonth({
+        year: selectedYear,
+        month: MONTH_ABBR[month - 1],
+      });
+      toast.success('Excel exported');
+    } catch {
+      toast.error('Failed to export Excel summary');
+    } finally {
+      setExportingMonth(null);
+    }
+  };
+
+  const handleExportYear = async () => {
+    if (exportingMonth != null || isExportingYear) return;
+    setIsExportingYear(true);
+    try {
+      await darLPOAPI.exportSummaryYear({ year: selectedYear });
+      toast.success('Year Excel exported');
+    } catch {
+      toast.error('Failed to export year summary');
+    } finally {
+      setIsExportingYear(false);
     }
   };
 
@@ -75,20 +108,31 @@ export default function DarLPOSummary() {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
           <BarChart2 className="w-4 h-4 text-green-500" />
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Monthly Summary</h2>
         </div>
-        <select
-          value={selectedYear}
-          onChange={e => setSelectedYear(Number(e.target.value))}
-          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-        >
-          {years.map(y => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={selectedYear}
+            onChange={e => setSelectedYear(Number(e.target.value))}
+            className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+          >
+            {years.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handleExportYear}
+            disabled={isExportingYear || summaries.length === 0}
+            className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isExportingYear ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 mr-1.5" />}
+            Export Year
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -156,7 +200,7 @@ export default function DarLPOSummary() {
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Trucks Served</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Liters</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total Amount (TZS)</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">PDF</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Export</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -172,19 +216,34 @@ export default function DarLPOSummary() {
                       {row.totalAmount.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => handleDownloadMonth(row.month)}
-                        disabled={downloadingMonth === row.month}
-                        title={`Download all LPOs for ${MONTH_NAMES[row.month - 1]} ${selectedYear}`}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {downloadingMonth === row.month ? (
-                          <span className="w-3.5 h-3.5 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <Download className="w-3.5 h-3.5" />
-                        )}
-                        PDF
-                      </button>
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleExportMonth(row.month)}
+                          disabled={exportingMonth === row.month || isExportingYear}
+                          title={`Export Excel for ${MONTH_NAMES[row.month - 1]} ${selectedYear}`}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {exportingMonth === row.month ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                          )}
+                          Excel
+                        </button>
+                        <button
+                          onClick={() => handleDownloadMonth(row.month)}
+                          disabled={downloadingMonth === row.month}
+                          title={`Download all LPOs for ${MONTH_NAMES[row.month - 1]} ${selectedYear}`}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {downloadingMonth === row.month ? (
+                            <span className="w-3.5 h-3.5 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5" />
+                          )}
+                          PDF
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

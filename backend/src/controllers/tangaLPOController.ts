@@ -9,6 +9,7 @@ import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sa
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
+import { createYardSummaryExportHandlers } from '../utils/yardLpoSummaryExport';
 
 // ── Balance recalculation ──────────────────────────────────────────────────────
 
@@ -948,3 +949,14 @@ export const downloadTangaMonthPDF = async (req: AuthRequest, res: Response): Pr
 
   logger.info(`Tanga month PDF downloaded: ${monthName} ${year} (${lpos.length} LPOs) by ${req.user?.username}`);
 };
+
+const tangaSummaryExport = createYardSummaryExportHandlers({
+  Model: TangaLPODocument,
+  dieselAt: 'Tanga Yard',
+  filePrefix: 'Tanga_LPO',
+  resourceType: 'TangaLPOSummary',
+  label: 'Tanga LPO',
+});
+
+export const exportTangaSummaryMonth = tangaSummaryExport.exportSummaryMonth;
+export const exportTangaSummaryYear = tangaSummaryExport.exportSummaryYear;

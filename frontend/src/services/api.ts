@@ -2871,6 +2871,36 @@ export const tangaLPOAPI = {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
   },
+  exportSummaryMonth: async (params: { year: number | string; month: string }): Promise<void> => {
+    const response = await apiClient.get('/tanga-lpo/summary-export/month', {
+      params: { year: params.year, month: params.month },
+      responseType: 'blob',
+    });
+    const filename = `Tanga_LPO_Summary_${params.month}_${params.year}.xlsx`;
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+  exportSummaryYear: async (params: { year: number | string }): Promise<void> => {
+    const response = await apiClient.get('/tanga-lpo/summary-export/year', {
+      params: { year: params.year },
+      responseType: 'blob',
+    });
+    const filename = `Tanga_LPO_Summary_${params.year}.xlsx`;
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
 };
 
 // ── Dar LPO API ───────────────────────────────────────────────────────────────
@@ -2979,6 +3009,36 @@ export const darLPOAPI = {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+  exportSummaryMonth: async (params: { year: number | string; month: string }): Promise<void> => {
+    const response = await apiClient.get('/dar-lpo/summary-export/month', {
+      params: { year: params.year, month: params.month },
+      responseType: 'blob',
+    });
+    const filename = `Dar_LPO_Summary_${params.month}_${params.year}.xlsx`;
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+  exportSummaryYear: async (params: { year: number | string }): Promise<void> => {
+    const response = await apiClient.get('/dar-lpo/summary-export/year', {
+      params: { year: params.year },
+      responseType: 'blob',
+    });
+    const filename = `Dar_LPO_Summary_${params.year}.xlsx`;
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
     window.URL.revokeObjectURL(url);
   },
 };
