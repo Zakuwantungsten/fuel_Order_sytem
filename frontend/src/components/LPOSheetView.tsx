@@ -143,7 +143,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   /** Desktop sheet grid */
   const sheetGridClass =
-    'grid grid-cols-[40px_minmax(0,0.9fr)_minmax(0,0.9fr)_100px_minmax(0,0.65fr)_minmax(0,0.5fr)_minmax(96px,0.9fr)_minmax(0,0.7fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(88px,0.85fr)_80px_168px] gap-0';
+    'grid grid-cols-[40px_minmax(0,0.85fr)_minmax(0,0.85fr)_100px_minmax(0,0.6fr)_minmax(0,0.45fr)_minmax(96px,0.85fr)_minmax(0,0.65fr)_minmax(0,0.75fr)_minmax(180px,1.45fr)_minmax(88px,0.8fr)_80px_168px] gap-0';
   /** Match header cell typography for body text */
   const sheetCellText = 'font-medium text-gray-900 dark:text-gray-100';
   const sheetCellMuted = 'font-medium text-gray-500 dark:text-gray-400';
@@ -1686,7 +1686,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     if (editingRow === index && lookup?.message) {
       return (
         <span
-          className={`block text-[11px] font-medium leading-snug ${
+          className={`block w-full max-w-full truncate whitespace-nowrap text-[11px] font-medium ${
             lookup.warningType
               ? 'text-amber-700 dark:text-amber-300'
               : 'text-green-700 dark:text-green-400'
@@ -2500,7 +2500,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                     </span>
                   </div>
 
-                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center min-w-0">
+                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center min-w-0 overflow-hidden">
                     {renderStatusCell(entry, originalIndex)}
                   </div>
 
