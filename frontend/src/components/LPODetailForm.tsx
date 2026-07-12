@@ -381,6 +381,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     blockedDirection: 'going' | 'returning';
   }>({ open: false, stationName: '', blockedDirection: 'going' });
 
+  // When switching station and rows already have liters, ask keep vs repopulate
+  const [stationLitersModal, setStationLitersModal] = useState<{
+    open: boolean;
+    stationName: string;
+  }>({ open: false, stationName: '' });
+
   // Ambiguous-DO picker modal. Opens when a typed DO matches more than one truck
   // (dirty imported data). The user must pick the correct journey; we never
   // silently auto-fill in that case.
@@ -1586,6 +1592,51 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // RETURNING: Zambia Return (400 = Ndola 50 + Kapiri 350), Tunduma Return (100), 
   //            Mbeya Return (400), Moro Return (100), Tanga Return (70), Dar Return (variable)
 
+  /** Apply the selected station's rate (and optionally default liters) to every row. */
+  const applyStationToEntries = (station: string, repopulateLiters: boolean) => {
+    setFormData(prev => {
+      const updatedEntries = (prev.entries || []).map((entry, idx) => {
+        const afill = entryAutoFillData[idx];
+        const direction = afill?.direction || 'going';
+        const fr = afill?.fuelRecord;
+        const defaults =
+          station === 'CUSTOM'
+            ? { liters: customDefaultLiters, rate: customRate }
+            : station === 'CASH'
+            ? { liters: cashDefaultLiters, rate: cashRate }
+            : getStationDefaults(
+                station,
+                direction,
+                entry.dest,
+                fr?.totalLts ?? undefined,
+                fr?.extra ?? undefined,
+                fr?.balance ?? undefined,
+              );
+        const resolvedLiters = repopulateLiters ? defaults.liters : (entry.liters || 0);
+        return {
+          ...entry,
+          rate: defaults.rate,
+          liters: resolvedLiters,
+          amount: resolvedLiters * defaults.rate,
+        };
+      });
+      const total = updatedEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+      return { ...prev, entries: updatedEntries, total };
+    });
+  };
+
+  const handleStationLitersKeep = () => {
+    const station = stationLitersModal.stationName;
+    setStationLitersModal({ open: false, stationName: '' });
+    if (station) applyStationToEntries(station, false);
+  };
+
+  const handleStationLitersRepopulate = () => {
+    const station = stationLitersModal.stationName;
+    setStationLitersModal({ open: false, stationName: '' });
+    if (station) applyStationToEntries(station, true);
+  };
+
   const handleHeaderChange = async (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     // Auto-uppercase text fields for consistency
@@ -1597,7 +1648,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       [name]: finalValue,
     }));
 
-    // When station changes, update rates for existing entries
+    // When station changes, update rates / liters for existing entries
     if (name === 'station' && value) {
       // If in forwarding mode and station is selected, automatically fetch LPO number
       if (isForwardingMode && value && value !== 'CASH' && value !== 'CUSTOM') {
@@ -1613,34 +1664,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         }
       }
 
-      // Regular station change - update rates for existing entries.
-      // In forwarding mode the entries were zeroed out, so always apply defaults.liters.
-      // On a normal form, preserve any liters the user has already typed.
-      // Pass preserved fuelRecord data so formula-based stations (e.g. INFINITY) can
-      // evaluate the correct liters using totalLts / extra / balance from the record.
-      const updatedEntries = formData.entries?.map((entry, idx) => {
-        const afill = entryAutoFillData[idx];
-        const direction = afill?.direction || 'going';
-        const fr = afill?.fuelRecord;
-        const defaults = getStationDefaults(
-          value,
-          direction,
-          entry.dest,
-          fr?.totalLts   ?? undefined,
-          fr?.extra      ?? undefined,
-          fr?.balance    ?? undefined,
-        );
-        const resolvedLiters = isForwardingMode ? defaults.liters : (entry.liters || defaults.liters);
-        return {
-          ...entry,
-          rate: defaults.rate,
-          liters: resolvedLiters,
-          amount: resolvedLiters * defaults.rate
-        };
-      }) || [];
-      
-      const total = updatedEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
-      setFormData(prev => ({ ...prev, entries: updatedEntries, total }));
+      // Forwarding rows are zeroed — always apply new defaults.
+      // Empty rows (no liters yet) — apply new defaults with no prompt.
+      // Rows that already have liters — ask keep vs repopulate.
+      const hasExistingLiters = (formData.entries || []).some(entry => (entry.liters || 0) > 0);
+      if (isForwardingMode || !hasExistingLiters) {
+        applyStationToEntries(value, true);
+      } else {
+        setStationLitersModal({ open: true, stationName: value });
+      }
     }
   };
 
@@ -4863,6 +4895,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           cancelLabel="Dismiss"
           onConfirm={() => setDirectionWarningModal(prev => ({ ...prev, open: false }))}
           onCancel={() => setDirectionWarningModal(prev => ({ ...prev, open: false }))}
+        />
+      </div>
+
+      {/* Station change: keep existing liters or refill from the new station defaults */}
+      <div onClick={e => e.stopPropagation()}>
+        <ConfirmModal
+          open={stationLitersModal.open}
+          title="Update Row Liters?"
+          message={`You switched to "${stationLitersModal.stationName}". Keep the liters already in the rows, or refill them with this station's default liters?`}
+          variant="info"
+          confirmLabel="Use new defaults"
+          cancelLabel="Keep current liters"
+          onConfirm={handleStationLitersRepopulate}
+          onCancel={handleStationLitersKeep}
         />
       </div>
 
