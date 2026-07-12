@@ -1,7 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { X, Fuel, AlertCircle, Loader2, TruckIcon, Calendar, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { X, Fuel, AlertCircle, Loader2, TruckIcon, Calendar, ArrowRight, ArrowLeft, CheckCircle2, MessageSquare } from 'lucide-react';
 import { FuelRecord } from '../types';
-import api from '../services/api';
+import api, { lpoDocumentsAPI } from '../services/api';
+
+type EntryContext = {
+  lpoId: string;
+  lpoNo: string;
+  station: string;
+  date: string;
+  doNo: string;
+  truckNo: string;
+  liters: number;
+  context: string;
+  dispensedCheckpoint?: string | null;
+};
 
 const CHECKPOINT_COLUMNS = [
   { abbr: 'MMS', field: 'mmsaYard', label: 'MMSA Yard' },
@@ -82,12 +94,16 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
   const [fuelRecord, setFuelRecord] = useState<FuelRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [entryContexts, setEntryContexts] = useState<EntryContext[]>([]);
+  const [contextPopover, setContextPopover] = useState<EntryContext | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setFuelRecord(null);
       setLoading(true);
       setError(null);
+      setEntryContexts([]);
+      setContextPopover(null);
     }
   }, [isOpen]);
 
@@ -96,6 +112,8 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
       setFuelRecord(null);
       setLoading(true);
       setError(null);
+      setEntryContexts([]);
+      setContextPopover(null);
       fetchFuelRecord();
     }
   }, [isOpen, fuelRecordId]);
@@ -103,23 +121,81 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); onClose(); }
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
+        if (contextPopover) {
+          setContextPopover(null);
+          return;
+        }
+        onClose();
+      }
     };
     window.addEventListener('keydown', handleEscape, true);
     return () => window.removeEventListener('keydown', handleEscape, true);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, contextPopover]);
+
+  const fetchEntryContexts = async (record: FuelRecord) => {
+    if (!record.truckNo) {
+      setEntryContexts([]);
+      return;
+    }
+    try {
+      const contexts = await lpoDocumentsAPI.getEntryContextsForFuelRecord({
+        truckNo: record.truckNo,
+        goingDo: record.goingDo,
+        returnDo: record.returnDo,
+      });
+      setEntryContexts(contexts || []);
+    } catch {
+      setEntryContexts([]);
+    }
+  };
 
   const fetchFuelRecord = async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await api.get(`/fuel-records/${fuelRecordId}`);
-      setFuelRecord(response.data?.data || response.data);
+      const record = response.data?.data || response.data;
+      setFuelRecord(record);
+      if (record) {
+        void fetchEntryContexts(record);
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to fetch fuel record');
     } finally {
       setLoading(false);
     }
+  };
+
+  const contextsForDo = (doNo?: string | null) => {
+    if (!doNo) return [];
+    const up = doNo.toUpperCase().trim();
+    return entryContexts.filter((c) => (c.doNo || '').toUpperCase().trim() === up);
+  };
+
+  const renderContextIcon = (doNo?: string | null, tint = 'text-indigo-600 dark:text-indigo-300') => {
+    const matches = contextsForDo(doNo);
+    if (matches.length === 0) return null;
+    const first = matches[0];
+    const title = matches.map((c) => c.context).join('\n\n');
+    return (
+      <button
+        type="button"
+        title={title}
+        onClick={(e) => {
+          e.stopPropagation();
+          setContextPopover(first);
+        }}
+        className={`inline-flex items-center gap-1 p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 ${tint}`}
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+        {matches.length > 1 && (
+          <span className="text-[10px] font-bold leading-none">{matches.length}</span>
+        )}
+      </button>
+    );
   };
 
   const handleClose = (e?: React.MouseEvent) => {
@@ -255,8 +331,9 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <p className="text-[10px] text-blue-500 dark:text-blue-400">DO number</p>
-                        <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mt-0.5">
+                        <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mt-0.5 inline-flex items-center gap-1">
                           {fuelRecord.goingDo || '—'}
+                          {renderContextIcon(fuelRecord.goingDo, 'text-blue-600 dark:text-blue-300')}
                         </p>
                       </div>
                       <div>
@@ -287,8 +364,9 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                       <div className="grid grid-cols-3 gap-3">
                         <div>
                           <p className="text-[10px] text-green-500 dark:text-green-400">DO number</p>
-                          <p className="text-sm font-semibold text-green-900 dark:text-green-100 mt-0.5">
+                          <p className="text-sm font-semibold text-green-900 dark:text-green-100 mt-0.5 inline-flex items-center gap-1">
                             {fuelRecord.returnDo}
+                            {renderContextIcon(fuelRecord.returnDo, 'text-green-600 dark:text-green-300')}
                           </p>
                         </div>
                         <div>
@@ -509,6 +587,42 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Entry context popover */}
+      {contextPopover && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+          onClick={() => setContextPopover(null)}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-sm rounded-xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 p-4 border-b border-gray-100 dark:border-gray-800">
+              <MessageSquare className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Order context</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                  LPO {contextPopover.lpoNo} · {contextPopover.station}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setContextPopover(null)}
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                {contextPopover.context}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

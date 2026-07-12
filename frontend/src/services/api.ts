@@ -921,6 +921,25 @@ export const lpoDocumentsAPI = {
     const response = await apiClient.get(`/lpo-documents/lpo/${encodeURIComponent(lpoNo)}`);
     return response.data.data;
   },
+
+  getEntryContextsForFuelRecord: async (params: {
+    truckNo: string;
+    goingDo?: string;
+    returnDo?: string;
+  }): Promise<Array<{
+    lpoId: string;
+    lpoNo: string;
+    station: string;
+    date: string;
+    doNo: string;
+    truckNo: string;
+    liters: number;
+    context: string;
+    dispensedCheckpoint?: string | null;
+  }>> => {
+    const response = await apiClient.get('/lpo-documents/entry-contexts', { params });
+    return response.data.data || [];
+  },
   
   create: async (data: Partial<LPOSummary>): Promise<LPOSummary> => {
     const response = await apiClient.post('/lpo-documents', data);

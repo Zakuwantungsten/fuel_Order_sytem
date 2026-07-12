@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight } from 'lucide-react';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight, MessageSquare } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
@@ -396,6 +396,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     doNo: string;
     matches: (TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' })[];
   }>({ open: false, index: -1, doNo: '', matches: [] });
+
+  // Optional per-row context note for truck orders
+  const [contextModal, setContextModal] = useState<{
+    open: boolean;
+    index: number;
+    text: string;
+    readOnly: boolean;
+  }>({ open: false, index: -1, text: '', readOnly: false });
 
   // Multi-select state for bulk editing
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
@@ -4329,6 +4337,26 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                         <Eye className="w-3.5 h-3.5" />
                         Inspect
                       </button>
+                      {entry?.context ? (
+                        <button
+                          type="button"
+                          onClick={() => setContextModal({ open: true, index, text: entry?.context || '', readOnly: true })}
+                          title="View context"
+                          className="flex-1 px-3 py-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-lg inline-flex items-center justify-center gap-1 transition-colors"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          Context
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setContextModal({ open: true, index, text: '', readOnly: false })}
+                          title="Add context"
+                          className="flex-1 px-3 py-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-lg inline-flex items-center justify-center gap-1 transition-colors"
+                        >
+                          Context
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleRemoveEntry(index)}
@@ -4385,6 +4413,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     {hasAnyIssue && (
                       <th className="lpo-th">Status</th>
                     )}
+                    <th className="lpo-th" style={{ width: '56px', textAlign: 'center' }}>Context</th>
                     <th className="lpo-th" style={{ width: '74px', textAlign: 'right' }} />
                   </tr>
                 </thead>
@@ -4746,6 +4775,27 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               </div>
                             </td>
                           )}
+                          <td style={{ textAlign: 'center' }}>
+                            {entry?.context ? (
+                              <button
+                                type="button"
+                                onClick={() => setContextModal({ open: true, index, text: entry?.context || '', readOnly: true })}
+                                className="icon-btn text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
+                                title="View context"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setContextModal({ open: true, index, text: '', readOnly: false })}
+                                className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                                title="Add context"
+                              >
+                                Context
+                              </button>
+                            )}
+                          </td>
                           <td style={{ textAlign: 'right' }}>
                             <span className="inline-flex gap-1 justify-end">
                               {/* Inspect button - Quick view fuel record */}
@@ -4774,7 +4824,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       );
                     })}
                   <tr style={{ borderTop: '1px dashed #c9cdf6' }}>
-                    <td colSpan={hasAnyIssue ? 11 : 10} style={{ padding: 0 }}>
+                    <td colSpan={hasAnyIssue ? 12 : 11} style={{ padding: 0 }}>
                       <button type="button" onClick={handleAddEntry} className="addrow-btn">
                         <Plus className="w-4 h-4" />
                         Add new entry
@@ -4980,6 +5030,85 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Entry context modal */}
+      {contextModal.open && contextModal.index >= 0 && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setContextModal({ open: false, index: -1, text: '', readOnly: false });
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 p-5 border-b border-gray-100 dark:border-gray-800">
+              <MessageSquare className="w-6 h-6 text-indigo-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  {contextModal.readOnly ? 'Order context' : 'Add context'}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Truck {formData.entries?.[contextModal.index]?.truckNo || '—'} · DO{' '}
+                  {formData.entries?.[contextModal.index]?.doNo || '—'}
+                </p>
+              </div>
+            </div>
+            <div className="p-5">
+              <textarea
+                value={contextModal.text}
+                onChange={(e) => setContextModal((p) => ({ ...p, text: e.target.value }))}
+                readOnly={contextModal.readOnly}
+                rows={5}
+                maxLength={2000}
+                placeholder="Optional note for this truck order…"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+              />
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setContextModal({ open: false, index: -1, text: '', readOnly: false })}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                {contextModal.readOnly ? 'Close' : 'Cancel'}
+              </button>
+              {!contextModal.readOnly && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData(prev => {
+                      const entries = [...(prev.entries || [])];
+                      if (entries[contextModal.index]) {
+                        entries[contextModal.index] = {
+                          ...entries[contextModal.index],
+                          context: contextModal.text.trim() || undefined,
+                        };
+                      }
+                      return { ...prev, entries };
+                    });
+                    setContextModal({ open: false, index: -1, text: '', readOnly: false });
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md"
+                >
+                  Save context
+                </button>
+              )}
+              {contextModal.readOnly && (
+                <button
+                  type="button"
+                  onClick={() => setContextModal((p) => ({ ...p, readOnly: false }))}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md"
+                >
+                  Edit
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -8,6 +8,7 @@ import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGene
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import { checkpointFieldLabel } from '../utils/checkpointLabels';
 import {
   generateCancellationReport,
   formatEntryForDisplay,
@@ -138,12 +139,19 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     return null;
   };
 
-  /** Desktop sheet grid: DO, Truck, Direction, Liters, Rate, Amount, Dest, Status, Actions */
+  /** Desktop sheet grid */
   const sheetGridClass =
-    'grid grid-cols-[40px_minmax(0,1.05fr)_minmax(0,1.05fr)_110px_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,0.85fr)_minmax(0,0.95fr)_108px_76px] gap-0';
+    'grid grid-cols-[40px_minmax(0,0.95fr)_minmax(0,0.95fr)_100px_minmax(0,0.7fr)_minmax(0,0.55fr)_minmax(0,0.7fr)_minmax(0,0.75fr)_minmax(0,0.9fr)_minmax(0,1.15fr)_56px_72px] gap-0';
   /** Match header cell typography for body text */
   const sheetCellText = 'font-medium text-gray-900 dark:text-gray-100';
   const sheetCellMuted = 'font-medium text-gray-500 dark:text-gray-400';
+
+  const [contextModal, setContextModal] = useState<{
+    open: boolean;
+    index: number | null;
+    text: string;
+    readOnly: boolean;
+  }>({ open: false, index: null, text: '', readOnly: false });
 
   // Any active entry is pickable — including REF / NIL / Driver-Account entries.
   // Those carry no fuel record, so pick-up just moves them (no fuel netting); the
@@ -1597,14 +1605,14 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
     if (canToggle) {
       return (
-        <div className="flex flex-col gap-0.5">
+        <div className="flex rounded overflow-hidden border border-gray-300 dark:border-gray-600 text-[11px] leading-none">
           <button
             type="button"
             onClick={() => handleDirectionToggle(index, 'going')}
-            className={`px-1 py-0.5 rounded font-medium leading-tight ${
+            className={`px-1.5 py-1 font-medium transition-colors ${
               dir === 'going'
                 ? 'bg-green-500 text-white'
-                : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-green-900/20'
             }`}
           >
             Going
@@ -1612,10 +1620,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           <button
             type="button"
             onClick={() => handleDirectionToggle(index, 'returning')}
-            className={`px-1 py-0.5 rounded font-medium leading-tight ${
+            className={`px-1.5 py-1 font-medium transition-colors border-l border-gray-300 dark:border-gray-600 ${
               dir === 'returning'
                 ? 'bg-blue-500 text-white'
-                : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
             }`}
           >
             Return
@@ -1648,6 +1656,21 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     if (editingRow === index && lookup?.loading) {
       return <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 mx-auto" />;
     }
+    // Prefer journey lookup message in Status (e.g. Found: DO …, Balance: …)
+    if (editingRow === index && lookup?.message) {
+      return (
+        <span
+          className={`block text-[11px] font-medium leading-snug ${
+            lookup.warningType
+              ? 'text-amber-700 dark:text-amber-300'
+              : 'text-green-700 dark:text-green-400'
+          }`}
+          title={lookup.message}
+        >
+          {lookup.message}
+        </span>
+      );
+    }
     const type = lookup?.selectedJourneyType;
     const fr = lookup?.fuelRecord;
     if (type === 'queued' || fr?.journeyStatus === 'queued') {
@@ -1664,10 +1687,44 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         </span>
       );
     }
-    if (editingRow === index) {
-      return <span className="font-medium text-gray-400 dark:text-gray-500">—</span>;
-    }
     return <span className="font-medium text-gray-400 dark:text-gray-500">—</span>;
+  };
+
+  const openContextModal = (index: number, readOnly: boolean) => {
+    const entry = editedSheet.entries[index];
+    setContextModal({
+      open: true,
+      index,
+      text: entry?.context || '',
+      readOnly: readOnly && editingRow !== index,
+    });
+  };
+
+  const saveContextModal = () => {
+    if (contextModal.index === null) return;
+    const idx = contextModal.index;
+    const text = contextModal.text.trim();
+    const nextEntries = editedSheet.entries.map((e, i) =>
+      i === idx ? { ...e, context: text || null } : e
+    );
+    setEditedSheet((prev) => ({ ...prev, entries: nextEntries }));
+    setContextModal({ open: false, index: null, text: '', readOnly: false });
+
+    if (editingRow === idx) {
+      toast.success(text ? 'Context saved on this entry — click Save to commit.' : 'Context cleared — click Save to commit.');
+      return;
+    }
+    void (async () => {
+      try {
+        const next = { ...editedSheet, entries: nextEntries };
+        const updated = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, next);
+        onUpdate(updated);
+        setEditedSheet(updated);
+        toast.success(text ? 'Context saved.' : 'Context cleared.');
+      } catch {
+        toast.error('Failed to save context.');
+      }
+    })();
   };
 
   return (
@@ -2281,7 +2338,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Rate</div>
                 <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Amount</div>
                 <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>Dest.</div>
+                <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Checkpoint</div>
                 <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Status</div>
+                <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Context</div>
                 <div className={`px-3 py-2 ${sheetCellText} text-center`}>Actions</div>
               </div>
             </div>
@@ -2409,7 +2468,36 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   </div>
 
                   <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center">
+                    <span className={`${sheetCellText} text-[11px] text-center leading-snug`} title={entry.dispensedCheckpoint || undefined}>
+                      {checkpointFieldLabel(entry.dispensedCheckpoint)}
+                    </span>
+                  </div>
+
+                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center min-w-0">
                     {renderStatusCell(entry, originalIndex)}
+                  </div>
+
+                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center">
+                    {entry.context ? (
+                      <button
+                        type="button"
+                        onClick={() => openContextModal(originalIndex, editingRow !== originalIndex)}
+                        className="p-1 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded"
+                        title="View context"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                      </button>
+                    ) : editingRow === originalIndex ? (
+                      <button
+                        type="button"
+                        onClick={() => openContextModal(originalIndex, false)}
+                        className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                      >
+                        Add
+                      </button>
+                    ) : (
+                      <span className="font-medium text-gray-400 dark:text-gray-500">—</span>
+                    )}
                   </div>
 
                   <div className="px-3 py-2 text-center">
@@ -2495,6 +2583,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   {formatCurrency(editedSheet.total)}
                 </div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700"></div>
+                <div className="px-2 py-3 border-r border-gray-300 dark:border-gray-700"></div>
+                <div className="px-2 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-2 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-3 py-3 text-center">
                   <Calculator className="w-4 h-4 text-blue-600 dark:text-blue-400 mx-auto" />
@@ -3234,6 +3324,64 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Entry context modal */}
+      {contextModal.open && contextModal.index !== null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="flex items-start gap-3 p-5 border-b border-gray-100 dark:border-gray-800">
+              <MessageSquare className="w-6 h-6 text-indigo-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  {contextModal.readOnly ? 'Order context' : 'Add context'}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Truck {editedSheet.entries[contextModal.index]?.truckNo} · DO{' '}
+                  {editedSheet.entries[contextModal.index]?.doNo}
+                </p>
+              </div>
+            </div>
+            <div className="p-5">
+              <textarea
+                value={contextModal.text}
+                onChange={(e) => setContextModal((p) => ({ ...p, text: e.target.value }))}
+                readOnly={contextModal.readOnly}
+                rows={5}
+                maxLength={2000}
+                placeholder="Optional note for this truck order…"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+              />
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setContextModal({ open: false, index: null, text: '', readOnly: false })}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                {contextModal.readOnly ? 'Close' : 'Cancel'}
+              </button>
+              {!contextModal.readOnly && (
+                <button
+                  type="button"
+                  onClick={saveContextModal}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md"
+                >
+                  Save context
+                </button>
+              )}
+              {contextModal.readOnly && (
+                <button
+                  type="button"
+                  onClick={() => setContextModal((p) => ({ ...p, readOnly: false }))}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md"
+                >
+                  Edit
+                </button>
+              )}
             </div>
           </div>
         </div>

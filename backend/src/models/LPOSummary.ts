@@ -138,6 +138,19 @@ const lpoDetailSchema = new Schema<ILPODetail>(
       trim: true,
       default: null,
     },
+    // Exact FuelRecord column written when liters were dispensed (incl. CASH/CUSTOM)
+    dispensedCheckpoint: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    // Optional operator note for this truck order
+    context: {
+      type: String,
+      trim: true,
+      maxlength: [2000, 'Context cannot exceed 2000 characters'],
+      default: null,
+    },
   },
   { _id: true }
 );

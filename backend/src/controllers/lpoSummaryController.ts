@@ -563,7 +563,7 @@ async function updateFuelRecordForLPOEntry(
     // When true (atomic LPO create with deduct ON), missing fuel/field is a hard error.
     requireSuccess?: boolean;
   }
-): Promise<void> {
+): Promise<string | undefined> {
   try {
     // Check for NIL DO, Driver Account, or REF entries
     const doNoUpper = (doNumber || '').toString().trim().toUpperCase();
@@ -576,19 +576,19 @@ async function updateFuelRecordForLPOEntry(
     // Skip fuel record update for NIL DOs (expected for Driver Account and CASH entries)
     if (isNilDO) {
       logger.debug(`Skipping fuel record update for NIL DO - likely Driver Account or CASH entry (truck: ${truckNo})`);
-      return;
+      return undefined;
     }
 
     // Skip fuel record update for REF entries (partner/third-party trucks)
     if (isRefEntry) {
       logger.debug(`Skipping fuel record update for REF entry - partner truck (truck: ${truckNo})`);
-      return;
+      return undefined;
     }
 
     // Skip DA-mode DO marker (flag-only driver account rows store doNo as "DA")
     if (isDaDo) {
       logger.debug(`Skipping fuel record update for DA DO marker (truck: ${truckNo})`);
-      return;
+      return undefined;
     }
 
     const result = await findFuelRecordWithDirection(doNumber, truckNo, batch, opts?.session);
@@ -601,7 +601,7 @@ async function updateFuelRecordForLPOEntry(
           `No fuel record found for DO ${doNumber} / truck ${truckNo}. LPO was not created — fix the fuel record first, or turn off LPO create deduct automation.`,
         );
       }
-      return;
+      return undefined;
     }
 
     const { fuelRecord, direction } = result;
@@ -615,7 +615,7 @@ async function updateFuelRecordForLPOEntry(
         if (opts?.requireSuccess) {
           throw new ApiError(422, `Invalid checkpoint field "${opts.explicitField}" for truck ${truckNo}.`);
         }
-        return;
+        return undefined;
       }
       fieldToUpdate = opts.explicitField;
       logger.debug(`Manual checkpoint -> field: ${fieldToUpdate}`);
@@ -631,7 +631,7 @@ async function updateFuelRecordForLPOEntry(
           `No fuel checkpoint mapping for station "${station}" (${direction}) on DO ${doNumber} / truck ${truckNo}. LPO was not created — configure the station checkpoint fields, or turn off LPO create deduct automation.`,
         );
       }
-      return;
+      return undefined;
     }
 
     // Store checkpoint values as POSITIVE numbers
@@ -657,7 +657,7 @@ async function updateFuelRecordForLPOEntry(
       existing.balance = (existing.balance || 0) - litersChange;
       batch.pendingInc.set(idStr, existing);
       logger.debug(`✓ Queued fuel record ${idStr} field ${fieldToUpdate}: ${litersChange > 0 ? 'deducted' : 'restored'} ${Math.abs(litersChange)}L`);
-      return;
+      return fieldToUpdate;
     }
 
     // Atomic pipeline update — safe under concurrent LPO writes on the same record
@@ -691,10 +691,12 @@ async function updateFuelRecordForLPOEntry(
         await checkAndPromoteStartedJourney(updatedRecord, 'lpo-system');
       }
     }
+    return fieldToUpdate;
   } catch (error: any) {
     logger.error(`Error updating fuel record for LPO: ${error.message}`);
     // Inside a transaction / requireSuccess the failure must abort the whole operation.
     if (opts?.session || opts?.requireSuccess || error instanceof ApiError) throw error;
+    return undefined;
   }
 }
 
@@ -1160,6 +1162,7 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       const fuelBatch = createFuelUpdateBatch();
       if (!lpo.entries || lpo.entries.length === 0) return [];
 
+      let entriesTouched = false;
       for (const entry of lpo.entries) {
         if (entry.isCancelled) {
           logger.debug(`Skipping fuel record update for cancelled entry: ${entry.truckNo}`);
@@ -1190,30 +1193,40 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
           ? { session, requireSuccess: true as const }
           : undefined;
 
+        let lastField: string | undefined;
         if (entry.goingCheckpoint) {
-          await updateFuelRecordForLPOEntry(
+          lastField = await updateFuelRecordForLPOEntry(
             entry.doNo, entry.liters, lpo.station, entry.truckNo,
             entry.goingCheckpoint, customInfo, fuelBatch, deductOpts,
-          );
+          ) || lastField;
         }
         if (entry.returningCheckpoint) {
-          await updateFuelRecordForLPOEntry(
+          lastField = await updateFuelRecordForLPOEntry(
             entry.doNo, entry.liters, lpo.station, entry.truckNo,
             entry.returningCheckpoint, customInfo, fuelBatch, deductOpts,
-          );
+          ) || lastField;
         }
         if (!entry.goingCheckpoint && !entry.returningCheckpoint && entry.cancellationPoint) {
-          await updateFuelRecordForLPOEntry(
+          lastField = await updateFuelRecordForLPOEntry(
             entry.doNo, entry.liters, lpo.station, entry.truckNo,
             entry.cancellationPoint, customInfo, fuelBatch, deductOpts,
-          );
+          ) || lastField;
         }
         if (!entry.goingCheckpoint && !entry.returningCheckpoint && !entry.cancellationPoint) {
-          await updateFuelRecordForLPOEntry(
+          lastField = await updateFuelRecordForLPOEntry(
             entry.doNo, entry.liters, lpo.station, entry.truckNo,
             undefined, customInfo, fuelBatch, deductOpts,
-          );
+          ) || lastField;
         }
+        if (lastField) {
+          entry.dispensedCheckpoint = lastField;
+          entriesTouched = true;
+        }
+      }
+
+      if (entriesTouched) {
+        lpo.markModified('entries');
+        await lpo.save(session ? { session } : undefined);
       }
 
       return flushFuelUpdateBatch(fuelBatch, 'lpo-system', session ? { session } : undefined);
@@ -1322,6 +1335,8 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       isCancelled?: boolean;
       isDriverAccount?: boolean;
       isRefer?: boolean;
+      dispensedCheckpoint?: string | null;
+      context?: string | null;
       cancellationPoint?: string;
       originalDoNo?: string;
       cancellationReason?: string;
@@ -1390,7 +1405,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         if (!entrySkipsFuelRecord(newEntry) && !entrySkipsFuelRecord(oldEntry)) {
           logger.info(`Entry restored: ${key}, deducting ${newEntry.liters}L from fuel record`);
           if (fuelFlags.lpoCancelRevert) {
-            await updateFuelRecordForLPOEntry(
+            const field = await updateFuelRecordForLPOEntry(
               newEntry.doNo,
               newEntry.liters, // Positive value to deduct from fuel record
               newData.station || existingLpo.station,
@@ -1404,12 +1419,14 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
               undefined,
               { session, touchedIds: touchedFuelIds }
             );
+            if (field) newEntry.dispensedCheckpoint = field;
           } else if (manualFieldFor(newEntry)) {
             // Automation off, but operator chose the checkpoint manually.
-            await updateFuelRecordForLPOEntry(
+            const field = await updateFuelRecordForLPOEntry(
               newEntry.doNo, newEntry.liters, newData.station || existingLpo.station, newEntry.truckNo,
               undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
             );
+            if (field) newEntry.dispensedCheckpoint = field;
             logger.info(`[fuelAutomation] lpoCancelRevert OFF — manual checkpoint ${manualFieldFor(newEntry)} re-deducted for ${newEntry.truckNo}`);
           } else {
             skippedAutomation.add('lpoCancelRevert');
@@ -1546,7 +1563,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         newEntry.amendedAt = new Date();
 
         if (fuelFlags.lpoEditAdjust) {
-          await updateFuelRecordForLPOEntry(
+          const field = await updateFuelRecordForLPOEntry(
             oldEntry.doNo,
             difference,
             newData.station || existingLpo.station,
@@ -1560,17 +1577,24 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
             undefined,
             { session, touchedIds: touchedFuelIds }
           );
+          if (field && difference > 0) newEntry.dispensedCheckpoint = field;
+          else if (!newEntry.dispensedCheckpoint) newEntry.dispensedCheckpoint = oldEntry.dispensedCheckpoint;
         } else if (manualFieldFor(newEntry)) {
           // Automation off, but operator chose the checkpoint manually.
-          await updateFuelRecordForLPOEntry(
+          const field = await updateFuelRecordForLPOEntry(
             oldEntry.doNo, difference, newData.station || existingLpo.station, oldEntry.truckNo,
             undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
           );
+          if (field && difference > 0) newEntry.dispensedCheckpoint = field;
+          else if (!newEntry.dispensedCheckpoint) newEntry.dispensedCheckpoint = oldEntry.dispensedCheckpoint;
           logger.info(`[fuelAutomation] lpoEditAdjust OFF — manual checkpoint ${manualFieldFor(newEntry)} adjusted (${difference}L) for ${oldEntry.truckNo}`);
         } else {
           skippedAutomation.add('lpoEditAdjust');
           logger.info(`[fuelAutomation] lpoEditAdjust OFF — skipping liters adjustment (${difference}L) for ${oldEntry.truckNo}`);
         }
+
+        // Preserve context unless the client sent an update
+        if (newEntry.context === undefined) newEntry.context = oldEntry.context;
 
         entriesToUpdate.push(newEntry);
       } else {
@@ -1580,6 +1604,8 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           newEntry.originalLiters = oldEntry.originalLiters;
           newEntry.amendedAt = oldEntry.amendedAt;
         }
+        if (!newEntry.dispensedCheckpoint) newEntry.dispensedCheckpoint = oldEntry.dispensedCheckpoint;
+        if (newEntry.context === undefined) newEntry.context = oldEntry.context;
       }
     }
 
@@ -1603,7 +1629,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         // For CUSTOM station entries, pass the custom checkpoint info
         logger.info(`New entry: ${key}, adding ${newEntry.liters}L`);
         if (fuelFlags.lpoEditAdjust) {
-          await updateFuelRecordForLPOEntry(
+          const field = await updateFuelRecordForLPOEntry(
             newEntry.doNo,
             newEntry.liters,
             newData.station || existingLpo.station,
@@ -1617,11 +1643,13 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
             undefined,
             { session, touchedIds: touchedFuelIds }
           );
+          if (field) newEntry.dispensedCheckpoint = field;
         } else if (manualFieldFor(newEntry)) {
-          await updateFuelRecordForLPOEntry(
+          const field = await updateFuelRecordForLPOEntry(
             newEntry.doNo, newEntry.liters, newData.station || existingLpo.station, newEntry.truckNo,
             undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
           );
+          if (field) newEntry.dispensedCheckpoint = field;
           logger.info(`[fuelAutomation] lpoEditAdjust OFF — manual checkpoint ${manualFieldFor(newEntry)} deducted for newly-added entry ${newEntry.truckNo}`);
         } else {
           skippedAutomation.add('lpoEditAdjust');
@@ -3240,6 +3268,65 @@ export const getDriverLPOEntries = async (req: AuthRequest, res: Response): Prom
       success: true,
       message: 'Driver LPO entries retrieved successfully',
       data: flattenedEntries,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * LPO entry contexts for a fuel-record journey (truck + going/return DO).
+ * Used by Fuel Record Inspect to show a message icon without expanding rows.
+ */
+export const getEntryContextsForFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const truckNo = String(req.query.truckNo || '').trim();
+    const goingDo = String(req.query.goingDo || '').trim().toUpperCase();
+    const returnDo = String(req.query.returnDo || '').trim().toUpperCase();
+    if (!truckNo) throw new ApiError(400, 'truckNo is required');
+
+    const truckNorm = truckNo.replace(/\s+/g, '').toUpperCase();
+    const truckRegexPattern = truckNorm.split('').join('\\s*');
+    const doList = [goingDo, returnDo].filter((d) => d && d !== 'NIL' && d !== 'N/A');
+
+    const matchEntry: Record<string, any> = {
+      'entries.truckNo': new RegExp(`^${truckRegexPattern}$`, 'i'),
+      'entries.context': { $exists: true, $nin: [null, ''] },
+    };
+    if (doList.length > 0) {
+      matchEntry.$or = [
+        { 'entries.doNo': { $in: doList } },
+        { 'entries.referenceDoNo': { $in: doList } },
+        { 'entries.referenceDo': { $in: doList } },
+      ];
+    }
+
+    const rows = await LPOSummary.aggregate([
+      { $match: { isDeleted: false } },
+      { $unwind: '$entries' },
+      { $match: matchEntry },
+      { $sort: { date: -1 } },
+      { $limit: 50 },
+      {
+        $project: {
+          _id: 0,
+          lpoId: '$_id',
+          lpoNo: 1,
+          station: 1,
+          date: 1,
+          doNo: '$entries.doNo',
+          truckNo: '$entries.truckNo',
+          liters: '$entries.liters',
+          context: '$entries.context',
+          dispensedCheckpoint: '$entries.dispensedCheckpoint',
+        },
+      },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Entry contexts retrieved successfully',
+      data: rows,
     });
   } catch (error: any) {
     throw error;

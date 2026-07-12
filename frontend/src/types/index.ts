@@ -263,6 +263,13 @@ export interface LPODetail {
   customGoingCheckpoint?: string;   // Fuel record field for going direction (Custom1)
   customReturnCheckpoint?: string;  // Fuel record field for return direction (Custom2)
   customCountry?: string;           // Country for custom stations (default Zambia)
+  // Exact FuelRecord column written when liters were dispensed (incl. CASH/CUSTOM)
+  dispensedCheckpoint?: string | null;
+  // Optional operator note for this truck order
+  context?: string | null;
+  // Amendment tracking
+  originalLiters?: number | null;
+  amendedAt?: string | null;
 }
 
 // Fuel Record Types
