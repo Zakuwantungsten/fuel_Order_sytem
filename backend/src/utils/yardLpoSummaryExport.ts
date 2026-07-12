@@ -145,6 +145,14 @@ export function createYardSummaryExportHandlers(cfg: YardSummaryExportConfig) {
       const year = parseInt(String(req.query.year || ''), 10);
       if (isNaN(year)) throw new ApiError(400, 'year is required');
 
+      const monthsRaw = req.query.months ? String(req.query.months) : '';
+      const requestedMonths = monthsRaw
+        .split(',')
+        .map((m) => m.trim())
+        .filter((m) => MONTH_ABBR.includes(m));
+      const monthFilter =
+        requestedMonths.length > 0 ? new Set(requestedMonths) : null;
+
       const entries = await loadYardEntriesForRange(
         cfg.Model,
         cfg.dieselAt,
@@ -152,12 +160,24 @@ export function createYardSummaryExportHandlers(cfg: YardSummaryExportConfig) {
         `${year}-12-31`
       );
 
-      if (entries.length === 0) {
-        throw new ApiError(404, `No ${cfg.label} entries found for the selected year`);
+      const filtered = monthFilter
+        ? entries.filter((e) => {
+            const mon = monthAbbrFromDate(e.date);
+            return mon != null && monthFilter.has(mon);
+          })
+        : entries;
+
+      if (filtered.length === 0) {
+        throw new ApiError(
+          404,
+          monthFilter
+            ? `No ${cfg.label} entries found for the selected months`
+            : `No ${cfg.label} entries found for the selected year`
+        );
       }
 
       const byMonth = new Map<string, YardFlatEntry[]>();
-      for (const entry of entries) {
+      for (const entry of filtered) {
         const mon = monthAbbrFromDate(entry.date);
         if (!mon) continue;
         if (!byMonth.has(mon)) byMonth.set(mon, []);
@@ -169,13 +189,17 @@ export function createYardSummaryExportHandlers(cfg: YardSummaryExportConfig) {
       workbook.created = new Date();
 
       for (const month of MONTH_ABBR) {
+        if (monthFilter && !monthFilter.has(month)) continue;
         const monthEntries = byMonth.get(month);
         if (!monthEntries || monthEntries.length === 0) continue;
         addYardLpoSummaryMonthSheet(workbook, `${month}_${year}`, monthEntries);
       }
       addYardLpoYearSummarySheet(workbook, year, byMonth);
 
-      const filename = `${cfg.filePrefix}_Summary_${year}.xlsx`;
+      const isFiltered = !!monthFilter;
+      const filename = isFiltered
+        ? `${cfg.filePrefix}_Summary_${year}_Filtered.xlsx`
+        : `${cfg.filePrefix}_Summary_${year}.xlsx`;
       res.setHeader(
         'Content-Type',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -189,13 +213,15 @@ export function createYardSummaryExportHandlers(cfg: YardSummaryExportConfig) {
         action: 'EXPORT',
         resourceType: cfg.resourceType,
         resourceId: String(year),
-        details: `${cfg.label} summary year export (${entries.length} rows) by ${req.user?.username}`,
+        details: `${cfg.label} summary ${isFiltered ? 'filtered' : 'year'} export (${filtered.length} rows) by ${req.user?.username}`,
         ipAddress: req.ip,
         severity: 'low',
       }).catch(() => {});
 
       res.end();
-      logger.info(`${cfg.label} summary year ${year} exported by ${req.user?.username}`);
+      logger.info(
+        `${cfg.label} summary year ${year}${isFiltered ? ` (months: ${[...monthFilter!].join(',')})` : ''} exported by ${req.user?.username}`
+      );
     } catch (error: any) {
       if (error instanceof ApiError) {
         if (!res.headersSent) res.status(error.statusCode).json({ error: error.message });

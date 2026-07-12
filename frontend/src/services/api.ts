@@ -2886,12 +2886,17 @@ export const tangaLPOAPI = {
     link.remove();
     window.URL.revokeObjectURL(url);
   },
-  exportSummaryYear: async (params: { year: number | string }): Promise<void> => {
+  exportSummaryYear: async (params: { year: number | string; months?: string[] }): Promise<void> => {
     const response = await apiClient.get('/tanga-lpo/summary-export/year', {
-      params: { year: params.year },
+      params: {
+        year: params.year,
+        ...(params.months?.length ? { months: params.months.join(',') } : {}),
+      },
       responseType: 'blob',
     });
-    const filename = `Tanga_LPO_Summary_${params.year}.xlsx`;
+    const filename = params.months?.length
+      ? `Tanga_LPO_Summary_${params.year}_Filtered.xlsx`
+      : `Tanga_LPO_Summary_${params.year}.xlsx`;
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
@@ -3026,12 +3031,17 @@ export const darLPOAPI = {
     link.remove();
     window.URL.revokeObjectURL(url);
   },
-  exportSummaryYear: async (params: { year: number | string }): Promise<void> => {
+  exportSummaryYear: async (params: { year: number | string; months?: string[] }): Promise<void> => {
     const response = await apiClient.get('/dar-lpo/summary-export/year', {
-      params: { year: params.year },
+      params: {
+        year: params.year,
+        ...(params.months?.length ? { months: params.months.join(',') } : {}),
+      },
       responseType: 'blob',
     });
-    const filename = `Dar_LPO_Summary_${params.year}.xlsx`;
+    const filename = params.months?.length
+      ? `Dar_LPO_Summary_${params.year}_Filtered.xlsx`
+      : `Dar_LPO_Summary_${params.year}.xlsx`;
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
