@@ -201,6 +201,12 @@ const LPO_RD_STYLES = `
 .dark .lpo-rd .fld{background:#0f172a;border-color:#334155;color:#e2e8f0;}
 .lpo-rd .fld-ro{background:#f3f5f9;color:#475569;}
 .dark .lpo-rd .fld-ro{background:#0b1220;border-color:#1e293b;color:#94a3b8;}
+/* Station dropdown trigger — chevron overlaid so it never steals text space */
+.lpo-rd .fld-station{position:relative;display:flex;align-items:center;padding:0 22px 0 8px;overflow:hidden;text-align:left;}
+.lpo-rd .fld-station-label{display:block;width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:40px;height:40px;font-weight:600;}
+.lpo-rd .fld-station-chevron{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;pointer-events:none;color:#94a3b8;line-height:0;}
+.lpo-rd .fld-station-chevron.is-open{transform:translateY(-50%) rotate(180deg);}
+.lpo-rd .fld-station-chevron svg{width:12px;height:12px;display:block;}
 /* Table cell input */
 .lpo-rd .cell-input{width:100%;box-sizing:border-box;height:34px;padding:0 10px;border:1px solid #e6eaf1;border-radius:8px;background:#fff;color:#0f1729;font-size:13px;font-weight:500;outline:none;transition:border-color .12s,box-shadow .12s;}
 .lpo-rd .cell-input:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.12);}
@@ -3401,20 +3407,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     type="button"
                     onClick={() => !loadingStations && setShowStationDropdown(!showStationDropdown)}
                     disabled={loadingStations}
-                    className="fld relative !px-2 !pr-7 flex items-center text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="fld fld-station disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ color: formData.station ? undefined : '#94a3b8' }}
                     title={formData.station || undefined}
                   >
-                    <span
-                      className="block w-full min-w-0 text-[10px] leading-[1.2] font-semibold line-clamp-2 break-words"
-                      title={loadingStations ? undefined : (formData.station || undefined)}
-                    >
+                    <span className="fld-station-label">
                       {loadingStations ? 'Loading...' : (formData.station || 'Select station')}
                     </span>
-                    <ChevronDown
-                      className={`pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-[#94a3b8] transition-transform ${showStationDropdown ? 'rotate-180' : ''}`}
-                      aria-hidden
-                    />
+                    <span className={`fld-station-chevron${showStationDropdown ? ' is-open' : ''}`} aria-hidden>
+                      <ChevronDown />
+                    </span>
                   </button>
 
                   {showStationDropdown && !loadingStations && (
