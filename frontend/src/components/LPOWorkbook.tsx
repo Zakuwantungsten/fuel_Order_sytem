@@ -192,7 +192,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
   const canGoNext = tabPageStart + TABS_PER_PAGE < sheets.length;
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-800 transition-colors">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-800 transition-colors min-w-0">
       {/* Workbook Header */}
       <div className="hidden lg:block border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 p-2 sm:p-4">
         <div className="flex items-center justify-between gap-2">
@@ -331,7 +331,7 @@ const LPOWorkbook: React.FC<LPOWorkbookProps> = ({ workbookId, onClose, initialL
       </div>
 
       {/* Sheet Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-w-0">
         {activeSheet ? (
           <LPOSheetView
             sheet={activeSheet}

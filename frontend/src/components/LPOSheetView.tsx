@@ -142,17 +142,17 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   };
 
   /**
-   * Desktop sheet grid — each column has a hard minimum so widening one
-   * never steals from another; extra viewport width grows the flexible tracks.
-   * Total mins ≈ 1480px; parent is full-bleed so side margins are used.
+   * Desktop sheet grid — fluid tracks that shrink to the viewport.
+   * Low mins (~900px total) avoid horizontal scroll at 100%/125% zoom;
+   * cells already truncate. Extra width still grows flexible columns.
    */
   const sheetGridClass =
-    'grid w-full min-w-[1480px] grid-cols-[40px_minmax(110px,1fr)_minmax(120px,1fr)_118px_minmax(80px,0.7fr)_minmax(88px,0.75fr)_minmax(120px,1fr)_minmax(130px,1.25fr)_minmax(110px,0.95fr)_minmax(220px,1.7fr)_minmax(110px,0.95fr)_80px_168px] gap-0';
+    'grid w-full grid-cols-[32px_minmax(0,0.75fr)_minmax(0,0.9fr)_minmax(0,0.7fr)_minmax(0,0.55fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_minmax(0,0.8fr)_44px_minmax(112px,128px)] gap-0';
   /** Shared cell: horizontal + vertical center */
   const sheetCell =
-    'px-2 py-1.5 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center min-w-0 overflow-hidden';
+    'px-1.5 py-1.5 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center min-w-0 overflow-hidden';
   const sheetCellLast =
-    'px-2 py-1.5 flex items-center justify-center min-w-0 overflow-hidden';
+    'px-1 py-1.5 flex items-center justify-center min-w-0 overflow-hidden';
   /** Match header cell typography for body text */
   const sheetCellText = 'text-[11px] leading-tight font-medium text-gray-900 dark:text-gray-100 text-center';
   const sheetCellMuted = 'text-[11px] leading-tight font-medium text-gray-500 dark:text-gray-400 text-center';
@@ -1763,7 +1763,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   };
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900 transition-colors relative">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900 transition-colors relative min-w-0">
       {/* Loading overlay for server fetch */}
       {isFetchingSheet && (
         <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 flex items-center justify-center z-10">
@@ -1850,10 +1850,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
       {/* Sheet Header - Desktop Only */}
       <div className="hidden lg:block border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2">
-        {/* Desktop: single row */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-x-4">
+        {/* Desktop: single row that wraps under tight / high-zoom viewports */}
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2">
           {/* LPO details - wrap on mobile */}
-          <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5">
+          <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5 min-w-0">
             <div className="flex items-center space-x-1.5">
               <span className="font-medium text-gray-700 dark:text-gray-300 text-xs">LPO No.:</span>
               {isEditing ? (
@@ -1910,11 +1910,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
               )}
             </div>
             
-            <span className="hidden lg:inline text-xs text-gray-600 dark:text-gray-400 font-medium border-l border-gray-300 dark:border-gray-600 pl-4">KINDLY SUPPLY THE FOLLOWING LITERS</span>
+            <span className="hidden 2xl:inline text-xs text-gray-600 dark:text-gray-400 font-medium border-l border-gray-300 dark:border-gray-600 pl-4">KINDLY SUPPLY THE FOLLOWING LITERS</span>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center space-x-1.5 flex-shrink-0">
+          <div className="flex items-center flex-wrap gap-1.5">
             {/* Search input - visible on all viewports */}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
@@ -2142,7 +2142,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       )}
 
       {/* Sheet Content */}
-      <div className="flex-1 overflow-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+      <div className="flex-1 overflow-auto min-w-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
 
         {/* ===== MOBILE VIEW (lg:hidden) ===== */}
         <div className="lg:hidden bg-white dark:bg-gray-800 min-h-full">
@@ -2344,12 +2344,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         </div>
 
         {/* ===== DESKTOP VIEW (hidden lg:block) ===== */}
-        <div className="hidden lg:block w-full px-3 py-4 xl:px-4">
-          <div className="w-full">
-            <div className="border border-gray-300 dark:border-gray-700 rounded-lg overflow-x-auto">
+        <div className="hidden lg:block w-full min-w-0 px-3 py-4 xl:px-4">
+          <div className="w-full min-w-0">
+            <div className="border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
 
             {/* Table Header */}
-            <div className="bg-blue-50 dark:bg-blue-900/30 border-b border-gray-300 dark:border-gray-700 min-w-[1480px]">
+            <div className="bg-blue-50 dark:bg-blue-900/30 border-b border-gray-300 dark:border-gray-700">
               <div className={sheetGridClass}>
                 <div className={`${sheetCell}`}>
                   {(() => {
