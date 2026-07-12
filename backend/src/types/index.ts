@@ -377,6 +377,9 @@ export interface ILPODetail {
   dispensedCheckpoint?: string | null;
   // Optional operator note for this truck order
   context?: string | null;
+  // In-place fill-station override (truck stays on this LPO)
+  pickedAtStation?: string | null;
+  pickedAtAt?: Date | null;
 }
 
 // Cancellation Point Types

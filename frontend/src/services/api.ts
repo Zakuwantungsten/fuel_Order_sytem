@@ -6,7 +6,8 @@ import {
   LPOEntry, 
   LPOSummary, 
   LPOWorkbook, 
-  LPOSheet, 
+  LPOSheet,
+  LPODetail,
   DOWorkbook,
   FuelRecord, 
   DashboardStats,
@@ -1110,6 +1111,30 @@ export const lpoDocumentsAPI = {
     entriesPickedUp: number;
   }> => {
     const response = await apiClient.post('/lpo-documents/pickup-at', data);
+    return response.data.data;
+  },
+
+  // In-place picked-at: keep truck on this LPO, override fill station (+ notify managers).
+  setPickedAt: async (data: {
+    lpoId: string | number;
+    doNo: string;
+    truckNo: string;
+    targetStation?: string | null;
+    customStationName?: string;
+    customCountry?: string;
+    customGoingCheckpoint?: string;
+    customReturnCheckpoint?: string;
+    revertField?: string;
+    addField?: string;
+  }): Promise<{
+    lpoId: string;
+    lpoNo: string;
+    orderStation: string;
+    previousStation: string;
+    pickedAtStation: string | null;
+    entry: LPODetail;
+  }> => {
+    const response = await apiClient.post('/lpo-documents/set-picked-at', data);
     return response.data.data;
   },
 

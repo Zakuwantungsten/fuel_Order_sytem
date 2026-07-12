@@ -151,6 +151,16 @@ const lpoDetailSchema = new Schema<ILPODetail>(
       maxlength: [2000, 'Context cannot exceed 2000 characters'],
       default: null,
     },
+    // In-place fill-station override: truck stays on this LPO but filled elsewhere
+    pickedAtStation: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    pickedAtAt: {
+      type: Date,
+      default: null,
+    },
   },
   { _id: true }
 );

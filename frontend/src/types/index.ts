@@ -72,7 +72,9 @@ export interface LPOEntry {
   date: string;
   lpoNo: string;
   lpoSortNum?: number;
-  dieselAt: string; // Station name like "LAKE CHILABOMBWE"
+  dieselAt: string; // Station name like "LAKE CHILABOMBWE" (effective: picked-at || order)
+  orderStation?: string; // LPO document station (order station)
+  pickedAtStation?: string | null; // Per-truck fill override
   doSdo: string;
   truckNo: string;
   ltrs: number;
@@ -267,6 +269,9 @@ export interface LPODetail {
   dispensedCheckpoint?: string | null;
   // Optional operator note for this truck order
   context?: string | null;
+  // In-place fill-station override (truck stays on this LPO)
+  pickedAtStation?: string | null;
+  pickedAtAt?: string | null;
   // Amendment tracking
   originalLiters?: number | null;
   amendedAt?: string | null;

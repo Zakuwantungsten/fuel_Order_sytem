@@ -1175,6 +1175,85 @@ export const createLPOAmendedNotification = async (
   }
 };
 
+/**
+ * Notify when a truck stays on its LPO but is marked as filled at another station
+ * ("picked at"). Recipients include managers for both the order station and the
+ * picked-at station (plus super_manager where configured).
+ */
+export const createLPOPickedAtNotification = async (
+  lpoDoc: any,
+  entry: any,
+  opts: {
+    orderStation: string;
+    previousStation: string;
+    pickedAtStation: string | null;
+    cleared?: boolean;
+  },
+  createdBy: string
+): Promise<void> => {
+  try {
+    const { isCustomZambia } = resolveLpoNotifyContext(lpoDoc);
+    const orderStation = (opts.orderStation || '').toString().trim().toUpperCase();
+    const previousStation = (opts.previousStation || '').toString().trim().toUpperCase();
+    const pickedAt = opts.pickedAtStation
+      ? opts.pickedAtStation.toString().trim().toUpperCase()
+      : null;
+
+    const stationSet = new Set<string>();
+    if (orderStation && orderStation !== 'CASH') stationSet.add(orderStation);
+    if (previousStation && previousStation !== 'CASH') stationSet.add(previousStation);
+    if (pickedAt && pickedAt !== 'CASH') stationSet.add(pickedAt);
+    if (stationSet.size === 0) return;
+
+    const recipientSet = new Set<string>();
+    for (const st of stationSet) {
+      const recips = await buildLpoRecipients(st, [entry.truckNo], { isCustomZambia });
+      for (const r of recips) recipientSet.add(r);
+    }
+    const recipients = Array.from(recipientSet);
+    if (recipients.length === 0) return;
+
+    const displayStation = pickedAt || orderStation;
+    const title = opts.cleared
+      ? `Picked At Cleared — ${orderStation}`
+      : `Picked At — ${displayStation}`;
+    const message = opts.cleared
+      ? `Truck ${entry.truckNo} on LPO ${lpoDoc.lpoNo} picked-at cleared (back to order station ${orderStation}).`
+      : `Truck ${entry.truckNo} on LPO ${lpoDoc.lpoNo} (ordered at ${orderStation}) filled at ${displayStation}.`;
+
+    const notification = await Notification.create({
+      type: 'lpo_picked_at',
+      title,
+      message,
+      relatedModel: 'LPO',
+      relatedId: lpoDoc._id.toString(),
+      metadata: {
+        lpoNo: lpoDoc.lpoNo,
+        station: displayStation,
+        truckNo: entry.truckNo,
+        orderStation,
+        previousStation,
+        pickedAtStation: pickedAt || undefined,
+      },
+      recipients,
+      createdBy,
+    });
+
+    emitNotification(recipients, lpoWsPayload(notification));
+    sendPushToRecipients(recipients, {
+      title,
+      body: message,
+      data: lpoPushData('lpo_picked_at', { lpoNo: lpoDoc.lpoNo, truckNo: entry.truckNo }, lpoDoc._id.toString()),
+    });
+    emitDataChange('notifications', 'create');
+    logger.info(
+      `LPO picked-at notification: ${lpoDoc.lpoNo} truck ${entry.truckNo} ${previousStation} → ${pickedAt || orderStation}`
+    );
+  } catch (error) {
+    logger.error('Failed to create LPO picked-at notification:', error);
+  }
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Browser Push Subscription endpoints
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1306,4 +1385,5 @@ export default {
   createLPOCreatedNotification,
   createLPOCancelledNotification,
   createLPOAmendedNotification,
+  createLPOPickedAtNotification,
 };

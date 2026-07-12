@@ -1688,6 +1688,7 @@ const LPOs = () => {
                           <span className={`text-sm font-bold ${lpo.isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-blue-600 dark:text-blue-400'}`}>{lpo.lpoNo}</span>
                           {lpo.isCancelled && <span className="px-1.5 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
                           {!lpo.isCancelled && lpo.originalLtrs != null && lpo.originalLtrs !== lpo.ltrs && <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded">AMENDED</span>}
+                          {!lpo.isCancelled && !!lpo.pickedAtStation && <span className="px-1.5 py-0.5 text-[10px] font-bold bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 rounded">PICKED AT</span>}
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{lpo.date}</p>
                       </div>
@@ -1878,6 +1879,7 @@ const LPOs = () => {
                           <span className={lpo.isCancelled ? 'line-through text-red-500 dark:text-red-400' : ''}>{lpo.lpoNo}</span>
                           {lpo.isCancelled && <span className="ml-1 px-1 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
                           {!lpo.isCancelled && lpo.originalLtrs != null && lpo.originalLtrs !== lpo.ltrs && <span className="ml-1 px-1 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded">AMENDED</span>}
+                          {!lpo.isCancelled && !!lpo.pickedAtStation && <span className="ml-1 px-1 py-0.5 text-[10px] font-bold bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 rounded">PICKED AT</span>}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
                           {lpo.dieselAt}

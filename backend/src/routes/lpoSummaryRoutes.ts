@@ -97,6 +97,13 @@ router.post(
   asyncHandler(lpoSummaryController.pickupAtStation)
 );
 
+// In-place picked-at: keep truck on this LPO but record fill station override.
+router.post(
+  '/set-picked-at',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'fuel_attendant', 'station_manager', 'payment_manager'),
+  asyncHandler(lpoSummaryController.setPickedAtStation)
+);
+
 // Update route - per frontend LPOS UPDATE permissions
 router.put(
   '/:id',

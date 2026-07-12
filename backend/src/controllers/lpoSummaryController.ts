@@ -26,12 +26,19 @@ import {
   createLPOCreatedNotification,
   createLPOCancelledNotification,
   createLPOAmendedNotification,
+  createLPOPickedAtNotification,
 } from './notificationController';
 
 // Dynamic station to fuel field mapping cache
 let STATION_TO_FUEL_FIELD_CACHE: Record<string, { going?: string; returning?: string }> = {};
 let CACHE_LAST_UPDATED = 0;
 const CACHE_TTL = 60000; // 1 minute
+
+/** Effective fill station for an entry: picked-at override, else LPO order station. */
+function effectiveStationForEntry(entry: any, lpoStation: string): string {
+  const picked = (entry?.pickedAtStation || '').toString().trim();
+  return picked || (lpoStation || '').toString().trim();
+}
 
 /**
  * Load station mappings from database and cache them
@@ -2434,7 +2441,7 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
     await updateFuelRecordForLPOEntry(
       entry.doNo,
       -entry.liters,
-      lpo.station,
+      effectiveStationForEntry(entry, lpo.station),
       entry.truckNo,
       entry.cancellationPoint,
       entry.isCustomStation ? {
@@ -2557,7 +2564,7 @@ export const amendTruckInLPO = async (req: AuthRequest, res: Response): Promise<
       await updateFuelRecordForLPOEntry(
         entry.doNo,
         -delta,
-        lpo.station,
+        effectiveStationForEntry(entry, lpo.station),
         entry.truckNo,
         cancellationPoint || entry.cancellationPoint,
         entry.isCustomStation ? {
@@ -2668,7 +2675,7 @@ export const cancelAllEntriesInLPO = async (req: AuthRequest, res: Response): Pr
             await updateFuelRecordForLPOEntry(
               entry.doNo,
               -entry.liters,
-              lpo.station,
+              effectiveStationForEntry(entry, lpo.station),
               entry.truckNo,
               fuelFlags.lpoCancelRevert ? entry.cancellationPoint : undefined,
               entry.isCustomStation ? {
@@ -3194,6 +3201,232 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
 };
 
 /**
+ * In-place "picked at": keep the truck on this LPO, but record that it filled
+ * at another station. Nets fuel (revert current effective station, deduct at
+ * new) and notifies managers for order + picked-at stations.
+ *
+ * Body: {
+ *   lpoId, doNo, truckNo,
+ *   targetStation?: string | null,  // omit/null/'' to clear back to order station
+ *   customStationName?, customCountry?, customGoingCheckpoint?, customReturnCheckpoint?,
+ *   revertField?, addField?         // required when automation off / CUSTOM
+ * }
+ */
+export const setPickedAtStation = async (req: AuthRequest, res: Response): Promise<void> => {
+  const {
+    lpoId,
+    doNo,
+    truckNo,
+    targetStation,
+    customStationName,
+    customCountry,
+    customGoingCheckpoint,
+    customReturnCheckpoint,
+    revertField,
+    addField,
+  } = req.body;
+
+  if (!lpoId || !doNo || !truckNo) {
+    throw new ApiError(400, 'lpoId, doNo, and truckNo are required');
+  }
+
+  const clearPickedAt =
+    targetStation == null ||
+    String(targetStation).trim() === '' ||
+    String(targetStation).toUpperCase() === 'CLEAR';
+
+  const isCustomTarget = !clearPickedAt && String(targetStation).toUpperCase() === 'CUSTOM';
+  if (isCustomTarget && !customStationName) {
+    throw new ApiError(400, 'Custom station name is required when target is CUSTOM');
+  }
+
+  const fuelFlags = await getFuelAutomationFlags();
+  const autoCheckpoints = fuelFlags.lpoPickupAuto && !isCustomTarget;
+  const username = req.user?.username || 'system';
+  await enforceEditLock(LPOSummary, lpoId, username, 'lpo_summaries');
+
+  const touchedIds = new Set<string>();
+  const session = await mongoose.startSession();
+  let updatedEntry: any = null;
+  let lpoNo = '';
+  let orderStation = '';
+  let previousStation = '';
+  let newPickedAt: string | null = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const lpo = await LPOSummary.findOne({ _id: lpoId, isDeleted: false }).session(session);
+      if (!lpo) throw new ApiError(404, 'LPO not found');
+      lpoNo = lpo.lpoNo;
+      orderStation = lpo.station;
+
+      const entry: any = lpo.entries.find(
+        (e: any) => e.doNo === doNo && e.truckNo === truckNo && !e.isCancelled
+      );
+      if (!entry) {
+        throw new ApiError(400, `Active truck ${truckNo} (DO ${doNo}) not found on LPO ${lpo.lpoNo}`);
+      }
+
+      previousStation = effectiveStationForEntry(entry, lpo.station);
+      newPickedAt = clearPickedAt
+        ? null
+        : isCustomTarget
+          ? String(customStationName).toUpperCase().trim()
+          : String(targetStation).toUpperCase().trim();
+
+      if (!clearPickedAt && newPickedAt === String(lpo.station).toUpperCase().trim()) {
+        throw new ApiError(400, 'Picked-at station cannot be the same as the LPO order station — clear instead');
+      }
+      if (
+        (newPickedAt || null) === ((entry.pickedAtStation || '').toString().trim().toUpperCase() || null)
+      ) {
+        throw new ApiError(400, 'Picked-at station is already set to that value');
+      }
+
+      const special = isNoFuelRecordEntry(entry);
+      if (!special && !autoCheckpoints) {
+        if (!revertField || !FUEL_CHECKPOINT_FIELDS.has(revertField)) {
+          throw new ApiError(400, 'A valid revert checkpoint is required (manual mode)');
+        }
+        if (!addField || !FUEL_CHECKPOINT_FIELDS.has(addField)) {
+          throw new ApiError(400, 'A valid destination checkpoint is required (manual mode)');
+        }
+      }
+
+      // Revert fuel at current effective station
+      if (!special) {
+        await updateFuelRecordForLPOEntry(
+          entry.doNo,
+          -entry.liters,
+          previousStation,
+          entry.truckNo,
+          entry.cancellationPoint,
+          entry.isCustomStation
+            ? {
+                isCustomStation: entry.isCustomStation,
+                customGoingCheckpoint: entry.customGoingCheckpoint,
+                customReturnCheckpoint: entry.customReturnCheckpoint,
+              }
+            : undefined,
+          undefined,
+          { session, touchedIds, explicitField: autoCheckpoints ? undefined : revertField }
+        );
+      }
+
+      // Deduct at new effective station (order station when clearing)
+      const deductStation = newPickedAt || lpo.station;
+      if (!special) {
+        const customInfo = isCustomTarget
+          ? {
+              isCustomStation: true,
+              customGoingCheckpoint,
+              customReturnCheckpoint,
+            }
+          : entry.isCustomStation && !newPickedAt
+            ? {
+                isCustomStation: entry.isCustomStation,
+                customGoingCheckpoint: entry.customGoingCheckpoint,
+                customReturnCheckpoint: entry.customReturnCheckpoint,
+              }
+            : undefined;
+
+        const dispensed = await updateFuelRecordForLPOEntry(
+          entry.doNo,
+          entry.liters,
+          deductStation,
+          entry.truckNo,
+          entry.cancellationPoint,
+          customInfo,
+          undefined,
+          {
+            session,
+            touchedIds,
+            explicitField: autoCheckpoints ? undefined : addField,
+          }
+        );
+        if (dispensed) entry.dispensedCheckpoint = dispensed;
+      }
+
+      if (clearPickedAt) {
+        entry.pickedAtStation = null;
+        entry.pickedAtAt = null;
+      } else {
+        entry.pickedAtStation = newPickedAt;
+        entry.pickedAtAt = new Date();
+        if (isCustomTarget) {
+          entry.isCustomStation = true;
+          entry.customStationName = customStationName;
+          entry.customGoingCheckpoint = customGoingCheckpoint;
+          entry.customReturnCheckpoint = customReturnCheckpoint;
+          entry.customCountry = (customCountry || 'Zambia').toString().trim();
+        }
+      }
+
+      lpo.markModified('entries');
+      await lpo.save({ session });
+      updatedEntry = entry.toObject ? entry.toObject() : { ...entry };
+    });
+  } finally {
+    session.endSession();
+  }
+
+  // Post-commit: promote journeys for any fuel records we touched.
+  if (touchedIds.size > 0) {
+    const records = await FuelRecord.find({ _id: { $in: Array.from(touchedIds) } });
+    for (const rec of records) {
+      emitDataChange('fuel_records', 'update', rec.toObject());
+      await checkAndPromoteStartedJourney(rec, username);
+    }
+  }
+
+  await AuditService.log({
+    userId: req.user?.userId,
+    username,
+    action: 'UPDATE',
+    resourceType: 'LPOSummary',
+    resourceId: lpoNo,
+    details: clearPickedAt
+      ? `Cleared picked-at for truck ${truckNo} on LPO ${lpoNo} (back to ${orderStation}) by ${username}`
+      : `Set picked-at for truck ${truckNo} on LPO ${lpoNo}: ${previousStation} → ${newPickedAt} by ${username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
+  const lpoDoc = await LPOSummary.findById(lpoId);
+  if (lpoDoc && updatedEntry) {
+    createLPOPickedAtNotification(
+      lpoDoc,
+      updatedEntry,
+      {
+        orderStation,
+        previousStation,
+        pickedAtStation: newPickedAt,
+        cleared: clearPickedAt,
+      },
+      username
+    ).catch(() => {});
+  }
+
+  emitDataChange('lpo_summaries', 'update');
+  emitDataChange('fuel_records', 'update');
+
+  res.status(200).json({
+    success: true,
+    message: clearPickedAt
+      ? `Cleared picked-at for truck ${truckNo} on LPO ${lpoNo}`
+      : `Truck ${truckNo} on LPO ${lpoNo} marked as picked at ${newPickedAt}`,
+    data: {
+      lpoId,
+      lpoNo,
+      orderStation,
+      previousStation,
+      pickedAtStation: newPickedAt,
+      entry: updatedEntry,
+    },
+  });
+};
+
+/**
  * Get flattened LPO entries for a specific truck (Driver Portal)
  * Returns all entries from LPOSummary with cancellation status and updates
  */
@@ -3234,7 +3467,9 @@ export const getDriverLPOEntries = async (req: AuthRequest, res: Response): Prom
             _id: entryId.toString ? entryId.toString() : entryId,
             date: lpo.date,
             lpoNo: lpo.lpoNo,
-            station: lpo.station,
+            station: (entry as any).pickedAtStation || lpo.station,
+            orderStation: lpo.station,
+            pickedAtStation: (entry as any).pickedAtStation || null,
             doSdo: entry.doNo,
             truckNo: entry.truckNo,
             ltrs: entry.liters,
@@ -3312,7 +3547,15 @@ export const getEntryContextsForFuelRecord = async (req: AuthRequest, res: Respo
           _id: 0,
           lpoId: '$_id',
           lpoNo: 1,
-          station: 1,
+          station: {
+            $cond: {
+              if: { $gt: [{ $strLenCP: { $ifNull: ['$entries.pickedAtStation', ''] } }, 0] },
+              then: '$entries.pickedAtStation',
+              else: '$station',
+            },
+          },
+          orderStation: '$station',
+          pickedAtStation: '$entries.pickedAtStation',
           date: 1,
           doNo: '$entries.doNo',
           truckNo: '$entries.truckNo',
@@ -3401,7 +3644,15 @@ const ENTRY_PROJECTION = {
   lpoId: '$_id',
   lpoNo: 1,
   date: 1,
-  dieselAt: '$station',
+  orderStation: '$station',
+  dieselAt: {
+    $cond: {
+      if: { $gt: [{ $strLenCP: { $ifNull: ['$entries.pickedAtStation', ''] } }, 0] },
+      then: '$entries.pickedAtStation',
+      else: '$station',
+    },
+  },
+  pickedAtStation: '$entries.pickedAtStation',
   doSdo: '$doSdoDisplay',
   truckNo: '$entries.truckNo',
   ltrs: '$entries.liters',
@@ -3559,7 +3810,24 @@ function applyManagerStationScope(
     delete docMatch.$nor;
     delete docMatch.$and;
     const s = sanitizeRegexInput(scope.forcedStation);
-    docMatch.station = s ? { $regex: `^${s}$`, $options: 'i' } : '\0__no_station__';
+    if (!s) {
+      docMatch.station = '\0__no_station__';
+      return;
+    }
+    const stationRegex = { $regex: `^${s}$`, $options: 'i' };
+    // Include LPOs ordered at this station OR any LPO with a truck picked-at here.
+    delete docMatch.station;
+    docMatch.$or = [
+      { station: stationRegex },
+      {
+        entries: {
+          $elemMatch: {
+            pickedAtStation: stationRegex,
+            isCancelled: { $ne: true },
+          },
+        },
+      },
+    ];
     return;
   }
 
@@ -3690,7 +3958,13 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
     if (!managerTier) {
       if (station && !search) {
         const s = sanitizeRegexInput(station as string);
-        if (s) docMatch.station = { $regex: `^${s}`, $options: 'i' };
+        if (s) {
+          const stationRegex = { $regex: `^${s}`, $options: 'i' };
+          docMatch.$or = [
+            { station: stationRegex },
+            { 'entries.pickedAtStation': stationRegex },
+          ];
+        }
       }
       if (stations && !station && !search) {
         const list = (stations as string)
@@ -3698,7 +3972,10 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
           .map((x) => sanitizeRegexInput(x.trim()))
           .filter(Boolean);
         if (list.length > 0) {
-          docMatch.$or = list.map((s) => ({ station: { $regex: `^${s}$`, $options: 'i' } }));
+          docMatch.$or = list.flatMap((s) => [
+            { station: { $regex: `^${s}$`, $options: 'i' } },
+            { 'entries.pickedAtStation': { $regex: `^${s}$`, $options: 'i' } },
+          ]);
         }
       }
     }
@@ -3748,6 +4025,52 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
       { $unwind: { path: '$entries', includeArrayIndex: 'entryIdx' } },
     ];
     if (Object.keys(entryMatch).length > 0) pipeline.push({ $match: entryMatch });
+
+    // Station-scoped managers: after unwind, keep rows ordered at their station
+    // OR rows whose picked-at override matches their station (exclude other trucks
+    // on foreign LPOs that merely share a document).
+    if (scope?.forcedStation) {
+      const s = sanitizeRegexInput(scope.forcedStation);
+      if (s) {
+        const stationRegex = { $regex: `^${s}$`, $options: 'i' };
+        pipeline.push({
+          $match: {
+            $or: [
+              { station: stationRegex },
+              { 'entries.pickedAtStation': stationRegex },
+            ],
+          },
+        });
+      }
+    }
+
+    // Optional client station filter at entry level (effective dieselAt)
+    if (!managerTier && station && !search) {
+      const s = sanitizeRegexInput(station as string);
+      if (s) {
+        const stationRegex = { $regex: `^${s}`, $options: 'i' };
+        pipeline.push({
+          $match: {
+            $or: [
+              {
+                $and: [
+                  { station: stationRegex },
+                  {
+                    $or: [
+                      { 'entries.pickedAtStation': null },
+                      { 'entries.pickedAtStation': '' },
+                      { 'entries.pickedAtStation': { $exists: false } },
+                    ],
+                  },
+                ],
+              },
+              { 'entries.pickedAtStation': stationRegex },
+            ],
+          },
+        });
+      }
+    }
+
     pipeline.push(ENTRY_DERIVE_STAGE);
 
     if (search) {

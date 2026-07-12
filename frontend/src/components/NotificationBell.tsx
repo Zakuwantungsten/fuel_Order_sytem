@@ -18,7 +18,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 interface Notification {
   id?: string;
   _id?: string;
-  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'yard_fuel_recorded' | 'truck_pending_linking' | 'truck_entry_rejected' | 'lpo_created' | 'info' | 'warning' | 'error';
+  type: 'missing_total_liters' | 'missing_extra_fuel' | 'both' | 'unlinked_export_do' | 'yard_fuel_recorded' | 'truck_pending_linking' | 'truck_entry_rejected' | 'lpo_created' | 'lpo_cancelled' | 'lpo_amended' | 'lpo_picked_at' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
   relatedModel: string;
@@ -427,6 +427,12 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
         return 'text-green-500';
       case 'lpo_created':
         return 'text-indigo-500';
+      case 'lpo_picked_at':
+        return 'text-teal-500';
+      case 'lpo_amended':
+        return 'text-amber-500';
+      case 'lpo_cancelled':
+        return 'text-red-500';
       default:
         return 'text-blue-500';
     }
@@ -439,7 +445,7 @@ export default function NotificationBell({ onNotificationClick, onEditDO, onReli
     if (type === 'yard_fuel_recorded') {
       return <CheckCircle2 className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
     }
-    if (type === 'lpo_created') {
+    if (type === 'lpo_created' || type === 'lpo_picked_at' || type === 'lpo_amended' || type === 'lpo_cancelled') {
       return <FileText className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;
     }
     return <AlertCircle className={`w-5 h-5 mt-0.5 flex-shrink-0 ${getIconColor(type)}`} />;

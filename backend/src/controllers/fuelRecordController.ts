@@ -1166,7 +1166,15 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           _id: '$entries._id',
           lpoNo: 1,
           date: 1,
-          dieselAt: '$station',
+          dieselAt: {
+            $cond: {
+              if: { $gt: [{ $strLenCP: { $ifNull: ['$entries.pickedAtStation', ''] } }, 0] },
+              then: '$entries.pickedAtStation',
+              else: '$station',
+            },
+          },
+          pickedAtStation: '$entries.pickedAtStation',
+          orderStation: '$station',
           doSdo: { $ifNull: ['$entries.doNo', 'PENDING'] },
           truckNo: '$entries.truckNo',
           ltrs: '$entries.liters',
@@ -1234,7 +1242,15 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           _id: '$entries._id',
           lpoNo: 1,
           date: 1,
-          dieselAt: '$station',
+          dieselAt: {
+            $cond: {
+              if: { $gt: [{ $strLenCP: { $ifNull: ['$entries.pickedAtStation', ''] } }, 0] },
+              then: '$entries.pickedAtStation',
+              else: '$station',
+            },
+          },
+          pickedAtStation: '$entries.pickedAtStation',
+          orderStation: '$station',
           doSdo: { $ifNull: ['$entries.doNo', 'NIL'] },
           truckNo: '$entries.truckNo',
           ltrs: '$entries.liters',

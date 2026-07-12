@@ -199,12 +199,19 @@ export function ManagerView({ user }: ManagerViewProps) {
           if (isSuperManager) {
             // The server already scopes the data; this just keeps the UI honest if
             // the config and the response ever drift. Configured list wins.
+            const orderStation = entry.orderStation?.toUpperCase()?.trim();
             if (configuredStations.length > 0) {
-              return configuredStations.map(s => s.toUpperCase().trim()).includes(station);
+              const allowed = configuredStations.map(s => s.toUpperCase().trim());
+              return allowed.includes(station) || (!!orderStation && allowed.includes(orderStation));
             }
-            if (EXCLUDED_STATIONS_SUPER.includes(station)) return false;
+            if (EXCLUDED_STATIONS_SUPER.includes(station) && (!orderStation || EXCLUDED_STATIONS_SUPER.includes(orderStation))) {
+              return false;
+            }
           }
-          if (!isSuperManager && userStation && station !== userStation) return false;
+          if (!isSuperManager && userStation && station !== userStation) {
+            const orderStation = entry.orderStation?.toUpperCase()?.trim();
+            if (orderStation !== userStation) return false;
+          }
           return true;
         });
 
@@ -292,8 +299,8 @@ export function ManagerView({ user }: ManagerViewProps) {
       console.log('[ManagerView] Received real-time notification:', notification);
       
       // If it's an LPO notification, refresh the list immediately
-      if (notification.type === 'lpo_created') {
-        console.log('[ManagerView] LPO created - refreshing data...');
+      if (notification.type === 'lpo_created' || notification.type === 'lpo_picked_at' || notification.type === 'lpo_amended' || notification.type === 'lpo_cancelled') {
+        console.log('[ManagerView] LPO change - refreshing data...');
         fetchLPOEntries(true); // Silent refresh
       }
     }, 'manager');
