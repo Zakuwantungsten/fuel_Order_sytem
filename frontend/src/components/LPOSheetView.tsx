@@ -341,7 +341,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           }
         })
       );
-      if (!cancelled) setEntryDirections(next);
+      // Merge so a temporary empty DO (truck re-type) does not wipe existing Dir state
+      if (!cancelled) setEntryDirections((prev) => ({ ...prev, ...next }));
     };
     void resolveAll();
     return () => {
@@ -1258,8 +1259,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       const fr = result.fuelRecord;
       if (!fr) return;
 
+      // Match LPODetailForm: always replace DO from journey — never keep the previous row DO.
       const doNumber =
-        direction === 'going' ? result.goingDo || fr.goingDo : result.returnDo || fr.returnDo || fr.goingDo;
+        direction === 'going'
+          ? result.goingDo || fr.goingDo || ''
+          : result.returnDo || fr.returnDo || result.goingDo || fr.goingDo || '';
       const dest =
         direction === 'going'
           ? result.goingDestination || fr.originalGoingTo || fr.to || 'NIL'
@@ -1275,7 +1279,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         updatedEntries[index] = {
           ...cur,
           truckNo,
-          doNo: (doNumber || cur.doNo || '').toString().toUpperCase(),
+          doNo: String(doNumber).toUpperCase(),
           dest,
           amount: cur.liters * cur.rate,
         };
@@ -1309,13 +1313,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   const runTruckLookup = useCallback(
     async (index: number, truckNo: string) => {
-      let priorDirection: 'going' | 'returning' = 'going';
+      // Same as Detail Form: use current Dir toggle, else going.
+      let direction: 'going' | 'returning' = 'going';
       setRowLookup((prev) => {
-        priorDirection = prev[index]?.direction || 'going';
+        direction = prev[index]?.direction || entryDirections[index] || 'going';
         return {
           ...prev,
           [index]: {
             ...(prev[index] || { direction: 'going' as const }),
+            direction,
             loading: true,
             fetched: false,
             fuelRecord: null,
@@ -1329,7 +1335,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           [index]: {
             loading: false,
             fetched: true,
-            direction: prev[index]?.direction || priorDirection,
+            direction: prev[index]?.direction || direction,
             fuelRecord: result.fuelRecord,
             message: result.message,
             warningType: result.warningType || null,
@@ -1341,12 +1347,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       }
       applyJourneyToRow(
         index,
-        { ...result, direction: priorDirection },
-        { direction: priorDirection, preserveTruck: true }
+        { ...result, direction },
+        { direction, preserveTruck: true }
       );
       toast.success(result.message || 'Truck journey loaded');
     },
-    [applyJourneyToRow, lpoTruckLookupMonths]
+    [applyJourneyToRow, entryDirections, lpoTruckLookupMonths]
   );
 
   const runDoLookup = useCallback(
@@ -1491,31 +1497,45 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   };
 
   const handleEntryEdit = (index: number, field: keyof LPODetail, value: string | number) => {
-    const updatedEntries = [...editedSheet.entries];
-    
-    // Format truck number to standard format
+    // Format truck number to standard format (same as LPODetailForm)
     const processedValue = field === 'truckNo' ? formatTruckNumber(value as string) : value;
-    
-    updatedEntries[index] = {
-      ...updatedEntries[index],
-      [field]: processedValue
-    };
+    const TRUCK_FORMAT_COMPLETE = /^T\d+ [A-Z]{2,}$/i;
 
-    // Recalculate amount if liters or rate changed
-    if (field === 'liters' || field === 'rate') {
-      updatedEntries[index].amount = updatedEntries[index].liters * updatedEntries[index].rate;
-    }
+    let entryAfterEdit: LPODetail | null = null;
+    let truckIdentityChanged = false;
 
-    setEditedSheet(prev => ({
-      ...prev,
-      entries: updatedEntries
-    }));
+    // Functional update so a keystroke cannot clobber DO/dest filled by applyJourneyToRow
+    setEditedSheet((prev) => {
+      const updatedEntries = [...prev.entries];
+      const cur = updatedEntries[index];
+      if (!cur) return prev;
+
+      if (field === 'truckNo') {
+        const prevTruck = formatTruckNumber(cur.truckNo || '').toUpperCase();
+        const nextTruck = String(processedValue || '').toUpperCase();
+        truckIdentityChanged = prevTruck !== nextTruck;
+      }
+
+      updatedEntries[index] = {
+        ...cur,
+        [field]: processedValue,
+        // Clear stale journey fields when truck changes; fetch will refill (Detail Form parity)
+        ...(truckIdentityChanged ? { doNo: '', dest: 'NIL' } : {}),
+      };
+
+      if (field === 'liters' || field === 'rate') {
+        updatedEntries[index].amount = updatedEntries[index].liters * updatedEntries[index].rate;
+      }
+
+      entryAfterEdit = updatedEntries[index];
+      return { ...prev, entries: updatedEntries };
+    });
 
     // Debounced journey fetch for truck / DO corrections — never for DA / REF / NIL
     if (field === 'truckNo' || field === 'doNo') {
       if (lookupTimers.current[index]) clearTimeout(lookupTimers.current[index]);
-      const entryAfterEdit = updatedEntries[index];
-      if (isNonFuelEntry(entryAfterEdit)) {
+
+      if (entryAfterEdit && isNonFuelEntry(entryAfterEdit)) {
         setRowLookup((prev) => {
           const next = { ...prev };
           delete next[index];
@@ -1523,6 +1543,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         });
         return;
       }
+
       const raw = String(processedValue || '').trim();
       if (field === 'doNo' && isSpecialDo(raw)) {
         setRowLookup((prev) => {
@@ -1532,10 +1553,41 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         });
         return;
       }
+
+      if (field === 'truckNo') {
+        // Wait for complete truck format before fetching (same gate as LPODetailForm)
+        if (!TRUCK_FORMAT_COMPLETE.test(raw.toUpperCase())) {
+          setRowLookup((prev) => ({
+            ...prev,
+            [index]: {
+              ...(prev[index] || { direction: entryDirections[index] || ('going' as const) }),
+              loading: false,
+              fetched: false,
+              fuelRecord: null,
+              message: undefined,
+              warningType: null,
+            },
+          }));
+          return;
+        }
+        setRowLookup((prev) => ({
+          ...prev,
+          [index]: {
+            ...(prev[index] || { direction: entryDirections[index] || ('going' as const) }),
+            loading: true,
+            fetched: false,
+            fuelRecord: null,
+          },
+        }));
+        lookupTimers.current[index] = setTimeout(() => {
+          void runTruckLookup(index, raw);
+        }, 300);
+        return;
+      }
+
       if (raw.length < 3) return;
       lookupTimers.current[index] = setTimeout(() => {
-        if (field === 'truckNo') void runTruckLookup(index, raw);
-        else void runDoLookup(index, raw.toUpperCase());
+        void runDoLookup(index, raw.toUpperCase());
       }, 350);
     }
   };
