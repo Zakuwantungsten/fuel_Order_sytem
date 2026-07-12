@@ -833,7 +833,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       station: editedSheet.station,
       orderOf: editedSheet.orderOf,
       entries: editedSheet.entries,
-      total: editedSheet.total
+      total: editedSheet.total,
+      currency: editedSheet.currency,
     };
   };
 
@@ -951,6 +952,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }).format(amount);
   };
 
+  // Prefer stored LPO currency; fall back to station-name heuristic (same as LPOPrint)
+  const sheetCurrency: 'USD' | 'TZS' = editedSheet.currency || (() => {
+    const upper = (editedSheet.station || '').toUpperCase();
+    return (upper.startsWith('LAKE') && !upper.includes('TUNDUMA')) ? 'USD' : 'TZS';
+  })();
+  const currencyPrefix = sheetCurrency === 'USD' ? '$' : 'TZS';
+  const formatMoney = (amount: number): string =>
+    `${currencyPrefix} ${formatCurrency(amount)}`;
+
   // Filtered entries for search — carries originalIndex so all handlers use the correct full-array position
   const visibleEntries = editedSheet.entries
     .map((entry, originalIndex) => ({ entry, originalIndex }))
@@ -1045,7 +1055,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           </div>
           <div>
             <div className="text-[9.5px] font-semibold tracking-[0.1em] uppercase text-[#bfdbfe] mb-[3px]">Grand Total</div>
-            <div className="text-[13.5px] font-extrabold text-[#4ade80] tabular-nums">${formatCurrency(editedSheet.total)}</div>
+            <div className="text-[13.5px] font-extrabold text-[#4ade80] tabular-nums">{formatMoney(editedSheet.total)}</div>
           </div>
         </div>
       </div>
@@ -1469,7 +1479,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         <div className="text-right flex-shrink-0">
                           <div className="text-[9px] font-bold tracking-[0.08em] uppercase text-gray-500 dark:text-gray-400">Amount</div>
                           <div className={`text-[18px] font-extrabold tabular-nums leading-tight ${isCancelled ? 'line-through text-red-500 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
-                            ${formatCurrency(entry.amount)}
+                            {formatMoney(entry.amount)}
                           </div>
                         </div>
                       </div>
@@ -1818,7 +1828,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           </div>
           <div className="text-right">
             <div className="text-[9px] font-bold tracking-[0.1em] uppercase text-[#bfdbfe]">Grand Total</div>
-            <div className="text-[21px] font-extrabold text-white tabular-nums leading-tight">${formatCurrency(editedSheet.total)}</div>
+            <div className="text-[21px] font-extrabold text-white tabular-nums leading-tight">{formatMoney(editedSheet.total)}</div>
           </div>
         </div>
       </div>

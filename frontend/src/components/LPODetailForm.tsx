@@ -3393,8 +3393,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 />
               </div>
 
-              {/* Station */}
-              <div className="col-span-2 lg:col-span-1">
+              {/* Station — same row as Order of on mobile (1 col each) */}
+              <div>
                 <label className="lbl">Station</label>
                 <div className="relative" ref={stationDropdownRef}>
                   <button
@@ -3403,16 +3403,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     disabled={loadingStations}
                     className="fld flex items-center justify-between text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ color: formData.station ? undefined : '#94a3b8' }}
+                    title={formData.station || undefined}
                   >
-                    <span className="flex-1 inline-flex items-center gap-2 min-w-0 overflow-hidden mr-1">
-                      <MapPin className="w-[15px] h-[15px] text-[#4f46e5] shrink-0" />
-                      <span className="truncate">{loadingStations ? 'Loading stations...' : (formData.station || 'Select station')}</span>
+                    <span className="flex-1 inline-flex items-center gap-1.5 min-w-0 overflow-hidden mr-0.5">
+                      <MapPin className="w-[13px] h-[13px] text-[#4f46e5] shrink-0" />
+                      <span
+                        className="truncate text-[11px] leading-tight font-semibold"
+                        title={loadingStations ? undefined : (formData.station || undefined)}
+                      >
+                        {loadingStations ? 'Loading...' : (formData.station || 'Select station')}
+                      </span>
                     </span>
-                    <ChevronDown className={`w-4 h-4 shrink-0 text-[#94a3b8] transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-3.5 h-3.5 shrink-0 text-[#94a3b8] transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
                   </button>
 
                   {showStationDropdown && !loadingStations && (
-                    <div className="menu absolute z-40 left-0 right-0 top-[46px] p-1.5 max-h-[280px] overflow-y-auto">
+                    <div className="menu absolute z-40 left-0 top-[46px] p-1.5 max-h-[280px] overflow-y-auto w-[calc(200%+1rem)] min-w-full max-w-[min(100vw-1.5rem,22rem)] lg:w-full lg:max-w-none">
                       <button
                         type="button"
                         onClick={() => {
@@ -3438,8 +3444,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             className="menu-item w-full flex items-center justify-between gap-2.5 px-[11px] py-2 rounded-lg text-left"
                           >
                             <span className="flex flex-col gap-0.5 min-w-0">
-                              <span className={`text-[13px] font-semibold truncate ${active ? 'text-[#4f46e5] dark:text-indigo-400' : 'text-[#0f1729] dark:text-gray-100'}`}>{station.stationName}</span>
-                              <span className="text-[11px] text-[#9aa6b6] font-medium truncate">
+                              <span
+                                className={`text-[11.5px] font-semibold truncate ${active ? 'text-[#4f46e5] dark:text-indigo-400' : 'text-[#0f1729] dark:text-gray-100'}`}
+                                title={station.stationName}
+                              >
+                                {station.stationName}
+                              </span>
+                              <span className="text-[10px] text-[#9aa6b6] font-medium truncate">
                                 Going {station.defaultLitersGoing}L · Return {station.defaultLitersReturning}L · @{station.defaultRate}/L
                               </span>
                             </span>
