@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { toast } from 'react-toastify';
-import { SquarePen, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, CircleX, RotateCcw, Loader2, XCircle, Search, ArrowRightLeft, MapPin, Check } from 'lucide-react';
+import { PenSquare, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, XCircle, RotateCcw, Loader2, Search, ArrowRightLeft, MapPin, Check } from 'lucide-react';
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint, FuelRecord } from '../types';
 import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI, FuelAutomationConfig } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
@@ -1807,7 +1807,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   </button>
                   <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
                   <button onClick={handleStartEdit} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <SquarePen className="w-4 h-4 mr-3 text-blue-500" />Edit LPO
+                    <PenSquare className="w-4 h-4 mr-3 text-blue-500" />Edit LPO
                   </button>
                   {editedSheet.entries.some(e => !e.isCancelled) && (
                     <button onClick={() => { setShowCopyDropdown(false); setShowCancelAllModal(true); }} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
@@ -2014,7 +2014,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   onClick={handleStartEdit}
                   className="flex items-center px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
                 >
-                  <SquarePen className="w-3.5 h-3.5 mr-1" />
+                  <PenSquare className="w-3.5 h-3.5 mr-1" />
                   Edit LPO
                 </button>
 
@@ -2298,7 +2298,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         ) : (
                           <>
                             <button onClick={() => handleStartRowEdit(originalIndex)} className="flex-1 flex items-center justify-center gap-[7px] h-[42px] rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-[13px] font-bold hover:bg-blue-100 dark:hover:bg-blue-900/30">
-                              <SquarePen className="w-[15px] h-[15px]" />Modify
+                              <PenSquare className="w-[15px] h-[15px]" />Modify
                             </button>
                             <button onClick={() => openCancelModal(originalIndex)} className="flex-1 flex items-center justify-center gap-[7px] h-[42px] rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-[13px] font-bold hover:bg-orange-100 dark:hover:bg-orange-900/30">
                               <XCircle className="w-[15px] h-[15px]" />Void
@@ -2577,7 +2577,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                             className="p-1.5 rounded-md text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                             title="Edit Entry"
                           >
-                            <SquarePen className="w-4 h-4" strokeWidth={2} />
+                            <PenSquare className="w-4 h-4" strokeWidth={2} />
                           </button>
                           <button
                             onClick={() => handleOpenPickedAt(originalIndex)}
@@ -2604,7 +2604,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                             className="p-1.5 rounded-md text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30"
                             title="Cancel Entry"
                           >
-                            <CircleX className="w-4 h-4" strokeWidth={2} />
+                            <XCircle className="w-4 h-4" strokeWidth={2} />
                           </button>
                         </>
                       )}
@@ -2712,7 +2712,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 transition-colors">
             <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                <CircleX className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" />
+                <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" />
                 Cancel Entry
               </h3>
               <button
