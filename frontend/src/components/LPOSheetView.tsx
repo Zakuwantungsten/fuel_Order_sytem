@@ -104,6 +104,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   // Truck / DO journey lookup while editing a row (parity with LPODetailForm)
   const [rowLookup, setRowLookup] = useState<Record<number, RowLookupState>>({});
   const lookupTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  /** Resolved going/returning per row (always-visible Dir column). */
+  const [entryDirections, setEntryDirections] = useState<Record<number, 'going' | 'returning'>>({});
+  /** Direction at edit-start — used to detect direction swaps on save. */
+  const editOriginDirectionRef = useRef<Record<number, 'going' | 'returning'>>({});
   const [doAmbiguityModal, setDoAmbiguityModal] = useState<{
     open: boolean;
     index: number;
@@ -126,6 +130,17 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   /** DA / REF / NIL rows never fetch journeys or touch fuel records. */
   const isNonFuelEntry = (entry: LPODetail): boolean =>
     !!entry.isDriverAccount || !!(entry as any).isRefer || isSpecialDo(entry.doNo || '');
+
+  const specialModeLabel = (entry: LPODetail): 'DA' | 'REF' | 'NIL' | null => {
+    if (entry.isDriverAccount) return 'DA';
+    if ((entry as any).isRefer || (entry.doNo || '').toUpperCase().trim() === 'REF') return 'REF';
+    if (isSpecialDo(entry.doNo || '')) return 'NIL';
+    return null;
+  };
+
+  /** Desktop sheet grid: DO, Truck, Dir, Liters, Rate, Amount, Dest, Status, Actions */
+  const sheetGridClass =
+    'grid grid-cols-[40px_minmax(0,1.05fr)_minmax(0,1.05fr)_92px_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,0.85fr)_minmax(0,0.95fr)_108px_76px] gap-0';
 
   // Any active entry is pickable — including REF / NIL / Driver-Account entries.
   // Those carry no fuel record, so pick-up just moves them (no fuel netting); the
@@ -243,6 +258,36 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   useEffect(() => {
     if (journeyConfig?.fuelAutomation) setFuelAutomation(journeyConfig.fuelAutomation);
   }, [journeyConfig]);
+
+  // Resolve going/returning for every regular entry so the Dir column is always populated.
+  const directionFingerprint = editedSheet.entries
+    .map((e) => `${e.doNo}|${e.truckNo}|${!!e.isDriverAccount}|${!!(e as any).isRefer}|${!!e.isCancelled}`)
+    .join(';');
+  useEffect(() => {
+    let cancelled = false;
+    const resolveAll = async () => {
+      const next: Record<number, 'going' | 'returning'> = {};
+      await Promise.all(
+        editedSheet.entries.map(async (entry, index) => {
+          if (entry.isCancelled || isNonFuelEntry(entry)) return;
+          const doNo = (entry.doNo || '').trim();
+          if (doNo.length < 3) return;
+          try {
+            const res = await fuelRecordsAPI.getByDoNumber(doNo);
+            if (res?.direction) next[index] = res.direction;
+          } catch {
+            /* leave unresolved */
+          }
+        })
+      );
+      if (!cancelled) setEntryDirections(next);
+    };
+    void resolveAll();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fingerprint captures entry identity
+  }, [directionFingerprint]);
 
   // Scroll to and highlight the row for initialTruckNo once entries are loaded
   useEffect(() => {
@@ -383,9 +428,13 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   // Save a single row edit to the backend. When a manual checkpoint is supplied
   // (lpoEditAdjust automation OFF), it's attached so the backend adjusts that column.
-  // For truck/DO identity changes, pass the same field for both old and new keys so
-  // revert (old) and deduct (new) hit the correct fuel records.
-  const handleRowSave = async (index: number, manualField?: string) => {
+  // For truck/DO/direction identity changes, pass fields for both old and new keys so
+  // revert (old) and deduct (new) hit the correct fuel records / checkpoints.
+  const handleRowSave = async (
+    index: number,
+    manualField?: string,
+    opts?: { revertField?: string }
+  ) => {
     if (isSaving) return; // Prevent double submission
     setIsSaving(true);
     try {
@@ -401,7 +450,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           ((orig.doNo || '') !== (cur.doNo || '') ||
             (orig.truckNo || '').toLowerCase() !== (cur.truckNo || '').toLowerCase())
         ) {
-          checkpoints[`${orig.doNo}-${orig.truckNo}`] = manualField;
+          checkpoints[`${orig.doNo}-${orig.truckNo}`] = opts?.revertField || manualField;
         }
         payload = { ...editedSheet, manualCheckpoints: checkpoints };
       }
@@ -413,7 +462,26 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         delete next[index];
         return next;
       });
-      setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false });
+      delete editOriginDirectionRef.current[index];
+      // Keep Dir column in sync after save
+      const saved = updatedSheet.entries?.[index] ?? editedSheet.entries[index];
+      if (saved && !isNonFuelEntry(saved)) {
+        const dir = rowLookup[index]?.direction;
+        if (dir) {
+          setEntryDirections((prev) => ({ ...prev, [index]: dir }));
+        }
+      }
+      setEditCheckpoint({
+        open: false,
+        index: null,
+        direction: null,
+        oldDirection: null,
+        fuelRecordId: null,
+        field: '',
+        revertField: '',
+        isDirectionSwap: false,
+        loading: false,
+      });
       await releaseLockIfNeeded();
       toast.success('Entry updated! Fuel records have been adjusted.');
     } catch (error: any) {
@@ -421,7 +489,17 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       if (error?.response?.status === 409) {
         toast.error('Edit session expired — click the edit button to start a new edit.');
         setEditingRow(null);
-        setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false });
+        setEditCheckpoint({
+          open: false,
+          index: null,
+          direction: null,
+          oldDirection: null,
+          fuelRecordId: null,
+          field: '',
+          revertField: '',
+          isDirectionSwap: false,
+          loading: false,
+        });
         await releaseLockIfNeeded();
       } else {
         toast.error('Error saving entry. Please try again.');
@@ -432,14 +510,28 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   };
 
   // Edit-side manual checkpoint state (when lpoEditAdjust automation is OFF).
+  // Direction swaps need separate revert (old dir) + add (new dir) columns.
   const [editCheckpoint, setEditCheckpoint] = useState<{
     open: boolean;
     index: number | null;
     direction: 'going' | 'returning' | null;
+    oldDirection: 'going' | 'returning' | null;
     fuelRecordId: string | number | null;
     field: string;
+    revertField: string;
+    isDirectionSwap: boolean;
     loading: boolean;
-  }>({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false });
+  }>({
+    open: false,
+    index: null,
+    direction: null,
+    oldDirection: null,
+    fuelRecordId: null,
+    field: '',
+    revertField: '',
+    isDirectionSwap: false,
+    loading: false,
+  });
   const [showEditInspect, setShowEditInspect] = useState(false);
 
   // Decide whether a row save needs a manual checkpoint pick first.
@@ -451,9 +543,18 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       !!orig &&
       ((orig.doNo || '') !== (cur.doNo || '') ||
         (orig.truckNo || '').toLowerCase() !== (cur.truckNo || '').toLowerCase());
+    const newDir = rowLookup[index]?.direction ?? entryDirections[index] ?? null;
+    const oldDir = editOriginDirectionRef.current[index] ?? null;
+    // Direction change usually changes DO; also detect via lookup vs resolved origin
+    const directionChanged =
+      !!orig &&
+      !!newDir &&
+      !!oldDir &&
+      newDir !== oldDir &&
+      hasFuelRecord(orig);
     const needsFuelAdjust =
-      (litersChanged || identityChanged) &&
-      (hasFuelRecord(cur) || (identityChanged && orig && hasFuelRecord(orig)));
+      (litersChanged || identityChanged || directionChanged) &&
+      (hasFuelRecord(cur) || ((identityChanged || directionChanged) && orig && hasFuelRecord(orig)));
 
     if (needsFuelAdjust) {
       if (fuelAutomation === null) {
@@ -461,21 +562,32 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         return;
       }
       if (fuelAutomation.lpoEditAdjust === false) {
-        setEditCheckpoint({ open: true, index, direction: null, fuelRecordId: null, field: '', loading: true });
+        const isDirectionSwap = directionChanged || (identityChanged && !!oldDir && !!newDir && oldDir !== newDir);
+        setEditCheckpoint({
+          open: true,
+          index,
+          direction: null,
+          oldDirection: oldDir,
+          fuelRecordId: null,
+          field: '',
+          revertField: '',
+          isDirectionSwap,
+          loading: true,
+        });
         try {
           const res = await fuelRecordsAPI.getByDoNumber(cur.doNo);
           const fr: any = res?.fuelRecord;
           setEditCheckpoint((p) => ({
             ...p,
             loading: false,
-            direction: res?.direction ?? rowLookup[index]?.direction ?? 'going',
+            direction: res?.direction ?? newDir ?? 'going',
             fuelRecordId: fr?.id ?? fr?._id ?? null,
           }));
         } catch {
           setEditCheckpoint((p) => ({
             ...p,
             loading: false,
-            direction: rowLookup[index]?.direction ?? 'going',
+            direction: newDir ?? 'going',
           }));
         }
         return;
@@ -505,6 +617,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       delete next[index];
       return next;
     });
+    delete editOriginDirectionRef.current[index];
     setEditingRow(null);
     await releaseLockIfNeeded();
   };
@@ -526,6 +639,83 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       }
     }
     setEditingRow(index);
+
+    // Hydrate journey for direction toggle — do not overwrite liters/DO/truck on the row.
+    const entry = editedSheet.entries[index];
+    if (entryDirections[index]) {
+      editOriginDirectionRef.current[index] = entryDirections[index];
+    }
+    if (!entry || isNonFuelEntry(entry) || !hasFuelRecord(entry)) return;
+
+    setRowLookup((prev) => ({
+      ...prev,
+      [index]: {
+        ...(prev[index] || { direction: entryDirections[index] || 'going' }),
+        loading: true,
+        fetched: false,
+        fuelRecord: prev[index]?.fuelRecord ?? null,
+      },
+    }));
+    try {
+      let result = await fetchDoForLpo(entry.doNo);
+      if ((!result.success || !result.fuelRecord) && entry.truckNo) {
+        result = await fetchTruckForLpo(entry.truckNo, lpoTruckLookupMonths);
+      }
+      if (!result.fuelRecord) {
+        setRowLookup((prev) => ({
+          ...prev,
+          [index]: {
+            loading: false,
+            fetched: true,
+            direction: entryDirections[index] || 'going',
+            fuelRecord: null,
+            message: result.message,
+            warningType: result.warningType || null,
+          },
+        }));
+        return;
+      }
+      const direction =
+        result.direction ||
+        entryDirections[index] ||
+        (result.fuelRecord.returnDo &&
+        (result.fuelRecord.returnDo || '').toUpperCase() === (entry.doNo || '').toUpperCase()
+          ? 'returning'
+          : 'going');
+      setEntryDirections((prev) => ({ ...prev, [index]: direction }));
+      if (!editOriginDirectionRef.current[index]) {
+        editOriginDirectionRef.current[index] = direction;
+      }
+      const queued = result.allJourneys?.queued || [];
+      const fr = result.fuelRecord;
+      const isQueued = fr.journeyStatus === 'queued';
+      setRowLookup((prev) => ({
+        ...prev,
+        [index]: {
+          loading: false,
+          fetched: true,
+          direction,
+          fuelRecord: fr,
+          message: result.message,
+          warningType: result.warningType || null,
+          allJourneys: result.allJourneys,
+          selectedJourneyType: isQueued ? 'queued' : 'active',
+          selectedJourneyIndex: isQueued
+            ? Math.max(0, queued.findIndex((q) => (q.id || q._id) === (fr.id || fr._id)))
+            : -1,
+        },
+      }));
+    } catch {
+      setRowLookup((prev) => ({
+        ...prev,
+        [index]: {
+          loading: false,
+          fetched: false,
+          direction: entryDirections[index] || 'going',
+          fuelRecord: null,
+        },
+      }));
+    }
   };
 
   // Open cancel modal for an entry - auto-detect direction and checkpoint
@@ -1051,6 +1241,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           selectedJourneyIndex: isQueued ? queuedIdx : -1,
         },
       }));
+      setEntryDirections((prev) => ({ ...prev, [index]: direction }));
     },
     []
   );
@@ -1205,12 +1396,19 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     const lookup = rowLookup[index];
     const fr = lookup?.fuelRecord;
     if (!fr) {
-      setRowLookup((prev) => ({
-        ...prev,
-        [index]: { ...(prev[index] || { loading: false, fetched: false, fuelRecord: null }), direction },
-      }));
+      toast.info('Loading journey… try again in a moment.');
       return;
     }
+    if (direction === 'returning') {
+      const rd = (fr.returnDo || '').trim().toUpperCase();
+      if (!rd || rd === 'NIL' || rd === 'N/A') {
+        toast.error('This journey has no return DO yet — cannot switch to returning.');
+        return;
+      }
+    }
+    // Updates DO/dest for the toggled direction; liters/rate stay as the user left them
+    // so save reverts old checkpoint liters and deducts current (possibly edited) liters
+    // onto the new direction checkpoint.
     applyJourneyToRow(
       index,
       {
@@ -1228,6 +1426,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       },
       { direction, preserveTruck: true }
     );
+    setEntryDirections((prev) => ({ ...prev, [index]: direction }));
   };
 
   const handleEntryEdit = (index: number, field: keyof LPODetail, value: string | number) => {
@@ -1317,6 +1516,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       ((lookup.allJourneys.active && lookup.allJourneys.queued.length > 0) ||
         (!lookup.allJourneys.active && lookup.allJourneys.queued.length > 1));
 
+    // Direction + status live in table columns; this panel is message + queued picker only.
+    if (!lookup.loading && !lookup.message && !showJourneyPicker) return null;
+
     return (
       <div className="mt-2 space-y-2 col-span-full">
         {lookup.loading && (
@@ -1334,41 +1536,6 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           >
             {lookup.message}
           </p>
-        )}
-        {lookup.fetched && lookup.fuelRecord && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => handleDirectionToggle(index, 'going')}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                lookup.direction === 'going'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              Going
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDirectionToggle(index, 'returning')}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                lookup.direction === 'returning'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              Returning
-            </button>
-            <span
-              className={`text-[10px] font-semibold ${
-                lookup.selectedJourneyType === 'queued'
-                  ? 'text-blue-600 dark:text-blue-400'
-                  : 'text-green-600 dark:text-green-400'
-              }`}
-            >
-              {lookup.selectedJourneyType === 'queued' ? 'Queued' : 'Active'}
-            </span>
-          </div>
         )}
         {showJourneyPicker && lookup.allJourneys && (
           <div className="flex flex-wrap gap-1.5">
@@ -1403,6 +1570,101 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         )}
       </div>
     );
+  };
+
+  const renderDirectionCell = (entry: LPODetail, index: number) => {
+    const special = specialModeLabel(entry);
+    if (special) {
+      const color =
+        special === 'DA'
+          ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300'
+          : special === 'REF'
+            ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'
+            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+      return (
+        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-extrabold tracking-wide ${color}`}>
+          {special}
+        </span>
+      );
+    }
+
+    const dir = rowLookup[index]?.direction ?? entryDirections[index] ?? null;
+    const editing = editingRow === index;
+    const canToggle = editing && !!rowLookup[index]?.fuelRecord;
+
+    if (canToggle) {
+      return (
+        <div className="flex flex-col gap-0.5">
+          <button
+            type="button"
+            onClick={() => handleDirectionToggle(index, 'going')}
+            className={`px-1 py-0.5 rounded text-[9px] font-bold leading-tight ${
+              dir === 'going'
+                ? 'bg-green-500 text-white'
+                : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+            }`}
+          >
+            Going
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDirectionToggle(index, 'returning')}
+            className={`px-1 py-0.5 rounded text-[9px] font-bold leading-tight ${
+              dir === 'returning'
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+            }`}
+          >
+            Return
+          </button>
+        </div>
+      );
+    }
+
+    if (!dir) {
+      return <span className="text-[10px] text-gray-400 dark:text-gray-500">—</span>;
+    }
+    return (
+      <span
+        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+          dir === 'returning'
+            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+            : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+        }`}
+      >
+        {dir === 'returning' ? 'Return' : 'Going'}
+      </span>
+    );
+  };
+
+  const renderStatusCell = (entry: LPODetail, index: number) => {
+    if (specialModeLabel(entry)) {
+      return <span className="text-[10px] text-gray-400 dark:text-gray-500">—</span>;
+    }
+    const lookup = rowLookup[index];
+    if (editingRow === index && lookup?.loading) {
+      return <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 mx-auto" />;
+    }
+    const type = lookup?.selectedJourneyType;
+    const fr = lookup?.fuelRecord;
+    if (type === 'queued' || fr?.journeyStatus === 'queued') {
+      return (
+        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+          Queued{fr?.queueOrder != null ? ` #${fr.queueOrder}` : ''}
+        </span>
+      );
+    }
+    if (type === 'active' || fr?.journeyStatus === 'active' || (lookup?.fetched && fr)) {
+      return (
+        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+          Active
+        </span>
+      );
+    }
+    if (editingRow === index) {
+      return <span className="text-[10px] text-gray-400 dark:text-gray-500">—</span>;
+    }
+    return <span className="text-[10px] text-gray-400 dark:text-gray-500">—</span>;
   };
 
   return (
@@ -1853,8 +2115,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                           <input type="text" value={entry.truckNo} onChange={(e) => handleEntryEdit(originalIndex, 'truckNo', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-[10px] bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-semibold outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent" />
                         </div>
                         <div>
+                          <label className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 block">Direction</label>
+                          <div className="min-h-[42px] flex items-center">{renderDirectionCell(entry, originalIndex)}</div>
+                        </div>
+                        <div>
                           <label className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 block">DO No.</label>
                           <input type="text" value={entry.doNo} onChange={(e) => handleEntryEdit(originalIndex, 'doNo', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-[10px] bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-semibold outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent" />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 block">Status</label>
+                          <div className="min-h-[42px] flex items-center">{renderStatusCell(entry, originalIndex)}</div>
                         </div>
                         <div>
                           <label className="text-[9px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 block">Liters</label>
@@ -1985,7 +2255,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
             {/* Table Header */}
             <div className="bg-blue-50 dark:bg-blue-900/30 border-b border-gray-300 dark:border-gray-700">
-              <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-0">
+              <div className={sheetGridClass}>
                 <div className="px-2 py-2 flex items-center justify-center border-r border-gray-300 dark:border-gray-700">
                   {(() => {
                     const pickableCount = editedSheet.entries.filter(isPickable).length;
@@ -2003,10 +2273,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 </div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700">DO No.</div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700">Truck No.</div>
+                <div className="px-2 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-center text-xs">Dir</div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-right">Liters</div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-right">Rate</div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-right">Amount</div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700">Dest.</div>
+                <div className="px-2 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-center text-xs">Status</div>
                 <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 text-center">Actions</div>
               </div>
             </div>
@@ -2036,7 +2308,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                 }}
                 className={rowClass}
               >
-                <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-0">
+                <div className={sheetGridClass}>
                   <div className="px-2 py-2 flex items-center justify-center border-r border-gray-300 dark:border-gray-700">
                     {isPickable(entry) && editingRow !== originalIndex && (
                       <input
@@ -2074,6 +2346,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                     ) : (
                       <span className={`text-sm font-medium ${isCancelled ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>{entry.truckNo}</span>
                     )}
+                  </div>
+
+                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center">
+                    {renderDirectionCell(entry, originalIndex)}
                   </div>
 
                   <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-700 text-right">
@@ -2127,6 +2403,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         {isCancelled ? entry.dest : isDriverAccount ? 'NIL' : entry.dest}
                       </span>
                     )}
+                  </div>
+
+                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center">
+                    {renderStatusCell(entry, originalIndex)}
                   </div>
 
                   <div className="px-3 py-2 text-center">
@@ -2201,16 +2481,18 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
             {/* Total Row */}
             <div className="bg-blue-100 dark:bg-blue-900/40 font-semibold">
-              <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-0">
+              <div className={sheetGridClass}>
                 <div className="px-2 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700"></div>
+                <div className="px-2 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700 text-right text-gray-900 dark:text-gray-100">TOTAL</div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700 text-right text-lg font-bold text-blue-900 dark:text-blue-300">
                   {formatCurrency(editedSheet.total)}
                 </div>
                 <div className="px-3 py-3 border-r border-gray-300 dark:border-gray-700"></div>
+                <div className="px-2 py-3 border-r border-gray-300 dark:border-gray-700"></div>
                 <div className="px-3 py-3 text-center">
                   <Calculator className="w-4 h-4 text-blue-600 dark:text-blue-400 mx-auto" />
                 </div>
@@ -2724,14 +3006,26 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         />
       )}
 
-      {/* Edit-side manual checkpoint modal (lpoEditAdjust OFF + liters changed) */}
+      {/* Edit-side manual checkpoint modal (lpoEditAdjust OFF) */}
       {editCheckpoint.open && editCheckpoint.index !== null && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Choose Adjustment Checkpoint</h3>
               <button
-                onClick={() => setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false })}
+                onClick={() =>
+                  setEditCheckpoint({
+                    open: false,
+                    index: null,
+                    direction: null,
+                    oldDirection: null,
+                    fuelRecordId: null,
+                    field: '',
+                    revertField: '',
+                    isDirectionSwap: false,
+                    loading: false,
+                  })
+                }
                 className="text-gray-400 hover:text-gray-500"
               >
                 <X className="w-5 h-5" />
@@ -2739,12 +3033,67 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
             <div className="px-6 py-4 space-y-3">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Fuel automation for edits is OFF. Liters / truck / DO changes for{' '}
-                <strong>{editedSheet.entries[editCheckpoint.index].truckNo}</strong> will be adjusted on the column you choose
-                ({editCheckpoint.direction === 'returning' ? 'returning' : 'going'} direction). For a truck/DO swap, the same column is used to revert the old journey and deduct the new one.
+                Fuel automation for edits is OFF.
+                {editCheckpoint.isDirectionSwap ? (
+                  <>
+                    {' '}
+                    Direction change for <strong>{editedSheet.entries[editCheckpoint.index].truckNo}</strong>:
+                    revert the old direction checkpoint, then deduct current liters onto the new direction checkpoint.
+                  </>
+                ) : (
+                  <>
+                    {' '}
+                    Liters / truck / DO changes for{' '}
+                    <strong>{editedSheet.entries[editCheckpoint.index].truckNo}</strong> use the column you choose
+                    ({editCheckpoint.direction === 'returning' ? 'returning' : 'going'}).
+                  </>
+                )}
               </p>
               {editCheckpoint.loading ? (
                 <div className="flex items-center gap-2 text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Detecting direction…</div>
+              ) : editCheckpoint.isDirectionSwap ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                      Revert from ({editCheckpoint.oldDirection === 'returning' ? 'returning' : 'going'})
+                    </label>
+                    <select
+                      value={editCheckpoint.revertField}
+                      onChange={(e) => setEditCheckpoint((p) => ({ ...p, revertField: e.target.value }))}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    >
+                      <option value="">Select column…</option>
+                      {(editCheckpoint.oldDirection === 'returning' ? FUEL_RECORD_COLUMNS.return : FUEL_RECORD_COLUMNS.going).map((c) => (
+                        <option key={c.field} value={c.field}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                        Deduct onto ({editCheckpoint.direction === 'returning' ? 'returning' : 'going'})
+                      </label>
+                      <select
+                        value={editCheckpoint.field}
+                        onChange={(e) => setEditCheckpoint((p) => ({ ...p, field: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      >
+                        <option value="">Select column…</option>
+                        {(editCheckpoint.direction === 'returning' ? FUEL_RECORD_COLUMNS.return : FUEL_RECORD_COLUMNS.going).map((c) => (
+                          <option key={c.field} value={c.field}>{c.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {editCheckpoint.fuelRecordId != null && (
+                      <button
+                        onClick={() => setShowEditInspect(true)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      >
+                        <Search className="w-3.5 h-3.5" /> Inspect
+                      </button>
+                    )}
+                  </div>
+                </div>
               ) : (
                 <div className="flex items-end gap-2">
                   <div className="flex-1">
@@ -2773,14 +3122,35 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
             <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t dark:border-gray-700">
               <button
-                onClick={() => setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false })}
+                onClick={() =>
+                  setEditCheckpoint({
+                    open: false,
+                    index: null,
+                    direction: null,
+                    oldDirection: null,
+                    fuelRecordId: null,
+                    field: '',
+                    revertField: '',
+                    isDirectionSwap: false,
+                    loading: false,
+                  })
+                }
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 Cancel
               </button>
               <button
-                onClick={() => editCheckpoint.index !== null && handleRowSave(editCheckpoint.index, editCheckpoint.field)}
-                disabled={!editCheckpoint.field || isSaving}
+                onClick={() =>
+                  editCheckpoint.index !== null &&
+                  handleRowSave(editCheckpoint.index, editCheckpoint.field, {
+                    revertField: editCheckpoint.isDirectionSwap ? editCheckpoint.revertField : undefined,
+                  })
+                }
+                disabled={
+                  !editCheckpoint.field ||
+                  (editCheckpoint.isDirectionSwap && !editCheckpoint.revertField) ||
+                  isSaving
+                }
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? 'Saving…' : 'Save Entry'}
