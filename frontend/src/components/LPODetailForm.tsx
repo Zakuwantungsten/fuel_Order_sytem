@@ -203,7 +203,7 @@ const LPO_RD_STYLES = `
 .dark .lpo-rd .fld-ro{background:#0b1220;border-color:#1e293b;color:#94a3b8;}
 /* Station dropdown trigger — chevron overlaid so it never steals text space */
 .lpo-rd .fld-station{position:relative;display:flex;align-items:center;padding:0 22px 0 8px;overflow:hidden;text-align:left;}
-.lpo-rd .fld-station-label{display:block;width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:40px;height:40px;font-weight:600;}
+.lpo-rd .fld-station-label{display:block;width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;line-height:40px;height:40px;font-weight:600;}
 .lpo-rd .fld-station-chevron{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;pointer-events:none;color:#94a3b8;line-height:0;}
 .lpo-rd .fld-station-chevron.is-open{transform:translateY(-50%) rotate(180deg);}
 .lpo-rd .fld-station-chevron svg{width:12px;height:12px;display:block;}
@@ -3479,12 +3479,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           >
                             <span className="flex flex-col gap-0.5 min-w-0">
                               <span
-                                className={`text-[11.5px] font-semibold truncate ${active ? 'text-[#4f46e5] dark:text-indigo-400' : 'text-[#0f1729] dark:text-gray-100'}`}
+                                className={`text-[13.5px] font-semibold truncate ${active ? 'text-[#4f46e5] dark:text-indigo-400' : 'text-[#0f1729] dark:text-gray-100'}`}
                                 title={station.stationName}
                               >
                                 {station.stationName}
                               </span>
-                              <span className="text-[10px] text-[#9aa6b6] font-medium truncate">
+                              <span className="text-[11px] text-[#9aa6b6] font-medium truncate">
                                 Going {station.defaultLitersGoing}L · Return {station.defaultLitersReturning}L · @{station.defaultRate}/L
                               </span>
                             </span>

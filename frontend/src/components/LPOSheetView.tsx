@@ -138,9 +138,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     return null;
   };
 
-  /** Desktop sheet grid: DO, Truck, Dir, Liters, Rate, Amount, Dest, Status, Actions */
+  /** Desktop sheet grid: DO, Truck, Direction, Liters, Rate, Amount, Dest, Status, Actions */
   const sheetGridClass =
-    'grid grid-cols-[40px_minmax(0,1.05fr)_minmax(0,1.05fr)_92px_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,0.85fr)_minmax(0,0.95fr)_108px_76px] gap-0';
+    'grid grid-cols-[40px_minmax(0,1.05fr)_minmax(0,1.05fr)_110px_minmax(0,0.85fr)_minmax(0,0.7fr)_minmax(0,0.85fr)_minmax(0,0.95fr)_108px_76px] gap-0';
+  /** Match header cell typography for body text */
+  const sheetCellText = 'font-medium text-gray-900 dark:text-gray-100';
+  const sheetCellMuted = 'font-medium text-gray-500 dark:text-gray-400';
 
   // Any active entry is pickable — including REF / NIL / Driver-Account entries.
   // Those carry no fuel record, so pick-up just moves them (no fuel netting); the
@@ -1582,7 +1585,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300'
             : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
       return (
-        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-extrabold tracking-wide ${color}`}>
+        <span className={`inline-block px-1.5 py-0.5 rounded font-medium ${color}`}>
           {special}
         </span>
       );
@@ -1598,7 +1601,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           <button
             type="button"
             onClick={() => handleDirectionToggle(index, 'going')}
-            className={`px-1 py-0.5 rounded text-[9px] font-bold leading-tight ${
+            className={`px-1 py-0.5 rounded font-medium leading-tight ${
               dir === 'going'
                 ? 'bg-green-500 text-white'
                 : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
@@ -1609,7 +1612,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           <button
             type="button"
             onClick={() => handleDirectionToggle(index, 'returning')}
-            className={`px-1 py-0.5 rounded text-[9px] font-bold leading-tight ${
+            className={`px-1 py-0.5 rounded font-medium leading-tight ${
               dir === 'returning'
                 ? 'bg-blue-500 text-white'
                 : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
@@ -1622,11 +1625,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }
 
     if (!dir) {
-      return <span className="text-[10px] text-gray-400 dark:text-gray-500">—</span>;
+      return <span className="font-medium text-gray-400 dark:text-gray-500">—</span>;
     }
     return (
       <span
-        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+        className={`inline-block px-1.5 py-0.5 rounded font-medium ${
           dir === 'returning'
             ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
             : 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
@@ -1639,7 +1642,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   const renderStatusCell = (entry: LPODetail, index: number) => {
     if (specialModeLabel(entry)) {
-      return <span className="text-[10px] text-gray-400 dark:text-gray-500">—</span>;
+      return <span className="font-medium text-gray-400 dark:text-gray-500">—</span>;
     }
     const lookup = rowLookup[index];
     if (editingRow === index && lookup?.loading) {
@@ -1649,22 +1652,22 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     const fr = lookup?.fuelRecord;
     if (type === 'queued' || fr?.journeyStatus === 'queued') {
       return (
-        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+        <span className="inline-block px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
           Queued{fr?.queueOrder != null ? ` #${fr.queueOrder}` : ''}
         </span>
       );
     }
     if (type === 'active' || fr?.journeyStatus === 'active' || (lookup?.fetched && fr)) {
       return (
-        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+        <span className="inline-block px-1.5 py-0.5 rounded font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
           Active
         </span>
       );
     }
     if (editingRow === index) {
-      return <span className="text-[10px] text-gray-400 dark:text-gray-500">—</span>;
+      return <span className="font-medium text-gray-400 dark:text-gray-500">—</span>;
     }
-    return <span className="text-[10px] text-gray-400 dark:text-gray-500">—</span>;
+    return <span className="font-medium text-gray-400 dark:text-gray-500">—</span>;
   };
 
   return (
@@ -2271,15 +2274,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                     );
                   })()}
                 </div>
-                <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700">DO No.</div>
-                <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700">Truck No.</div>
-                <div className="px-2 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-center text-xs">Dir</div>
-                <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-right">Liters</div>
-                <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-right">Rate</div>
-                <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-right">Amount</div>
-                <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700">Dest.</div>
-                <div className="px-2 py-2 font-medium text-gray-900 dark:text-gray-100 border-r border-gray-300 dark:border-gray-700 text-center text-xs">Status</div>
-                <div className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 text-center">Actions</div>
+                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>DO No.</div>
+                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>Truck No.</div>
+                <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Direction</div>
+                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Liters</div>
+                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Rate</div>
+                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Amount</div>
+                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>Dest.</div>
+                <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Status</div>
+                <div className={`px-3 py-2 ${sheetCellText} text-center`}>Actions</div>
               </div>
             </div>
 
@@ -2326,10 +2329,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         type="text"
                         value={entry.doNo}
                         onChange={(e) => handleEntryEdit(originalIndex, 'doNo', e.target.value)}
-                        className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className={`w-full px-1 py-0 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${sheetCellText}`}
                       />
                     ) : (
-                      <span className={`text-sm ${displayData.displayClass}`}>
+                      <span className={`${sheetCellText} ${displayData.displayClass}`}>
                         {isCancelled ? 'CANCELLED' : isDriverAccount ? 'NIL' : entry.doNo}
                       </span>
                     )}
@@ -2341,10 +2344,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         type="text"
                         value={entry.truckNo}
                         onChange={(e) => handleEntryEdit(originalIndex, 'truckNo', e.target.value)}
-                        className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className={`w-full px-1 py-0 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${sheetCellText}`}
                       />
                     ) : (
-                      <span className={`text-sm font-medium ${isCancelled ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>{entry.truckNo}</span>
+                      <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400' : ''}`}>{entry.truckNo}</span>
                     )}
                   </div>
 
@@ -2358,14 +2361,14 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         type="number"
                         value={entry.liters}
                         onChange={(e) => handleEntryEdit(originalIndex, 'liters', parseFloat(e.target.value) || 0)}
-                        className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        className={`w-full px-1 py-0 border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 ${sheetCellText} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                       />
                     ) : (
                       <span className="inline-flex items-center gap-1.5">
                         {entry.originalLiters != null && entry.originalLiters !== entry.liters && (
-                          <span className="text-sm text-gray-400 dark:text-gray-500 line-through">{entry.originalLiters}</span>
+                          <span className={`${sheetCellMuted} line-through`}>{entry.originalLiters}</span>
                         )}
-                        <span className={`text-sm ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.liters}</span>
+                        <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : ''}`}>{entry.liters}</span>
                       </span>
                     )}
                   </div>
@@ -2377,15 +2380,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         step="0.1"
                         value={entry.rate}
                         onChange={(e) => handleEntryEdit(originalIndex, 'rate', parseFloat(e.target.value) || 0)}
-                        className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        className={`w-full px-1 py-0 border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 ${sheetCellText} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                       />
                     ) : (
-                      <span className={`text-sm ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{entry.rate}</span>
+                      <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : ''}`}>{entry.rate}</span>
                     )}
                   </div>
 
                   <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-700 text-right">
-                    <span className={`text-sm font-medium ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
+                    <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : ''}`}>
                       {formatCurrency(entry.amount)}
                     </span>
                   </div>
@@ -2396,10 +2399,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         type="text"
                         value={entry.dest}
                         onChange={(e) => handleEntryEdit(originalIndex, 'dest', e.target.value)}
-                        className="w-full px-1 py-0 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        className={`w-full px-1 py-0 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${sheetCellText}`}
                       />
                     ) : (
-                      <span className={`text-sm ${displayData.displayClass}`}>
+                      <span className={`${sheetCellText} ${displayData.displayClass}`}>
                         {isCancelled ? entry.dest : isDriverAccount ? 'NIL' : entry.dest}
                       </span>
                     )}
@@ -2413,7 +2416,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                     <div className="flex items-center justify-center space-x-1">
                       {isCancelled ? (
                         <>
-                          <span className="text-xs text-red-600 font-medium mr-1">CANCELLED</span>
+                          <span className="font-medium text-red-600 mr-1">CANCELLED</span>
                           <button
                             onClick={() => openRestoreEntry(originalIndex)}
                             className="p-1 text-green-600 hover:text-green-800"
