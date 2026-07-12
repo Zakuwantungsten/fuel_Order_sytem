@@ -6,9 +6,16 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useQueryClient } from '@tanstack/react-query';
-import { darLPOAPI, fuelRecordsAPI, configAPI } from '../services/api';
+import { darLPOAPI, configAPI } from '../services/api';
 import { darLPOKeys } from '../hooks/useDarLPOs';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
+import YardFuelChoiceModal from './YardFuelChoiceModal';
+import {
+  fetchYardTruckCandidates,
+  fuelRecordIdOf,
+  recordDoDest,
+  yardAlreadyDispensed,
+} from '../services/yardLpoFetchService';
 import type { DarLPO, DarLPOEntry, FuelRecord } from '../types';
 import { useGridNav } from '../hooks/useGridNav';
 
@@ -28,15 +35,19 @@ interface RowState {
   fuelRecord: FuelRecord | null;
   fuelRecordId?: string | number;
   alreadyDispensed: number;
-  warningType?: 'not_found' | null;
+  warningType?: 'not_found' | 'needs_choice' | null;
   linked: boolean;
+  candidates: FuelRecord[];
 }
+
+const YARD: 'darYard' = 'darYard';
 
 const makeEmptyEntry = (rate = 0): DraftEntry => ({
   doNo: '', truckNo: '', liters: 0, rate, amount: 0, dest: '', isCancelled: false,
 });
 const makeEmptyRow = (): RowState => ({
-  autoFetching: false, fetched: false, fuelRecord: null, alreadyDispensed: 0, warningType: null, linked: false,
+  autoFetching: false, fetched: false, fuelRecord: null, alreadyDispensed: 0,
+  warningType: null, linked: false, candidates: [],
 });
 
 function fmt(n: number) {
@@ -49,14 +60,6 @@ const HEAD_CELL: CSSProperties = {
   fontSize: '10.5px', fontWeight: 600, color: '#8a8f84',
   textTransform: 'uppercase', letterSpacing: '0.05em',
 };
-
-function isRecordComplete(r: FuelRecord): boolean {
-  if (r.journeyStatus === 'completed') return true;
-  if (r.journeyStatus === 'active' || r.journeyStatus === 'queued') return false;
-  const dest = (r.originalGoingTo || r.to || '').toUpperCase();
-  const isMSA = dest.includes('MSA') || dest.includes('MOMBASA');
-  return isMSA ? !!(r.tangaReturn) : !!(r.mbeyaReturn);
-}
 
 export default function DarYardLPOForm({
   mode, nextLpoNo, existingLpo, onClose, onSuccess,
@@ -81,6 +84,10 @@ export default function DarYardLPOForm({
   const [inspectModal, setInspectModal] = useState<{
     isOpen: boolean; fuelRecordId: string | number; truckNumber?: string;
   }>({ isOpen: false, fuelRecordId: '' });
+
+  const [choiceModal, setChoiceModal] = useState<{
+    open: boolean; index: number; truckNo: string; candidates: FuelRecord[];
+  }>({ open: false, index: -1, truckNo: '', candidates: [] });
 
   // Grid keyboard navigation — col layout (desktop table only):
   // 0=Truck  1=DO#  2=Liters  3=Dispense(conditional)  4=Rate  5=Dest
@@ -114,6 +121,60 @@ export default function DarYardLPOForm({
     setRows(prev => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   };
 
+  const applyCandidate = useCallback((idx: number, record: FuelRecord, candidates: FuelRecord[]) => {
+    const { doNo, dest } = recordDoDest(record);
+    setEntries(prev => prev.map((e, i) => (i !== idx ? e : { ...e, doNo, dest })));
+    updateRow(idx, {
+      autoFetching: false,
+      fetched: true,
+      fuelRecord: record,
+      fuelRecordId: fuelRecordIdOf(record),
+      alreadyDispensed: yardAlreadyDispensed(record, YARD),
+      warningType: null,
+      linked: true,
+      candidates,
+    });
+  }, []);
+
+  const handleLinkToggle = (idx: number, checked: boolean) => {
+    const row = rows[idx];
+    if (!checked) {
+      setEntries(prev => prev.map((e, i) => (
+        i !== idx ? e : { ...e, doNo: '', dest: '', dispenseLiters: null }
+      )));
+      updateRow(idx, { linked: false });
+      return;
+    }
+    if (row?.warningType === 'needs_choice' || (!row?.fuelRecord && (row?.candidates?.length ?? 0) > 1)) {
+      setChoiceModal({
+        open: true,
+        index: idx,
+        truckNo: entries[idx]?.truckNo || '',
+        candidates: row?.candidates || [],
+      });
+      return;
+    }
+    if (row?.fuelRecord) {
+      const { doNo, dest } = recordDoDest(row.fuelRecord);
+      setEntries(prev => prev.map((e, i) => (i !== idx ? e : { ...e, doNo, dest })));
+      updateRow(idx, { linked: true });
+      return;
+    }
+    updateRow(idx, { linked: true });
+  };
+
+  const handlePickCandidate = (record: FuelRecord) => {
+    const { index, candidates } = choiceModal;
+    if (index < 0) return;
+    applyCandidate(index, record, candidates.length ? candidates : rows[index]?.candidates || [record]);
+    setChoiceModal({ open: false, index: -1, truckNo: '', candidates: [] });
+  };
+
+  const switchCandidate = (idx: number, record: FuelRecord) => {
+    const candidates = rows[idx]?.candidates || [];
+    applyCandidate(idx, record, candidates);
+  };
+
   const addRow = () => {
     const lastRate = entries.length > 0 ? entries[entries.length - 1].rate : 0;
     setEntries(prev => [...prev, makeEmptyEntry(lastRate)]);
@@ -132,55 +193,54 @@ export default function DarYardLPOForm({
     });
   };
 
-  const fetchTruck = useCallback(async (idx: number, rawTruckNo: string) => {
+  const fetchTruck = useCallback(async (idx: number, rawTruckNo: string, opts?: { openModalIfMany?: boolean }) => {
     const truckNo = rawTruckNo.trim();
     if (truckNo.length < 3) return;
+    const openModalIfMany = opts?.openModalIfMany ?? true;
 
-    updateRow(idx, { autoFetching: true, fetched: false, fuelRecord: null, warningType: null });
+    updateRow(idx, {
+      autoFetching: true, fetched: false, fuelRecord: null, fuelRecordId: undefined,
+      warningType: null, linked: false, candidates: [], alreadyDispensed: 0,
+    });
 
     try {
-      const response = await fuelRecordsAPI.getAll({ truckNo, limit: 10000 });
-      const all: FuelRecord[] = response.data;
-      const active = all.filter(r => !r.isCancelled);
+      const { candidates } = await fetchYardTruckCandidates(truckNo, YARD);
 
-      if (!active.length) {
-        updateRow(idx, { autoFetching: false, fetched: true, warningType: 'not_found' });
+      if (!candidates.length) {
+        updateRow(idx, {
+          autoFetching: false, fetched: true, warningType: 'not_found',
+          fuelRecord: null, candidates: [], linked: false,
+        });
         return;
       }
 
-      const sorted = [...active].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
+      if (candidates.length === 1) {
+        applyCandidate(idx, candidates[0], candidates);
+        return;
+      }
 
-      const record =
-        sorted.find(r => r.journeyStatus === 'active') ||
-        sorted.find(r => !isRecordComplete(r)) ||
-        sorted[0];
-
-      const fuelRecordId = (record._id ?? record.id) as string | number;
-
-      setEntries(prev => prev.map((e, i) => {
-        if (i !== idx) return e;
-        return {
-          ...e,
-          doNo: e.doNo || record.goingDo || '',
-          dest: e.dest || record.originalGoingTo || record.to || '',
-        };
-      }));
-
+      // Multiple matches: do not silent-pick. Bulk paste leaves rows pending;
+      // manual fetch opens the choice modal immediately.
       updateRow(idx, {
         autoFetching: false,
         fetched: true,
-        fuelRecord: record,
-        fuelRecordId,
-        alreadyDispensed: record.darYard || 0,
-        warningType: null,
-        linked: true,
+        fuelRecord: null,
+        fuelRecordId: undefined,
+        alreadyDispensed: 0,
+        warningType: 'needs_choice',
+        linked: false,
+        candidates,
       });
+      if (openModalIfMany) {
+        setChoiceModal({ open: true, index: idx, truckNo, candidates });
+      }
     } catch {
-      updateRow(idx, { autoFetching: false, fetched: true, warningType: 'not_found' });
+      updateRow(idx, {
+        autoFetching: false, fetched: true, warningType: 'not_found',
+        fuelRecord: null, candidates: [], linked: false,
+      });
     }
-  }, []);
+  }, [applyCandidate]);
 
   const handleTruckPaste = useCallback((idx: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData('text');
@@ -209,7 +269,8 @@ export default function DarYardLPOForm({
     });
     if (autoSearch) {
       lines.forEach((line, i) => {
-        setTimeout(() => fetchTruck(idx + i, line), i * 80);
+        // Bulk paste: leave multi-match rows as needs_choice (no modal spam).
+        setTimeout(() => fetchTruck(idx + i, line, { openModalIfMany: false }), i * 80);
       });
     }
   }, [fetchTruck, autoSearch]);
@@ -274,6 +335,9 @@ export default function DarYardLPOForm({
     e => e.truckNo.trim() && e.liters > 0 && e.rate > 0
   );
   const total = entries.reduce((s, e) => s + (e.amount || 0), 0);
+  const hasPendingChoice = entries.some(
+    (e, i) => e.truckNo.trim() && e.liters > 0 && e.rate > 0 && rows[i]?.warningType === 'needs_choice'
+  );
 
   const resetEntries = () => {
     const lastRate = entries.length > 0 ? entries[entries.length - 1].rate : 0;
@@ -318,23 +382,26 @@ export default function DarYardLPOForm({
   };
 
   const applyFuelLinks = async (lpoId: string, responseEntries: any[], validWithIdx: { i: number }[]) => {
-    const linkedEntryIds: string[] = [];
-    const topUpEntryIds: string[] = [];
+    const selections: { entryId: string; fuelRecordId: string; topUp?: boolean }[] = [];
     validWithIdx.forEach(({ i }, j) => {
       const respEntry = responseEntries[j];
-      if (rows[i]?.linked && respEntry?._id) {
-        const eid = respEntry._id.toString();
-        linkedEntryIds.push(eid);
-        if ((rows[i].alreadyDispensed ?? 0) > 0) topUpEntryIds.push(eid);
+      const row = rows[i];
+      const frId = row?.fuelRecordId != null ? String(row.fuelRecordId) : '';
+      if (row?.linked && respEntry?._id && frId) {
+        selections.push({
+          entryId: respEntry._id.toString(),
+          fuelRecordId: frId,
+          topUp: (row.alreadyDispensed ?? 0) > 0,
+        });
       }
     });
-    if (linkedEntryIds.length === 0) return;
+    if (selections.length === 0) return;
     try {
-      const linkResult = await darLPOAPI.bulkLink(lpoId, { entryIds: linkedEntryIds, topUpEntryIds });
+      const linkResult = await darLPOAPI.bulkLink(lpoId, { selections });
       const linked = (linkResult.results || []).filter((r: any) => r.status === 'linked' || r.status === 'topped_up').length;
       const notFound = (linkResult.results || []).filter((r: any) => r.status === 'not_found').length;
       if (linked > 0) toast.info(`${linked} ${linked === 1 ? 'entry' : 'entries'} linked to fuel record`);
-      if (notFound > 0) toast.warn(`${notFound} ${notFound === 1 ? 'entry' : 'entries'} could not be linked — DO number not matched`);
+      if (notFound > 0) toast.warn(`${notFound} ${notFound === 1 ? 'entry' : 'entries'} could not be linked`);
     } catch {
       toast.warn('Saved but fuel linking failed — use manual link from the LPO sheet');
     }
@@ -345,14 +412,42 @@ export default function DarYardLPOForm({
       toast.error('Add at least one entry with truck, liters, and rate');
       return;
     }
+    const pendingChoice = entries
+      .map((e, i) => ({ e, i, row: rows[i] }))
+      .filter(({ e, row }) => e.truckNo.trim() && e.liters > 0 && e.rate > 0 && row?.warningType === 'needs_choice');
+    if (pendingChoice.length > 0) {
+      const trucks = pendingChoice.map(({ e }) => e.truckNo).join(', ');
+      toast.error(`Pick a fuel record for: ${trucks}`);
+      const first = pendingChoice[0];
+      if (first.row?.candidates?.length) {
+        setChoiceModal({
+          open: true,
+          index: first.i,
+          truckNo: first.e.truckNo,
+          candidates: first.row.candidates,
+        });
+      }
+      return;
+    }
     setSubmitting(true);
     try {
       const validWithIdx = entries
         .map((e, i) => ({ e, i }))
         .filter(({ e }) => e.truckNo.trim() && e.liters > 0 && e.rate > 0);
 
+      // Unlinked rows that came from a fuel fetch must not keep DO/dest.
+      // Manual DO/dest (never fetched) are preserved.
+      const payloadEntries = validWithIdx.map(({ e, i }) => {
+        const row = rows[i];
+        if (row?.linked) return e;
+        if (row?.fuelRecord || (row?.candidates?.length ?? 0) > 0) {
+          return { ...e, doNo: '', dest: '', dispenseLiters: null };
+        }
+        return e;
+      });
+
       if (mode === 'new') {
-        const result = await darLPOAPI.create({ date, currency, notes: notes || undefined, entries: validEntries });
+        const result = await darLPOAPI.create({ date, currency, notes: notes || undefined, entries: payloadEntries });
         if (result.warnings?.length) {
           result.warnings.forEach((w: string) => toast.warn(w, { autoClose: 6000 }));
         }
@@ -369,10 +464,10 @@ export default function DarYardLPOForm({
         const lpoId = (existingLpo._id ?? existingLpo.id) as string;
         await darLPOAPI.acquireLock(lpoId);
         try {
-          const updatedEntries = [...existingLpo.entries, ...validEntries];
+          const updatedEntries = [...existingLpo.entries, ...payloadEntries];
           const updateResult = await darLPOAPI.update(lpoId, { entries: updatedEntries });
           toast.success(
-            `${validEntries.length} ${validEntries.length === 1 ? 'entry' : 'entries'} added to ${existingLpo.lpoNo}`
+            `${payloadEntries.length} ${payloadEntries.length === 1 ? 'entry' : 'entries'} added to ${existingLpo.lpoNo}`
           );
           const existingCount = existingLpo.entries.length;
           const newResponseEntries = (updateResult?.entries || []).slice(existingCount);
@@ -567,6 +662,7 @@ export default function DarYardLPOForm({
                 const showFuel = row.fetched && !row.warningType && !!row.fuelRecord;
                 const showDispense = row.fetched && !row.warningType && row.linked;
                 const accent = row.warningType ? '#e2b24a' : (showFuel ? '#3cae78' : 'transparent');
+                const chosenId = row.fuelRecord ? fuelRecordIdOf(row.fuelRecord) : '';
 
                 return (
                   <div
@@ -619,15 +715,50 @@ export default function DarYardLPOForm({
                               Bal {fmt(row.fuelRecord!.balance)}L · Dar {fmt(row.alreadyDispensed)}L
                             </span>
                           </div>
+                          {row.candidates.length > 1 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '4px', flexWrap: 'wrap' }}>
+                              {row.candidates.map((c, cIdx) => {
+                                const id = fuelRecordIdOf(c);
+                                const active = id === chosenId;
+                                return (
+                                  <button
+                                    key={id || cIdx}
+                                    type="button"
+                                    title={`${c.date || ''} · ${c.goingDo || '—'}`}
+                                    onClick={() => switchCandidate(idx, c)}
+                                    style={{
+                                      padding: '1px 6px', fontSize: '10px', fontWeight: 600, borderRadius: '4px', cursor: 'pointer',
+                                      border: active ? '1px solid #16794e' : '1px solid #d5d9d0',
+                                      background: active ? '#16794e' : '#f3f4f0',
+                                      color: active ? '#fff' : '#5c6358',
+                                    }}
+                                  >
+                                    {cIdx + 1}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                           <label style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px', cursor: 'pointer', userSelect: 'none' }}>
-                            <input type="checkbox" checked={row.linked} onChange={e => updateRow(idx, { linked: e.target.checked })} style={{ width: 13, height: 13, accentColor: '#16794e', cursor: 'pointer' }} />
+                            <input type="checkbox" checked={row.linked} onChange={e => handleLinkToggle(idx, e.target.checked)} style={{ width: 13, height: 13, accentColor: '#16794e', cursor: 'pointer' }} />
                             <span style={{ fontSize: '11px', color: '#7c8278', fontWeight: 500 }}>Link &amp; dispense</span>
                           </label>
                         </div>
-                      ) : row.warningType ? (
+                      ) : row.warningType === 'needs_choice' ? (
+                        <button
+                          type="button"
+                          onClick={() => setChoiceModal({ open: true, index: idx, truckNo: entry.truckNo, candidates: row.candidates })}
+                          style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#fdf4e3', border: '1px solid #f2e0b8', borderRadius: '6px', padding: '4px 7px', cursor: 'pointer', textAlign: 'left' }}
+                        >
+                          <AlertTriangle className="w-3 h-3" style={{ color: '#b4690e', flexShrink: 0 }} />
+                          <span style={{ fontSize: '11px', color: '#b4690e', fontWeight: 500 }}>
+                            {row.candidates.length} records — pick one
+                          </span>
+                        </button>
+                      ) : row.warningType === 'not_found' ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#fdf4e3', border: '1px solid #f2e0b8', borderRadius: '6px', padding: '4px 7px' }}>
                           <AlertTriangle className="w-3 h-3" style={{ color: '#b4690e', flexShrink: 0 }} />
-                          <span style={{ fontSize: '11px', color: '#b4690e', fontWeight: 500 }}>No active record</span>
+                          <span style={{ fontSize: '11px', color: '#b4690e', fontWeight: 500 }}>No record in window</span>
                         </div>
                       ) : (
                         <span style={{ fontSize: '13px', color: '#d3d6cf' }}>—</span>
@@ -840,11 +971,34 @@ export default function DarYardLPOForm({
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                       </div>
+                      {row.candidates.length > 1 && (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {row.candidates.map((c, cIdx) => {
+                            const id = fuelRecordIdOf(c);
+                            const active = id === fuelRecordIdOf(row.fuelRecord!);
+                            return (
+                              <button
+                                key={id || cIdx}
+                                type="button"
+                                title={`${c.date || ''} · ${c.goingDo || '—'}`}
+                                onClick={() => switchCandidate(idx, c)}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  active
+                                    ? 'bg-green-600 text-white'
+                                    : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                                }`}
+                              >
+                                {cIdx + 1}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                       <label className="flex items-center gap-1.5 cursor-pointer select-none">
                         <input
                           type="checkbox"
                           checked={row.linked}
-                          onChange={e => updateRow(idx, { linked: e.target.checked })}
+                          onChange={e => handleLinkToggle(idx, e.target.checked)}
                           className="w-3.5 h-3.5 accent-green-600"
                         />
                         <span className="text-[11px] font-semibold text-green-700 dark:text-green-400">
@@ -869,10 +1023,22 @@ export default function DarYardLPOForm({
                       )}
                     </div>
                   )}
-                  {row.fetched && row.warningType && (
+                  {row.fetched && row.warningType === 'needs_choice' && (
+                    <button
+                      type="button"
+                      onClick={() => setChoiceModal({ open: true, index: idx, truckNo: entry.truckNo, candidates: row.candidates })}
+                      className="flex items-center gap-1.5 mb-2 w-full px-2.5 py-1.5 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg text-left"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                      <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                        {row.candidates.length} records — pick one
+                      </span>
+                    </button>
+                  )}
+                  {row.fetched && row.warningType === 'not_found' && (
                     <div className="flex items-center gap-1.5 mb-2 px-2.5 py-1.5 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg">
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                      <span className="text-[11px] text-amber-700 dark:text-amber-400">No active fuel record — manual entry allowed</span>
+                      <span className="text-[11px] text-amber-700 dark:text-amber-400">No record in window — manual entry allowed</span>
                     </div>
                   )}
 
@@ -971,7 +1137,7 @@ export default function DarYardLPOForm({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={submitting || validEntries.length === 0}
+                disabled={submitting || validEntries.length === 0 || hasPendingChoice}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -993,6 +1159,16 @@ export default function DarYardLPOForm({
           onClose={() => setInspectModal(prev => ({ ...prev, isOpen: false }))}
           fuelRecordId={inspectModal.fuelRecordId}
           truckNumber={inspectModal.truckNumber}
+        />
+      )}
+
+      {choiceModal.open && (
+        <YardFuelChoiceModal
+          truckNo={choiceModal.truckNo}
+          yard={YARD}
+          candidates={choiceModal.candidates}
+          onPick={handlePickCandidate}
+          onClose={() => setChoiceModal({ open: false, index: -1, truckNo: '', candidates: [] })}
         />
       )}
     </div>
