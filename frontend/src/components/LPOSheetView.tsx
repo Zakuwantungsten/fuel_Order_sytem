@@ -1501,8 +1501,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     const processedValue = field === 'truckNo' ? formatTruckNumber(value as string) : value;
     const TRUCK_FORMAT_COMPLETE = /^T\d+ [A-Z]{2,}$/i;
 
-    let entryAfterEdit: LPODetail | null = null;
     let truckIdentityChanged = false;
+    // Snapshot flags before we clear DO — empty DO must not block truck fetch
+    let blockedAsNonFuel = false;
 
     // Functional update so a keystroke cannot clobber DO/dest filled by applyJourneyToRow
     setEditedSheet((prev) => {
@@ -1514,6 +1515,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         const prevTruck = formatTruckNumber(cur.truckNo || '').toUpperCase();
         const nextTruck = String(processedValue || '').toUpperCase();
         truckIdentityChanged = prevTruck !== nextTruck;
+        // Only DA / REF flags block truck lookup — not a cleared/empty DO
+        blockedAsNonFuel = !!cur.isDriverAccount || !!(cur as any).isRefer;
+      } else if (field === 'doNo') {
+        blockedAsNonFuel = !!cur.isDriverAccount || !!(cur as any).isRefer;
       }
 
       updatedEntries[index] = {
@@ -1527,15 +1532,14 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         updatedEntries[index].amount = updatedEntries[index].liters * updatedEntries[index].rate;
       }
 
-      entryAfterEdit = updatedEntries[index];
       return { ...prev, entries: updatedEntries };
     });
 
-    // Debounced journey fetch for truck / DO corrections — never for DA / REF / NIL
+    // Debounced journey fetch for truck / DO corrections — never for DA / REF
     if (field === 'truckNo' || field === 'doNo') {
       if (lookupTimers.current[index]) clearTimeout(lookupTimers.current[index]);
 
-      if (entryAfterEdit && isNonFuelEntry(entryAfterEdit)) {
+      if (blockedAsNonFuel) {
         setRowLookup((prev) => {
           const next = { ...prev };
           delete next[index];
