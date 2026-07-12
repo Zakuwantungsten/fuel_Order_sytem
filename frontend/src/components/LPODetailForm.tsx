@@ -3401,20 +3401,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     type="button"
                     onClick={() => !loadingStations && setShowStationDropdown(!showStationDropdown)}
                     disabled={loadingStations}
-                    className="fld flex items-center justify-between text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="fld relative !px-2 !pr-7 flex items-center text-left disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ color: formData.station ? undefined : '#94a3b8' }}
                     title={formData.station || undefined}
                   >
-                    <span className="flex-1 inline-flex items-center gap-1.5 min-w-0 overflow-hidden mr-0.5">
-                      <MapPin className="w-[13px] h-[13px] text-[#4f46e5] shrink-0" />
-                      <span
-                        className="truncate text-[11px] leading-tight font-semibold"
-                        title={loadingStations ? undefined : (formData.station || undefined)}
-                      >
-                        {loadingStations ? 'Loading...' : (formData.station || 'Select station')}
-                      </span>
+                    <span
+                      className="block w-full min-w-0 text-[10px] leading-[1.2] font-semibold line-clamp-2 break-words"
+                      title={loadingStations ? undefined : (formData.station || undefined)}
+                    >
+                      {loadingStations ? 'Loading...' : (formData.station || 'Select station')}
                     </span>
-                    <ChevronDown className={`w-3.5 h-3.5 shrink-0 text-[#94a3b8] transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
+                    <ChevronDown
+                      className={`pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-[#94a3b8] transition-transform ${showStationDropdown ? 'rotate-180' : ''}`}
+                      aria-hidden
+                    />
                   </button>
 
                   {showStationDropdown && !loadingStations && (
