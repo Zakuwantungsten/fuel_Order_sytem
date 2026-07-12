@@ -1336,20 +1336,18 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const runTruckLookup = useCallback(
     async (index: number, truckNo: string) => {
       // Same as Detail Form: use current Dir toggle, else going.
-      let direction: 'going' | 'returning' = 'going';
-      setRowLookup((prev) => {
-        direction = prev[index]?.direction || entryDirections[index] || 'going';
-        return {
-          ...prev,
-          [index]: {
-            ...(prev[index] || { direction: 'going' as const }),
-            direction,
-            loading: true,
-            fetched: false,
-            fuelRecord: null,
-          },
-        };
-      });
+      const direction: 'going' | 'returning' =
+        rowLookup[index]?.direction || entryDirections[index] || 'going';
+      setRowLookup((prev) => ({
+        ...prev,
+        [index]: {
+          ...(prev[index] || { direction: 'going' as const }),
+          direction,
+          loading: true,
+          fetched: false,
+          fuelRecord: null,
+        },
+      }));
       const result = await fetchTruckForLpo(truckNo, lpoTruckLookupMonths);
       if (!result.success || !result.fuelRecord) {
         setRowLookup((prev) => ({
@@ -1379,7 +1377,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         toast.success(result.message || 'Truck journey loaded');
       }
     },
-    [applyJourneyToRow, entryDirections, lpoTruckLookupMonths]
+    [applyJourneyToRow, entryDirections, lpoTruckLookupMonths, rowLookup]
   );
 
   const runDoLookup = useCallback(
