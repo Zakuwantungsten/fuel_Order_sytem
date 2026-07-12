@@ -32,7 +32,8 @@ const isSpecialEntry = (e: LPODetail): boolean => {
     doUp === 'NIL' ||
     doUp === 'N/A' ||
     doUp === 'REF' ||
-    doUp === 'DA'
+    doUp === 'DA' ||
+    doUp === 'PENDING'
   );
 };
 

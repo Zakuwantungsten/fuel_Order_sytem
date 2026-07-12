@@ -1281,6 +1281,11 @@ export const fuelRecordsAPI = {
     // Every matching record (1 element for a clean DO). Lets the caller offer a pick.
     matches: { fuelRecord: FuelRecord; direction: 'going' | 'returning' }[];
   } | null> => {
+    const doUp = (doNumber || '').toString().trim().toUpperCase();
+    // Placeholders never have a fuel record — skip the network call (avoids 404 spam).
+    if (!doUp || doUp === 'NIL' || doUp === 'N/A' || doUp === 'REF' || doUp === 'DA' || doUp === 'PENDING') {
+      return null;
+    }
     try {
       // URL-encode the DO number to handle slashes (e.g., "0003/26" -> "0003%2F26")
       const encodedDoNumber = encodeURIComponent(doNumber);

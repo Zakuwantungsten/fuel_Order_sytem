@@ -49,7 +49,7 @@ const isSpecialEntry = (e: LPODetail): boolean => {
   return (
     (e as any).isDriverAccount === true ||
     (e as any).isRefer === true ||
-    doUp === '' || doUp === 'NIL' || doUp === 'N/A' || doUp === 'REF' || doUp === 'DA'
+    doUp === '' || doUp === 'NIL' || doUp === 'N/A' || doUp === 'REF' || doUp === 'DA' || doUp === 'PENDING'
   );
 };
 

@@ -244,7 +244,7 @@ export async function fetchTruckForLpo(
 export async function fetchDoForLpo(
   doNumber: string
 ): Promise<TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' }> {
-  if (!doNumber || doNumber.length < 3) {
+  if (!doNumber || doNumber.length < 3 || isSpecialDo(doNumber)) {
     return {
       fuelRecord: null,
       goingDo: 'NIL',
@@ -252,7 +252,7 @@ export async function fetchDoForLpo(
       destination: 'NIL',
       goingDestination: 'NIL',
       balance: 0,
-      message: 'Enter a valid DO number',
+      message: isSpecialDo(doNumber) ? 'No delivery order assigned' : 'Enter a valid DO number',
       success: false,
     };
   }
@@ -296,5 +296,12 @@ export async function fetchDoForLpo(
 
 export function isSpecialDo(doNo: string): boolean {
   const up = (doNo || '').toUpperCase().trim();
-  return !up || up === 'NIL' || up === 'N/A' || up === 'REF' || up === 'DA';
+  return (
+    !up ||
+    up === 'NIL' ||
+    up === 'N/A' ||
+    up === 'REF' ||
+    up === 'DA' ||
+    up === 'PENDING'
+  );
 }
