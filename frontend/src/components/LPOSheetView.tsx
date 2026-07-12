@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { toast } from 'react-toastify';
-import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2, XCircle, Search, ArrowRight, MapPin } from 'lucide-react';
+import { SquarePen, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, CircleX, RotateCcw, Loader2, XCircle, Search, ArrowRightLeft, MapPin, Check } from 'lucide-react';
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint, FuelRecord } from '../types';
 import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI, FuelAutomationConfig } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
@@ -143,7 +143,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   /** Desktop sheet grid */
   const sheetGridClass =
-    'grid grid-cols-[40px_minmax(0,0.9fr)_minmax(0,0.9fr)_100px_minmax(0,0.65fr)_minmax(0,0.5fr)_minmax(96px,0.9fr)_minmax(0,0.7fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(88px,0.85fr)_80px_148px] gap-0';
+    'grid grid-cols-[40px_minmax(0,0.9fr)_minmax(0,0.9fr)_100px_minmax(0,0.65fr)_minmax(0,0.5fr)_minmax(96px,0.9fr)_minmax(0,0.7fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(88px,0.85fr)_80px_168px] gap-0';
   /** Match header cell typography for body text */
   const sheetCellText = 'font-medium text-gray-900 dark:text-gray-100';
   const sheetCellMuted = 'font-medium text-gray-500 dark:text-gray-400';
@@ -1807,7 +1807,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   </button>
                   <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
                   <button onClick={handleStartEdit} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <Edit2 className="w-4 h-4 mr-3 text-blue-500" />Edit LPO
+                    <SquarePen className="w-4 h-4 mr-3 text-blue-500" />Edit LPO
                   </button>
                   {editedSheet.entries.some(e => !e.isCancelled) && (
                     <button onClick={() => { setShowCopyDropdown(false); setShowCancelAllModal(true); }} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
@@ -2014,7 +2014,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                   onClick={handleStartEdit}
                   className="flex items-center px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
                 >
-                  <Edit2 className="w-3.5 h-3.5 mr-1" />
+                  <SquarePen className="w-3.5 h-3.5 mr-1" />
                   Edit LPO
                 </button>
 
@@ -2126,7 +2126,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
               onClick={handleOpenPickup}
               className="flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded"
             >
-              <ArrowRight className="w-3.5 h-3.5" /> Pick up at…
+              <ArrowRightLeft className="w-3.5 h-3.5" /> Pick up at…
             </button>
           </div>
         </div>
@@ -2298,7 +2298,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         ) : (
                           <>
                             <button onClick={() => handleStartRowEdit(originalIndex)} className="flex-1 flex items-center justify-center gap-[7px] h-[42px] rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-[13px] font-bold hover:bg-blue-100 dark:hover:bg-blue-900/30">
-                              <Edit2 className="w-[15px] h-[15px]" />Modify
+                              <SquarePen className="w-[15px] h-[15px]" />Modify
                             </button>
                             <button onClick={() => openCancelModal(originalIndex)} className="flex-1 flex items-center justify-center gap-[7px] h-[42px] rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-[13px] font-bold hover:bg-orange-100 dark:hover:bg-orange-900/30">
                               <XCircle className="w-[15px] h-[15px]" />Void
@@ -2540,71 +2540,71 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                     )}
                   </div>
 
-                  <div className="px-2 py-2 text-center">
+                  <div className="px-1.5 py-2 text-center">
                     <div className="flex items-center justify-center flex-wrap gap-0.5">
                       {isCancelled ? (
                         <>
                           <span className="font-medium text-red-600 text-[10px] mr-0.5">CANCELLED</span>
                           <button
                             onClick={() => openRestoreEntry(originalIndex)}
-                            className="p-1 text-green-600 hover:text-green-800"
+                            className="p-1.5 rounded-md text-green-600 hover:text-green-800 hover:bg-green-50 dark:hover:bg-green-900/30"
                             title="Restore Entry"
                           >
-                            <RotateCcw className="w-3 h-3" />
+                            <RotateCcw className="w-4 h-4" strokeWidth={2} />
                           </button>
                         </>
                       ) : editingRow === originalIndex ? (
                         <>
                           <button
                             onClick={() => requestRowSave(originalIndex)}
-                            className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+                            className="p-1.5 rounded-md text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30"
                             title="Save & Update Fuel Record"
                           >
-                            <Save className="w-3 h-3" />
+                            <Check className="w-4 h-4" strokeWidth={2} />
                           </button>
                           <button
                             onClick={() => handleRowCancel(originalIndex)}
-                            className="p-1 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                            className="p-1.5 rounded-md text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                             title="Cancel Edit"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="w-4 h-4" strokeWidth={2} />
                           </button>
                         </>
                       ) : (
                         <>
                           <button
                             onClick={() => handleStartRowEdit(originalIndex)}
-                            className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                            className="p-1.5 rounded-md text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                             title="Edit Entry"
                           >
-                            <Edit2 className="w-3 h-3" />
+                            <SquarePen className="w-4 h-4" strokeWidth={2} />
                           </button>
                           <button
                             onClick={() => handleOpenPickedAt(originalIndex)}
-                            className={`p-1 rounded ${
+                            className={`p-1.5 rounded-md ${
                               entry.pickedAtStation
                                 ? 'text-teal-700 bg-teal-50 dark:text-teal-300 dark:bg-teal-900/40'
-                                : 'text-teal-600 hover:text-teal-800 dark:text-teal-400 dark:hover:text-teal-300'
+                                : 'text-teal-600 hover:text-teal-800 dark:text-teal-400 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30'
                             }`}
                             title={entry.pickedAtStation ? `Picked at ${entry.pickedAtStation}` : 'Set picked at (stay on this LPO)'}
                           >
-                            <MapPin className="w-3 h-3" />
+                            <MapPin className="w-4 h-4" strokeWidth={2} />
                           </button>
                           {isPickable(entry) && (
                             <button
                               onClick={() => handleOpenPickupForIndex(originalIndex)}
-                              className="p-1 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+                              className="p-1.5 rounded-md text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
                               title="Pick up at… (move to new LPO)"
                             >
-                              <ArrowRight className="w-3 h-3" />
+                              <ArrowRightLeft className="w-4 h-4" strokeWidth={2} />
                             </button>
                           )}
                           <button
                             onClick={() => openCancelModal(originalIndex)}
-                            className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                            className="p-1.5 rounded-md text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30"
                             title="Cancel Entry"
                           >
-                            <Ban className="w-3 h-3" />
+                            <CircleX className="w-4 h-4" strokeWidth={2} />
                           </button>
                         </>
                       )}
@@ -2712,7 +2712,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 transition-colors">
             <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                <Ban className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" />
+                <CircleX className="w-5 h-5 text-red-600 dark:text-red-400 mr-2" />
                 Cancel Entry
               </h3>
               <button
