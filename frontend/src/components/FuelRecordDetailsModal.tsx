@@ -10,6 +10,7 @@ import {
   Clock,
   Ban,
   ArrowRight,
+  MessageSquare,
 } from 'lucide-react';
 import { FuelRecordDetails, fuelRecordsAPI } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -22,6 +23,13 @@ interface FuelRecordDetailsModalProps {
 }
 
 type ActiveTab = 'lpos' | 'yard' | 'history';
+
+type LpoContextNote = {
+  lpoNo: string;
+  station: string;
+  doSdo: string;
+  context: string;
+};
 
 const FUEL_LABELS: Record<string, string> = {
   tangaYard: 'Tanga Yard',
@@ -74,12 +82,27 @@ export default function FuelRecordDetailsModal({
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<FuelRecordDetails | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('lpos');
+  const [contextNote, setContextNote] = useState<LpoContextNote | null>(null);
 
   useEffect(() => {
     if (isOpen && recordId) {
+      setContextNote(null);
       fetchDetails();
     }
   }, [isOpen, recordId]);
+
+  useEffect(() => {
+    if (!isOpen || !contextNote) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
+        setContextNote(null);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [isOpen, contextNote]);
 
   const fetchDetails = useCallback(async () => {
     if (!recordId) return;
@@ -423,6 +446,26 @@ export default function FuelRecordDetailsModal({
                                   <td className="py-2 pr-3 font-medium whitespace-nowrap">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span className={lpo.isCancelled ? 'line-through text-red-400 dark:text-red-500' : 'text-slate-900 dark:text-slate-100'}>{lpo.lpoNo}</span>
+                                      {lpo.context?.trim() ? (
+                                        <button
+                                          type="button"
+                                          title={lpo.context}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setContextNote({
+                                              lpoNo: lpo.lpoNo,
+                                              station: lpo.dieselAt,
+                                              doSdo: lpo.doSdo,
+                                              context: lpo.context!,
+                                            });
+                                          }}
+                                          className="relative inline-flex items-center p-0.5 rounded text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
+                                          aria-label="View order context"
+                                        >
+                                          <MessageSquare className="w-3.5 h-3.5" />
+                                          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900" />
+                                        </button>
+                                      ) : null}
                                       {lpo.source === 'tanga' && <span className="px-1 py-0.5 text-[10px] font-bold bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 rounded">TNG</span>}
                                       {lpo.source === 'dar' && <span className="px-1 py-0.5 text-[10px] font-bold bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded">DAR</span>}
                                       {lpo.isCancelled && <span className="px-1 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
@@ -541,6 +584,45 @@ export default function FuelRecordDetailsModal({
           </div>
         </div>
       </div>
+
+      {/* Order context popover */}
+      {contextNote && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          onClick={() => setContextNote(null)}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-sm rounded-xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 p-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="relative shrink-0 mt-0.5">
+                <MessageSquare className="w-5 h-5 text-indigo-500" />
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Order context</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                  LPO {contextNote.lpoNo} · {contextNote.station} · DO {contextNote.doSdo}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setContextNote(null)}
+                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                {contextNote.context}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

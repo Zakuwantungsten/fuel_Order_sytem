@@ -1185,6 +1185,7 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           originalLtrs: '$entries.originalLiters',
           goingCheckpoint: '$entries.goingCheckpoint',
           returningCheckpoint: '$entries.returningCheckpoint',
+          context: '$entries.context',
         },
       },
       { $sort: { date: 1 } },
@@ -1261,6 +1262,7 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           originalLtrs: '$entries.originalLiters',
           goingCheckpoint: '$entries.goingCheckpoint',
           returningCheckpoint: '$entries.returningCheckpoint',
+          context: '$entries.context',
         },
       },
       { $sort: { date: 1 } },
@@ -1299,6 +1301,7 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
             originalLtrs: entry.originalLiters ?? null,
             goingCheckpoint: entry.goingCheckpoint ?? null,
             returningCheckpoint: entry.returningCheckpoint ?? null,
+            context: (entry as any).context ?? null,
           });
         }
       }

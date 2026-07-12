@@ -3511,29 +3511,39 @@ export const getDriverLPOEntries = async (req: AuthRequest, res: Response): Prom
 
 /**
  * LPO entry contexts for a fuel-record journey (truck + going/return DO).
- * Used by Fuel Record Inspect to show a message icon without expanding rows.
+ * Used by Fuel Record Inspect to show a message icon / LPO context list.
  */
 export const getEntryContextsForFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const truckNo = String(req.query.truckNo || '').trim();
-    const goingDo = String(req.query.goingDo || '').trim().toUpperCase();
-    const returnDo = String(req.query.returnDo || '').trim().toUpperCase();
+    const goingDo = String(req.query.goingDo || '').trim().toUpperCase().replace(/\s+/g, '');
+    const returnDo = String(req.query.returnDo || '').trim().toUpperCase().replace(/\s+/g, '');
     if (!truckNo) throw new ApiError(400, 'truckNo is required');
 
     const truckNorm = truckNo.replace(/\s+/g, '').toUpperCase();
     const truckRegexPattern = truckNorm.split('').join('\\s*');
-    const doList = [goingDo, returnDo].filter((d) => d && d !== 'NIL' && d !== 'N/A');
+    const doList = [goingDo, returnDo].filter((d) => d && d !== 'NIL' && d !== 'N/A' && d !== 'DA');
 
     const matchEntry: Record<string, any> = {
       'entries.truckNo': new RegExp(`^${truckRegexPattern}$`, 'i'),
       'entries.context': { $exists: true, $nin: [null, ''] },
     };
     if (doList.length > 0) {
-      matchEntry.$or = [
-        { 'entries.doNo': { $in: doList } },
-        { 'entries.referenceDoNo': { $in: doList } },
-        { 'entries.referenceDo': { $in: doList } },
-      ];
+      // Case-insensitive DO match ($in is case-sensitive). Also match DA/refer
+      // rows via referenceDo(No) and cancelled rows via originalDoNo.
+      const upperField = (path: string) => ({
+        $toUpper: {
+          $replaceAll: { input: { $ifNull: [path, ''] }, find: ' ', replacement: '' },
+        },
+      });
+      matchEntry.$expr = {
+        $or: doList.flatMap((d) => [
+          { $eq: [upperField('$entries.doNo'), d] },
+          { $eq: [upperField('$entries.referenceDoNo'), d] },
+          { $eq: [upperField('$entries.referenceDo'), d] },
+          { $eq: [upperField('$entries.originalDoNo'), d] },
+        ]),
+      };
     }
 
     const rows = await LPOSummary.aggregate([
@@ -3558,10 +3568,13 @@ export const getEntryContextsForFuelRecord = async (req: AuthRequest, res: Respo
           pickedAtStation: '$entries.pickedAtStation',
           date: 1,
           doNo: '$entries.doNo',
+          referenceDo: { $ifNull: ['$entries.referenceDoNo', '$entries.referenceDo'] },
+          originalDoNo: '$entries.originalDoNo',
           truckNo: '$entries.truckNo',
           liters: '$entries.liters',
           context: '$entries.context',
           dispensedCheckpoint: '$entries.dispensedCheckpoint',
+          isCancelled: { $ifNull: ['$entries.isCancelled', false] },
         },
       },
     ]);

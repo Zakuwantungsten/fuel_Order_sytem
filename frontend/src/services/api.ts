@@ -933,10 +933,13 @@ export const lpoDocumentsAPI = {
     station: string;
     date: string;
     doNo: string;
+    referenceDo?: string | null;
+    originalDoNo?: string | null;
     truckNo: string;
     liters: number;
     context: string;
     dispensedCheckpoint?: string | null;
+    isCancelled?: boolean;
   }>> => {
     const response = await apiClient.get('/lpo-documents/entry-contexts', { params });
     return response.data.data || [];
@@ -1218,6 +1221,7 @@ export interface FuelRecordDetails {
     originalDoNo?: string;
     checkpoint?: string;
     source?: 'main' | 'tanga' | 'dar';
+    context?: string | null;
   })[];
   yardDispenses: YardFuelDispense[];
   summary: {

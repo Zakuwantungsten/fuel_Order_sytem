@@ -9,11 +9,28 @@ type EntryContext = {
   station: string;
   date: string;
   doNo: string;
+  referenceDo?: string | null;
+  originalDoNo?: string | null;
   truckNo: string;
   liters: number;
   context: string;
   dispensedCheckpoint?: string | null;
+  isCancelled?: boolean;
 };
+
+function normDo(value?: string | null): string {
+  return (value || '').toUpperCase().replace(/\s+/g, '').trim();
+}
+
+function contextMatchesDo(ctx: EntryContext, doNo?: string | null): boolean {
+  const target = normDo(doNo);
+  if (!target || target === 'NIL' || target === 'N/A') return false;
+  return (
+    normDo(ctx.doNo) === target ||
+    normDo(ctx.referenceDo) === target ||
+    normDo(ctx.originalDoNo) === target
+  );
+}
 
 const CHECKPOINT_COLUMNS = [
   { abbr: 'MMS', field: 'mmsaYard', label: 'MMSA Yard' },
@@ -96,6 +113,7 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [entryContexts, setEntryContexts] = useState<EntryContext[]>([]);
   const [contextPopover, setContextPopover] = useState<EntryContext | null>(null);
+  const [contextPopoverList, setContextPopoverList] = useState<EntryContext[]>([]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -104,6 +122,7 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
       setError(null);
       setEntryContexts([]);
       setContextPopover(null);
+      setContextPopoverList([]);
     }
   }, [isOpen]);
 
@@ -114,6 +133,7 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
       setError(null);
       setEntryContexts([]);
       setContextPopover(null);
+      setContextPopoverList([]);
       fetchFuelRecord();
     }
   }, [isOpen, fuelRecordId]);
@@ -126,6 +146,7 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
         e.preventDefault();
         if (contextPopover) {
           setContextPopover(null);
+          setContextPopoverList([]);
           return;
         }
         onClose();
@@ -171,28 +192,35 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
 
   const contextsForDo = (doNo?: string | null) => {
     if (!doNo) return [];
-    const up = doNo.toUpperCase().trim();
-    return entryContexts.filter((c) => (c.doNo || '').toUpperCase().trim() === up);
+    return entryContexts.filter((c) => contextMatchesDo(c, doNo));
+  };
+
+  const openContextPopover = (matches: EntryContext[]) => {
+    if (matches.length === 0) return;
+    setContextPopover(matches[0]);
+    setContextPopoverList(matches);
   };
 
   const renderContextIcon = (doNo?: string | null, tint = 'text-indigo-600 dark:text-indigo-300') => {
     const matches = contextsForDo(doNo);
     if (matches.length === 0) return null;
-    const first = matches[0];
-    const title = matches.map((c) => c.context).join('\n\n');
+    const title = matches.map((c) => `LPO ${c.lpoNo}: ${c.context}`).join('\n\n');
     return (
       <button
         type="button"
         title={title}
         onClick={(e) => {
           e.stopPropagation();
-          setContextPopover(first);
+          openContextPopover(matches);
         }}
-        className={`inline-flex items-center gap-1 p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 ${tint}`}
+        className={`relative inline-flex items-center gap-1 p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 ${tint}`}
+        aria-label="View order context"
       >
         <MessageSquare className="h-3.5 w-3.5" />
+        {/* Notification-style dot */}
+        <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
         {matches.length > 1 && (
-          <span className="text-[10px] font-bold leading-none">{matches.length}</span>
+          <span className="text-[10px] font-bold leading-none ml-1">{matches.length}</span>
         )}
       </button>
     );
@@ -389,6 +417,55 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* ── ORDER CONTEXT NOTES (LPOs with context) ── */}
+                {entryContexts.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <SectionBadge n="01" />
+                      <h3 className="font-semibold text-gray-900 dark:text-white">Order context notes</h3>
+                      <span className="text-xs text-gray-400">({entryContexts.length})</span>
+                    </div>
+                    <div className="space-y-2">
+                      {entryContexts.map((ctx, idx) => (
+                        <button
+                          key={`${ctx.lpoId}-${ctx.doNo}-${idx}`}
+                          type="button"
+                          title={ctx.context}
+                          onClick={() => openContextPopover([ctx])}
+                          className="w-full text-left flex items-start gap-3 p-3 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-900/20 hover:bg-indigo-100/80 dark:hover:bg-indigo-900/40 transition-colors"
+                        >
+                          <div className="relative shrink-0 mt-0.5">
+                            <MessageSquare className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
+                            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-indigo-50 dark:ring-indigo-900" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                              <span className="font-bold text-gray-900 dark:text-gray-100">
+                                LPO {ctx.lpoNo}
+                              </span>
+                              <span className="text-gray-400">·</span>
+                              <span className="text-gray-600 dark:text-gray-300">{ctx.station}</span>
+                              {ctx.isCancelled && (
+                                <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                                  Cancelled
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                              DO {ctx.doNo}
+                              {ctx.referenceDo ? ` · Ref ${ctx.referenceDo}` : ''}
+                              {ctx.liters != null ? ` · ${Number(ctx.liters).toLocaleString()} L` : ''}
+                            </p>
+                            <p className="text-sm text-gray-800 dark:text-gray-200 mt-1 line-clamp-2 whitespace-pre-wrap">
+                              {ctx.context}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Locked warning */}
                 {(fuelRecord as any).isLocked && (
@@ -592,33 +669,52 @@ const FuelRecordInspectModal: React.FC<FuelRecordInspectModalProps> = ({
       {contextPopover && (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center p-4"
-          onClick={() => setContextPopover(null)}
+          onClick={() => {
+            setContextPopover(null);
+            setContextPopoverList([]);
+          }}
         >
           <div className="absolute inset-0 bg-black/40" />
           <div
-            className="relative w-full max-w-sm rounded-xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+            className="relative w-full max-w-sm rounded-xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden max-h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start gap-3 p-4 border-b border-gray-100 dark:border-gray-800">
-              <MessageSquare className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 p-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+              <div className="relative shrink-0 mt-0.5">
+                <MessageSquare className="w-5 h-5 text-indigo-500" />
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
+              </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Order context</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                   LPO {contextPopover.lpoNo} · {contextPopover.station}
+                  {contextPopoverList.length > 1 ? ` · ${contextPopoverList.length} notes` : ''}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setContextPopover(null)}
+                onClick={() => {
+                  setContextPopover(null);
+                  setContextPopoverList([]);
+                }}
                 className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
-            <div className="p-4">
-              <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
-                {contextPopover.context}
-              </p>
+            <div className="p-4 overflow-y-auto space-y-4">
+              {(contextPopoverList.length > 0 ? contextPopoverList : [contextPopover]).map((ctx, i) => (
+                <div key={`${ctx.lpoId}-${i}`} className={i > 0 ? 'pt-4 border-t border-gray-100 dark:border-gray-800' : ''}>
+                  {contextPopoverList.length > 1 && (
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                      LPO {ctx.lpoNo} · DO {ctx.doNo}
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                    {ctx.context}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
