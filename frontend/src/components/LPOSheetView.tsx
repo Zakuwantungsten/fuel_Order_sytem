@@ -145,8 +145,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const sheetGridClass =
     'grid grid-cols-[40px_minmax(0,0.85fr)_minmax(0,0.85fr)_100px_minmax(0,0.6fr)_minmax(0,0.45fr)_minmax(96px,0.85fr)_minmax(0,0.65fr)_minmax(0,0.75fr)_minmax(180px,1.45fr)_minmax(88px,0.8fr)_80px_168px] gap-0';
   /** Match header cell typography for body text */
-  const sheetCellText = 'font-medium text-gray-900 dark:text-gray-100';
-  const sheetCellMuted = 'font-medium text-gray-500 dark:text-gray-400';
+  const sheetCellText = 'text-[11px] leading-tight font-medium text-gray-900 dark:text-gray-100';
+  const sheetCellMuted = 'text-[11px] leading-tight font-medium text-gray-500 dark:text-gray-400';
 
   const [contextModal, setContextModal] = useState<{
     open: boolean;
@@ -2357,18 +2357,18 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                     );
                   })()}
                 </div>
-                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>DO No.</div>
-                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>Truck No.</div>
-                <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Direction</div>
-                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Liters</div>
-                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Rate</div>
-                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Amount</div>
-                <div className={`px-3 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>Dest.</div>
-                <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Checkpoint</div>
-                <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Status</div>
-                <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Picked at</div>
-                <div className={`px-2 py-2 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Context</div>
-                <div className={`px-3 py-2 ${sheetCellText} text-center`}>Actions</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>DO No.</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>Truck No.</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Direction</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Liters</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Rate</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-right`}>Amount</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700`}>Dest.</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Checkpoint</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Status</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Picked at</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} border-r border-gray-300 dark:border-gray-700 text-center`}>Context</div>
+                <div className={`px-2 py-1.5 ${sheetCellText} text-center`}>Actions</div>
               </div>
             </div>
 
@@ -2409,7 +2409,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                       />
                     )}
                   </div>
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-700">
+                  <div className="px-2 py-1.5 border-r border-gray-300 dark:border-gray-700 min-w-0">
                     {editingRow === originalIndex ? (
                       <input
                         type="text"
@@ -2418,13 +2418,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className={`w-full px-1 py-0 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${sheetCellText}`}
                       />
                     ) : (
-                      <span className={`${sheetCellText} ${displayData.displayClass}`}>
+                      <span
+                        className={`${sheetCellText} ${displayData.displayClass} block truncate`}
+                        title={isCancelled ? 'CANCELLED' : isDriverAccount ? 'NIL' : entry.doNo}
+                      >
                         {isCancelled ? 'CANCELLED' : isDriverAccount ? 'NIL' : entry.doNo}
                       </span>
                     )}
                   </div>
 
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-700">
+                  <div className="px-2 py-1.5 border-r border-gray-300 dark:border-gray-700 min-w-0">
                     {editingRow === originalIndex ? (
                       <input
                         type="text"
@@ -2433,15 +2436,20 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className={`w-full px-1 py-0 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${sheetCellText}`}
                       />
                     ) : (
-                      <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400' : ''}`}>{entry.truckNo}</span>
+                      <span
+                        className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400' : ''} block truncate`}
+                        title={entry.truckNo}
+                      >
+                        {entry.truckNo}
+                      </span>
                     )}
                   </div>
 
-                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center">
+                  <div className="px-1.5 py-1.5 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center">
                     {renderDirectionCell(entry, originalIndex)}
                   </div>
 
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-700 text-right">
+                  <div className="px-2 py-1.5 border-r border-gray-300 dark:border-gray-700 text-right min-w-0">
                     {editingRow === originalIndex ? (
                       <input
                         type="number"
@@ -2450,16 +2458,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className={`w-full px-1 py-0 border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 ${sheetCellText} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                       />
                     ) : (
-                      <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1 justify-end max-w-full">
                         {entry.originalLiters != null && entry.originalLiters !== entry.liters && (
-                          <span className={`${sheetCellMuted} line-through`}>{entry.originalLiters}</span>
+                          <span className={`${sheetCellMuted} line-through truncate`}>{entry.originalLiters}</span>
                         )}
-                        <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : ''}`}>{entry.liters}</span>
+                        <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : ''} truncate`}>{entry.liters}</span>
                       </span>
                     )}
                   </div>
 
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-700 text-right">
+                  <div className="px-2 py-1.5 border-r border-gray-300 dark:border-gray-700 text-right min-w-0">
                     {editingRow === originalIndex ? (
                       <input
                         type="number"
@@ -2469,17 +2477,22 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className={`w-full px-1 py-0 border dark:border-gray-600 rounded text-right bg-white dark:bg-gray-700 ${sheetCellText} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                       />
                     ) : (
-                      <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : ''}`}>{entry.rate}</span>
+                      <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : ''} block truncate`}>
+                        {entry.rate}
+                      </span>
                     )}
                   </div>
 
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-700 text-right">
-                    <span className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : ''}`}>
+                  <div className="px-2 py-1.5 border-r border-gray-300 dark:border-gray-700 text-right min-w-0">
+                    <span
+                      className={`${sheetCellText} ${isCancelled ? 'text-red-600 dark:text-red-400 line-through' : ''} block truncate`}
+                      title={formatCurrency(entry.amount)}
+                    >
                       {formatCurrency(entry.amount)}
                     </span>
                   </div>
 
-                  <div className="px-3 py-2 border-r border-gray-300 dark:border-gray-700">
+                  <div className="px-2 py-1.5 border-r border-gray-300 dark:border-gray-700 min-w-0">
                     {editingRow === originalIndex ? (
                       <input
                         type="text"
@@ -2488,36 +2501,42 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className={`w-full px-1 py-0 border dark:border-gray-600 rounded bg-white dark:bg-gray-700 ${sheetCellText}`}
                       />
                     ) : (
-                      <span className={`${sheetCellText} ${displayData.displayClass}`}>
+                      <span
+                        className={`${sheetCellText} ${displayData.displayClass} block truncate`}
+                        title={isCancelled ? entry.dest : isDriverAccount ? 'NIL' : entry.dest}
+                      >
                         {isCancelled ? entry.dest : isDriverAccount ? 'NIL' : entry.dest}
                       </span>
                     )}
                   </div>
 
-                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center">
-                    <span className={`${sheetCellText} text-[11px] text-center leading-snug`} title={entry.dispensedCheckpoint || undefined}>
+                  <div className="px-1.5 py-1.5 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center min-w-0 overflow-hidden">
+                    <span
+                      className={`${sheetCellText} text-center truncate max-w-full whitespace-nowrap`}
+                      title={checkpointFieldLabel(entry.dispensedCheckpoint) || entry.dispensedCheckpoint || undefined}
+                    >
                       {checkpointFieldLabel(entry.dispensedCheckpoint)}
                     </span>
                   </div>
 
-                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center min-w-0 overflow-hidden">
+                  <div className="px-1.5 py-1.5 border-r border-gray-300 dark:border-gray-700 flex items-center min-w-0 overflow-hidden">
                     {renderStatusCell(entry, originalIndex)}
                   </div>
 
-                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center min-w-0">
+                  <div className="px-1.5 py-1.5 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center min-w-0 overflow-hidden">
                     {entry.pickedAtStation ? (
                       <span
-                        className="text-[10px] font-bold leading-snug text-teal-700 dark:text-teal-300 text-center truncate max-w-full"
+                        className="text-[10px] font-bold text-teal-700 dark:text-teal-300 text-center truncate max-w-full whitespace-nowrap"
                         title={`Ordered at ${editedSheet.station} · filled at ${entry.pickedAtStation}`}
                       >
                         {entry.pickedAtStation}
                       </span>
                     ) : (
-                      <span className="font-medium text-gray-400 dark:text-gray-500">—</span>
+                      <span className={sheetCellMuted}>—</span>
                     )}
                   </div>
 
-                  <div className="px-1.5 py-2 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center">
+                  <div className="px-1.5 py-1.5 border-r border-gray-300 dark:border-gray-700 flex items-center justify-center">
                     {entry.context ? (
                       <button
                         type="button"
@@ -2525,7 +2544,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         className="p-1 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded"
                         title="View context"
                       >
-                        <MessageSquare className="w-4 h-4" />
+                        <MessageSquare className="w-3.5 h-3.5" />
                       </button>
                     ) : editingRow === originalIndex ? (
                       <button
@@ -2536,11 +2555,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         Add
                       </button>
                     ) : (
-                      <span className="font-medium text-gray-400 dark:text-gray-500">—</span>
+                      <span className={sheetCellMuted}>—</span>
                     )}
                   </div>
 
-                  <div className="px-1.5 py-2 text-center">
+                  <div className="px-1.5 py-1.5 text-center">
                     <div className="flex items-center justify-center flex-wrap gap-0.5">
                       {isCancelled ? (
                         <>
