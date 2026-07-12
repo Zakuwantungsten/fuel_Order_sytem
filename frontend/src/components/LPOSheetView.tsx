@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import { Edit2, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown, FileDown, Download, Lock, AlertTriangle, Clipboard, Ban, RotateCcw, Loader2, XCircle, Search, ArrowRight } from 'lucide-react';
-import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint } from '../types';
+import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint, FuelRecord } from '../types';
 import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI, FuelAutomationConfig } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
@@ -16,8 +16,27 @@ import {
   getCancellationPointDisplayName,
   FUEL_RECORD_COLUMNS
 } from '../services/cancellationService';
+import {
+  fetchTruckForLpo,
+  fetchDoForLpo,
+  isSpecialDo,
+  TruckFetchResult,
+} from '../utils/lpoJourneyLookup';
 import PickupAtModal from './PickupAtModal';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
+
+/** Per-row journey lookup state while editing truck/DO in the sheet. */
+interface RowLookupState {
+  loading: boolean;
+  fetched: boolean;
+  direction: 'going' | 'returning';
+  fuelRecord: FuelRecord | null;
+  message?: string;
+  warningType?: TruckFetchResult['warningType'];
+  allJourneys?: { active: FuelRecord | null; queued: FuelRecord[] };
+  selectedJourneyType?: 'active' | 'queued';
+  selectedJourneyIndex?: number; // -1 active, 0+ queued
+}
 
 interface LPOSheetViewProps {
   sheet: LPOSheet;
@@ -82,6 +101,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [showPickupModal, setShowPickupModal] = useState(false);
 
+  // Truck / DO journey lookup while editing a row (parity with LPODetailForm)
+  const [rowLookup, setRowLookup] = useState<Record<number, RowLookupState>>({});
+  const lookupTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const [doAmbiguityModal, setDoAmbiguityModal] = useState<{
+    open: boolean;
+    index: number;
+    doNo: string;
+    matches: (TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' })[];
+  }>({ open: false, index: -1, doNo: '', matches: [] });
+
   // A regular entry backed by a fuel record (real DO, not DA/REF/NIL). Used to gate
   // the manual fuel-checkpoint prompt on edit — those special entries have no record.
   const hasFuelRecord = (entry: LPODetail): boolean => {
@@ -93,6 +122,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       doUp !== '' && doUp !== 'NIL' && doUp !== 'N/A' && doUp !== 'REF' && doUp !== 'DA'
     );
   };
+
+  /** DA / REF / NIL rows never fetch journeys or touch fuel records. */
+  const isNonFuelEntry = (entry: LPODetail): boolean =>
+    !!entry.isDriverAccount || !!(entry as any).isRefer || isSpecialDo(entry.doNo || '');
 
   // Any active entry is pickable — including REF / NIL / Driver-Account entries.
   // Those carry no fuel record, so pick-up just moves them (no fuel netting); the
@@ -206,6 +239,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   }, [lpoNo]);
 
   const { data: journeyConfig } = useJourneyConfig();
+  const lpoTruckLookupMonths = journeyConfig?.lpoTruckLookupMonths ?? 4;
   useEffect(() => {
     if (journeyConfig?.fuelAutomation) setFuelAutomation(journeyConfig.fuelAutomation);
   }, [journeyConfig]);
@@ -349,18 +383,36 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   // Save a single row edit to the backend. When a manual checkpoint is supplied
   // (lpoEditAdjust automation OFF), it's attached so the backend adjusts that column.
+  // For truck/DO identity changes, pass the same field for both old and new keys so
+  // revert (old) and deduct (new) hit the correct fuel records.
   const handleRowSave = async (index: number, manualField?: string) => {
     if (isSaving) return; // Prevent double submission
     setIsSaving(true);
     try {
       let payload: any = editedSheet;
       if (manualField) {
-        const e = editedSheet.entries[index];
-        payload = { ...editedSheet, manualCheckpoints: { [`${e.doNo}-${e.truckNo}`]: manualField } };
+        const cur = editedSheet.entries[index];
+        const orig = sheet.entries[index];
+        const checkpoints: Record<string, string> = {
+          [`${cur.doNo}-${cur.truckNo}`]: manualField,
+        };
+        if (
+          orig &&
+          ((orig.doNo || '') !== (cur.doNo || '') ||
+            (orig.truckNo || '').toLowerCase() !== (cur.truckNo || '').toLowerCase())
+        ) {
+          checkpoints[`${orig.doNo}-${orig.truckNo}`] = manualField;
+        }
+        payload = { ...editedSheet, manualCheckpoints: checkpoints };
       }
       const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, payload);
       onUpdate(updatedSheet);
       setEditingRow(null);
+      setRowLookup((prev) => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
       setEditCheckpoint({ open: false, index: null, direction: null, fuelRecordId: null, field: '', loading: false });
       await releaseLockIfNeeded();
       toast.success('Entry updated! Fuel records have been adjusted.');
@@ -395,7 +447,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     const orig = sheet.entries[index];
     const cur = editedSheet.entries[index];
     const litersChanged = !!orig && cur.liters !== orig.liters;
-    if (litersChanged && hasFuelRecord(cur)) {
+    const identityChanged =
+      !!orig &&
+      ((orig.doNo || '') !== (cur.doNo || '') ||
+        (orig.truckNo || '').toLowerCase() !== (cur.truckNo || '').toLowerCase());
+    const needsFuelAdjust =
+      (litersChanged || identityChanged) &&
+      (hasFuelRecord(cur) || (identityChanged && orig && hasFuelRecord(orig)));
+
+    if (needsFuelAdjust) {
       if (fuelAutomation === null) {
         toast.error('Journey config still loading — please wait a moment and try again.');
         return;
@@ -408,11 +468,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           setEditCheckpoint((p) => ({
             ...p,
             loading: false,
-            direction: res?.direction ?? 'going',
+            direction: res?.direction ?? rowLookup[index]?.direction ?? 'going',
             fuelRecordId: fr?.id ?? fr?._id ?? null,
           }));
         } catch {
-          setEditCheckpoint((p) => ({ ...p, loading: false, direction: 'going' }));
+          setEditCheckpoint((p) => ({
+            ...p,
+            loading: false,
+            direction: rowLookup[index]?.direction ?? 'going',
+          }));
         }
         return;
       }
@@ -422,6 +486,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   // Cancel row edit - revert to original values
   const handleRowCancel = async (index: number) => {
+    if (lookupTimers.current[index]) {
+      clearTimeout(lookupTimers.current[index]);
+      delete lookupTimers.current[index];
+    }
     // Revert the edited entry back to original
     const originalEntry = sheet.entries[index];
     if (originalEntry) {
@@ -432,6 +500,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         entries: updatedEntries
       }));
     }
+    setRowLookup((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
     setEditingRow(null);
     await releaseLockIfNeeded();
   };
@@ -923,6 +996,240 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setShowCopyDropdown(false);
   };
 
+  /** Apply a fetched journey onto a sheet row (preserves liters/rate — correction case). */
+  const applyJourneyToRow = useCallback(
+    (
+      index: number,
+      result: TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' },
+      opts?: { direction?: 'going' | 'returning'; preserveTruck?: boolean }
+    ) => {
+      const direction = opts?.direction || result.direction || 'going';
+      const fr = result.fuelRecord;
+      if (!fr) return;
+
+      const doNumber =
+        direction === 'going' ? result.goingDo || fr.goingDo : result.returnDo || fr.returnDo || fr.goingDo;
+      const dest =
+        direction === 'going'
+          ? result.goingDestination || fr.originalGoingTo || fr.to || 'NIL'
+          : result.destination || fr.to || 'NIL';
+
+      setEditedSheet((prev) => {
+        const updatedEntries = [...prev.entries];
+        const cur = updatedEntries[index];
+        if (!cur) return prev;
+        const truckNo = opts?.preserveTruck
+          ? cur.truckNo
+          : formatTruckNumber(result.truckNo || fr.truckNo || cur.truckNo);
+        updatedEntries[index] = {
+          ...cur,
+          truckNo,
+          doNo: (doNumber || cur.doNo || '').toString().toUpperCase(),
+          dest,
+          amount: cur.liters * cur.rate,
+        };
+        return { ...prev, entries: updatedEntries };
+      });
+
+      const queued = result.allJourneys?.queued || [];
+      const isQueued = fr.journeyStatus === 'queued';
+      const queuedIdx = isQueued
+        ? Math.max(0, queued.findIndex((q) => (q.id || q._id) === (fr.id || fr._id)))
+        : -1;
+
+      setRowLookup((prev) => ({
+        ...prev,
+        [index]: {
+          loading: false,
+          fetched: true,
+          direction,
+          fuelRecord: fr,
+          message: result.message,
+          warningType: result.warningType || null,
+          allJourneys: result.allJourneys,
+          selectedJourneyType: isQueued ? 'queued' : 'active',
+          selectedJourneyIndex: isQueued ? queuedIdx : -1,
+        },
+      }));
+    },
+    []
+  );
+
+  const runTruckLookup = useCallback(
+    async (index: number, truckNo: string) => {
+      let priorDirection: 'going' | 'returning' = 'going';
+      setRowLookup((prev) => {
+        priorDirection = prev[index]?.direction || 'going';
+        return {
+          ...prev,
+          [index]: {
+            ...(prev[index] || { direction: 'going' as const }),
+            loading: true,
+            fetched: false,
+            fuelRecord: null,
+          },
+        };
+      });
+      const result = await fetchTruckForLpo(truckNo, lpoTruckLookupMonths);
+      if (!result.success || !result.fuelRecord) {
+        setRowLookup((prev) => ({
+          ...prev,
+          [index]: {
+            loading: false,
+            fetched: true,
+            direction: prev[index]?.direction || priorDirection,
+            fuelRecord: result.fuelRecord,
+            message: result.message,
+            warningType: result.warningType || null,
+            allJourneys: result.allJourneys,
+          },
+        }));
+        if (result.message) toast.info(result.message);
+        return;
+      }
+      applyJourneyToRow(
+        index,
+        { ...result, direction: priorDirection },
+        { direction: priorDirection, preserveTruck: true }
+      );
+      toast.success(result.message || 'Truck journey loaded');
+    },
+    [applyJourneyToRow, lpoTruckLookupMonths]
+  );
+
+  const runDoLookup = useCallback(
+    async (index: number, doNo: string) => {
+      const doUp = doNo.trim().toUpperCase();
+      if (isSpecialDo(doUp)) {
+        setRowLookup((prev) => {
+          const next = { ...prev };
+          delete next[index];
+          return next;
+        });
+        return;
+      }
+      setRowLookup((prev) => ({
+        ...prev,
+        [index]: {
+          ...(prev[index] || { direction: 'going' as const }),
+          loading: true,
+          fetched: false,
+          fuelRecord: null,
+        },
+      }));
+      const result = await fetchDoForLpo(doUp);
+      if (result.ambiguous && result.matches && result.matches.length > 1) {
+        setRowLookup((prev) => ({
+          ...prev,
+          [index]: {
+            loading: false,
+            fetched: true,
+            direction: result.direction || 'going',
+            fuelRecord: null,
+            message: `DO ${doUp} matches ${result.matches!.length} trucks — pick one`,
+            warningType: 'ambiguous_do',
+          },
+        }));
+        setDoAmbiguityModal({ open: true, index, doNo: doUp, matches: result.matches });
+        return;
+      }
+      if (!result.success || !result.fuelRecord) {
+        setRowLookup((prev) => ({
+          ...prev,
+          [index]: {
+            loading: false,
+            fetched: true,
+            direction: result.direction || 'going',
+            fuelRecord: null,
+            message: result.message,
+            warningType: result.warningType || null,
+          },
+        }));
+        if (result.message) toast.info(result.message);
+        return;
+      }
+      applyJourneyToRow(index, result);
+      toast.success(result.message || 'DO journey loaded');
+    },
+    [applyJourneyToRow]
+  );
+
+  const handleJourneySelect = (index: number, type: 'active' | 'queued', queuedIndex?: number) => {
+    const lookup = rowLookup[index];
+    if (!lookup?.allJourneys) return;
+    const { active, queued } = lookup.allJourneys;
+    let selected: FuelRecord | null = null;
+    let journeyIndex = -1;
+    if (type === 'active' && active) {
+      selected = active;
+      journeyIndex = -1;
+    } else if (type === 'queued' && queued?.length) {
+      const qi = queuedIndex ?? 0;
+      if (qi < queued.length) {
+        selected = queued[qi];
+        journeyIndex = qi;
+      }
+    }
+    if (!selected) return;
+
+    const direction = lookup.direction || 'going';
+    applyJourneyToRow(
+      index,
+      {
+        fuelRecord: selected,
+        goingDo: selected.goingDo || 'NIL',
+        returnDo: selected.returnDo || 'NIL',
+        destination: selected.to || 'NIL',
+        goingDestination: selected.originalGoingTo || selected.to || 'NIL',
+        balance: selected.balance || 0,
+        message: type === 'queued' ? `Queued #${selected.queueOrder || journeyIndex + 1}` : 'Active journey',
+        success: true,
+        allJourneys: lookup.allJourneys,
+        truckNo: selected.truckNo,
+        direction,
+      },
+      { direction, preserveTruck: true }
+    );
+    setRowLookup((prev) => ({
+      ...prev,
+      [index]: {
+        ...prev[index],
+        selectedJourneyType: type,
+        selectedJourneyIndex: journeyIndex,
+        fuelRecord: selected,
+      },
+    }));
+  };
+
+  const handleDirectionToggle = (index: number, direction: 'going' | 'returning') => {
+    const lookup = rowLookup[index];
+    const fr = lookup?.fuelRecord;
+    if (!fr) {
+      setRowLookup((prev) => ({
+        ...prev,
+        [index]: { ...(prev[index] || { loading: false, fetched: false, fuelRecord: null }), direction },
+      }));
+      return;
+    }
+    applyJourneyToRow(
+      index,
+      {
+        fuelRecord: fr,
+        goingDo: fr.goingDo || 'NIL',
+        returnDo: fr.returnDo || 'NIL',
+        destination: fr.to || 'NIL',
+        goingDestination: fr.originalGoingTo || fr.to || 'NIL',
+        balance: fr.balance || 0,
+        message: lookup.message || '',
+        success: true,
+        allJourneys: lookup.allJourneys,
+        truckNo: fr.truckNo,
+        direction,
+      },
+      { direction, preserveTruck: true }
+    );
+  };
+
   const handleEntryEdit = (index: number, field: keyof LPODetail, value: string | number) => {
     const updatedEntries = [...editedSheet.entries];
     
@@ -943,6 +1250,34 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       ...prev,
       entries: updatedEntries
     }));
+
+    // Debounced journey fetch for truck / DO corrections — never for DA / REF / NIL
+    if (field === 'truckNo' || field === 'doNo') {
+      if (lookupTimers.current[index]) clearTimeout(lookupTimers.current[index]);
+      const entryAfterEdit = updatedEntries[index];
+      if (isNonFuelEntry(entryAfterEdit)) {
+        setRowLookup((prev) => {
+          const next = { ...prev };
+          delete next[index];
+          return next;
+        });
+        return;
+      }
+      const raw = String(processedValue || '').trim();
+      if (field === 'doNo' && isSpecialDo(raw)) {
+        setRowLookup((prev) => {
+          const next = { ...prev };
+          delete next[index];
+          return next;
+        });
+        return;
+      }
+      if (raw.length < 3) return;
+      lookupTimers.current[index] = setTimeout(() => {
+        if (field === 'truckNo') void runTruckLookup(index, raw);
+        else void runDoLookup(index, raw.toUpperCase());
+      }, 350);
+    }
   };
 
   const formatCurrency = (amount: number): string => {
@@ -973,6 +1308,102 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         (entry.dest || '').toLowerCase().includes(term)
       );
     });
+
+  const renderRowLookupPanel = (index: number) => {
+    const lookup = rowLookup[index];
+    if (!lookup) return null;
+    const showJourneyPicker =
+      lookup.allJourneys &&
+      ((lookup.allJourneys.active && lookup.allJourneys.queued.length > 0) ||
+        (!lookup.allJourneys.active && lookup.allJourneys.queued.length > 1));
+
+    return (
+      <div className="mt-2 space-y-2 col-span-full">
+        {lookup.loading && (
+          <p className="text-[11px] text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Looking up journey…
+          </p>
+        )}
+        {!lookup.loading && lookup.message && (
+          <p
+            className={`text-[11px] ${
+              lookup.warningType
+                ? 'text-amber-700 dark:text-amber-300'
+                : 'text-green-700 dark:text-green-400'
+            }`}
+          >
+            {lookup.message}
+          </p>
+        )}
+        {lookup.fetched && lookup.fuelRecord && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleDirectionToggle(index, 'going')}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                lookup.direction === 'going'
+                  ? 'bg-green-500 text-white'
+                  : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+              }`}
+            >
+              Going
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDirectionToggle(index, 'returning')}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                lookup.direction === 'returning'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+              }`}
+            >
+              Returning
+            </button>
+            <span
+              className={`text-[10px] font-semibold ${
+                lookup.selectedJourneyType === 'queued'
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : 'text-green-600 dark:text-green-400'
+              }`}
+            >
+              {lookup.selectedJourneyType === 'queued' ? 'Queued' : 'Active'}
+            </span>
+          </div>
+        )}
+        {showJourneyPicker && lookup.allJourneys && (
+          <div className="flex flex-wrap gap-1.5">
+            {lookup.allJourneys.active && (
+              <button
+                type="button"
+                onClick={() => handleJourneySelect(index, 'active')}
+                className={`px-2 py-1 rounded text-[10px] font-bold border ${
+                  lookup.selectedJourneyType === 'active'
+                    ? 'bg-green-500 text-white border-green-600'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
+                }`}
+              >
+                Active · {lookup.allJourneys.active.goingDo}
+              </button>
+            )}
+            {lookup.allJourneys.queued.map((qJ, qIdx) => (
+              <button
+                key={qJ.id || qJ._id || qIdx}
+                type="button"
+                onClick={() => handleJourneySelect(index, 'queued', qIdx)}
+                className={`px-2 py-1 rounded text-[10px] font-bold border ${
+                  lookup.selectedJourneyType === 'queued' && lookup.selectedJourneyIndex === qIdx
+                    ? 'bg-blue-500 text-white border-blue-600'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
+                }`}
+              >
+                Queued #{qJ.queueOrder || qIdx + 1} · {qJ.goingDo}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 transition-colors relative">
@@ -1438,6 +1869,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                           <input type="text" value={entry.dest} onChange={(e) => handleEntryEdit(originalIndex, 'dest', e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-[10px] bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-semibold outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent" />
                         </div>
                       </div>
+                      {renderRowLookupPanel(originalIndex)}
                     </div>
                   ) : (
                     <div className="p-[15px]">
@@ -1748,6 +2180,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                     </div>
                   </div>
                 </div>
+                {editingRow === originalIndex && rowLookup[originalIndex] && (
+                  <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-slate-50 dark:bg-slate-800/40">
+                    {renderRowLookupPanel(originalIndex)}
+                  </div>
+                )}
               </div>
               );
             })}
@@ -2302,9 +2739,9 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             </div>
             <div className="px-6 py-4 space-y-3">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Fuel automation for edits is OFF. The liters change for{' '}
+                Fuel automation for edits is OFF. Liters / truck / DO changes for{' '}
                 <strong>{editedSheet.entries[editCheckpoint.index].truckNo}</strong> will be adjusted on the column you choose
-                ({editCheckpoint.direction === 'returning' ? 'returning' : 'going'} direction).
+                ({editCheckpoint.direction === 'returning' ? 'returning' : 'going'} direction). For a truck/DO swap, the same column is used to revert the old journey and deduct the new one.
               </p>
               {editCheckpoint.loading ? (
                 <div className="flex items-center gap-2 text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Detecting direction…</div>
@@ -2360,6 +2797,73 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
           fuelRecordId={editCheckpoint.fuelRecordId}
           truckNumber={editCheckpoint.index !== null ? editedSheet.entries[editCheckpoint.index]?.truckNo : undefined}
         />
+      )}
+
+      {/* Ambiguous DO — same DO on multiple trucks */}
+      {doAmbiguityModal.open && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDoAmbiguityModal({ open: false, index: -1, doNo: '', matches: [] })}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 p-5 border-b border-gray-100 dark:border-gray-800">
+              <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  DO {doAmbiguityModal.doNo} is on {doAmbiguityModal.matches.length} trucks
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Pick the truck you mean — the LPO row is not updated until you choose.
+                </p>
+              </div>
+            </div>
+            <div className="p-3 max-h-[55vh] overflow-y-auto space-y-2">
+              {doAmbiguityModal.matches.map((m, i) => (
+                <button
+                  key={`${m.fuelRecord?.id || m.fuelRecord?._id || i}`}
+                  type="button"
+                  onClick={() => {
+                    applyJourneyToRow(doAmbiguityModal.index, m);
+                    setDoAmbiguityModal({ open: false, index: -1, doNo: '', matches: [] });
+                    toast.success(`Selected truck ${formatTruckNumber(m.truckNo || m.fuelRecord?.truckNo || '')}`);
+                  }}
+                  className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/60 dark:hover:bg-indigo-900/20 transition-colors p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-bold text-gray-900 dark:text-gray-100">
+                      {formatTruckNumber(m.truckNo || m.fuelRecord?.truckNo || '—')}
+                    </span>
+                    <span
+                      className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-md ${
+                        m.direction === 'returning'
+                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                          : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                      }`}
+                    >
+                      {m.direction || 'going'}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    DO {m.goingDo}
+                    {m.returnDo && m.returnDo !== 'NIL' ? ` / ${m.returnDo}` : ''} · {m.goingDestination || m.destination} · Bal {m.balance}L
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDoAmbiguityModal({ open: false, index: -1, doNo: '', matches: [] })}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

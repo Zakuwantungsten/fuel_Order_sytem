@@ -341,6 +341,12 @@ async function findFuelRecordWithDirection(
     return batch.resolution.get(cacheKey)!;
   }
 
+  const truckNorm = (truckNo || '').trim().toLowerCase();
+  const truckMatches = (fr: any): boolean => {
+    if (!truckNorm) return true;
+    return ((fr?.truckNo || '') as string).trim().toLowerCase() === truckNorm;
+  };
+
   // First try to find by DO number (exclude cancelled and deleted records)
   let fuelRecord = await FuelRecord.findOne({
     goingDo: doNumber,
@@ -359,10 +365,19 @@ async function findFuelRecordWithDirection(
     if (fuelRecord) direction = 'returning';
   }
 
-  // If not found by DO, fall back to the truck's active journey
+  // DO hit but truck doesn't match (wrong-truck correction) — prefer the
+  // entry's truck journey so liters move onto the intended fuel record.
+  if (fuelRecord && !truckMatches(fuelRecord)) {
+    logger.info(
+      `DO ${doNumber} resolved to truck ${fuelRecord.truckNo} but entry is ${truckNo} — falling back to truck lookup`
+    );
+    fuelRecord = null;
+  }
+
+  // If not found by DO (or DO truck mismatched), fall back to the truck's journey
   if (!fuelRecord) {
     const truckRecords = await FuelRecord.find({
-      truckNo: { $regex: truckNo, $options: 'i' },
+      truckNo: { $regex: `^${truckNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
       isDeleted: false,
       isCancelled: { $ne: true },
     }).sort({ date: -1 }).session(session ?? null);
@@ -372,9 +387,30 @@ async function findFuelRecordWithDirection(
       return null;
     }
 
-    fuelRecord =
-      truckRecords.find((r: any) => r.journeyStatus === 'active') || truckRecords[0] || null;
-    direction = 'going';
+    // Prefer a record that owns this DO, else active, else most recent
+    const doUpper = (doNumber || '').toUpperCase().trim();
+    const byDo =
+      truckRecords.find(
+        (r: any) =>
+          (r.goingDo || '').toUpperCase() === doUpper ||
+          (r.returnDo || '').toUpperCase() === doUpper
+      ) || null;
+
+    if (byDo) {
+      fuelRecord = byDo;
+      direction =
+        (byDo.returnDo || '').toUpperCase() === doUpper &&
+        (byDo.goingDo || '').toUpperCase() !== doUpper
+          ? 'returning'
+          : 'going';
+    } else {
+      fuelRecord =
+        truckRecords.find((r: any) => r.journeyStatus === 'active') ||
+        truckRecords.find((r: any) => r.journeyStatus === 'queued') ||
+        truckRecords[0] ||
+        null;
+      direction = 'going';
+    }
   }
 
   if (!fuelRecord) {
@@ -481,6 +517,20 @@ async function resolveFuelFieldForEntry(
 }
 
 /**
+ * NIL / DA / REF (and empty DO) entries never touch fuel records.
+ * Matches create, cancel-all, and pick-up-at gating.
+ */
+function entrySkipsFuelRecord(entry: {
+  doNo?: string;
+  isDriverAccount?: boolean;
+  isRefer?: boolean;
+}): boolean {
+  if (entry?.isDriverAccount === true || entry?.isRefer === true) return true;
+  const doUp = (entry?.doNo || '').toString().trim().toUpperCase();
+  return !doUp || doUp === 'NIL' || doUp === 'N/A' || doUp === 'REF' || doUp === 'DA';
+}
+
+/**
  * Update fuel record when LPO entry is created/updated
  * @param doNumber - DO number for identifying the fuel record
  * @param litersChange - positive for deduction, negative for reverting
@@ -519,6 +569,7 @@ async function updateFuelRecordForLPOEntry(
     const doNoUpper = (doNumber || '').toString().trim().toUpperCase();
     const isNilDO = doNoUpper === 'NIL' || doNoUpper === '' || doNoUpper === 'N/A';
     const isRefEntry = doNoUpper === 'REF';
+    const isDaDo = doNoUpper === 'DA';
 
     logger.debug(`Updating fuel record: DO=${doNumber}, truck=${truckNo}, station=${station}, litersChange=${litersChange}, cancellationPoint=${cancellationPoint || 'N/A'}, explicitField=${opts?.explicitField || 'N/A'}, customInfo=${JSON.stringify(customCheckpointInfo || {})}`);
 
@@ -531,6 +582,12 @@ async function updateFuelRecordForLPOEntry(
     // Skip fuel record update for REF entries (partner/third-party trucks)
     if (isRefEntry) {
       logger.debug(`Skipping fuel record update for REF entry - partner truck (truck: ${truckNo})`);
+      return;
+    }
+
+    // Skip DA-mode DO marker (flag-only driver account rows store doNo as "DA")
+    if (isDaDo) {
+      logger.debug(`Skipping fuel record update for DA DO marker (truck: ${truckNo})`);
       return;
     }
 
@@ -1264,6 +1321,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       amendedAt?: Date | null;
       isCancelled?: boolean;
       isDriverAccount?: boolean;
+      isRefer?: boolean;
       cancellationPoint?: string;
       originalDoNo?: string;
       cancellationReason?: string;
@@ -1328,33 +1386,37 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       
       // Handle restoration first (when entry was cancelled but now is being uncancelled)
       if (newEntry && !newEntry.isCancelled && oldEntry.isCancelled) {
-        // Entry was restored/uncancelled - deduct fuel again
-        logger.info(`Entry restored: ${key}, deducting ${newEntry.liters}L from fuel record`);
-        if (fuelFlags.lpoCancelRevert) {
-          await updateFuelRecordForLPOEntry(
-            newEntry.doNo,
-            newEntry.liters, // Positive value to deduct from fuel record
-            newData.station || existingLpo.station,
-            newEntry.truckNo,
-            newEntry.cancellationPoint || oldEntry.cancellationPoint,
-            (newEntry.isCustomStation || oldEntry.isCustomStation) ? {
-              isCustomStation: newEntry.isCustomStation || oldEntry.isCustomStation,
-              customGoingCheckpoint: newEntry.customGoingCheckpoint || oldEntry.customGoingCheckpoint,
-              customReturnCheckpoint: newEntry.customReturnCheckpoint || oldEntry.customReturnCheckpoint,
-            } : undefined,
-            undefined,
-            { session, touchedIds: touchedFuelIds }
-          );
-        } else if (manualFieldFor(newEntry)) {
-          // Automation off, but operator chose the checkpoint manually.
-          await updateFuelRecordForLPOEntry(
-            newEntry.doNo, newEntry.liters, newData.station || existingLpo.station, newEntry.truckNo,
-            undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
-          );
-          logger.info(`[fuelAutomation] lpoCancelRevert OFF — manual checkpoint ${manualFieldFor(newEntry)} re-deducted for ${newEntry.truckNo}`);
+        // Entry was restored/uncancelled - deduct fuel again (skip for DA/REF/NIL)
+        if (!entrySkipsFuelRecord(newEntry) && !entrySkipsFuelRecord(oldEntry)) {
+          logger.info(`Entry restored: ${key}, deducting ${newEntry.liters}L from fuel record`);
+          if (fuelFlags.lpoCancelRevert) {
+            await updateFuelRecordForLPOEntry(
+              newEntry.doNo,
+              newEntry.liters, // Positive value to deduct from fuel record
+              newData.station || existingLpo.station,
+              newEntry.truckNo,
+              newEntry.cancellationPoint || oldEntry.cancellationPoint,
+              (newEntry.isCustomStation || oldEntry.isCustomStation) ? {
+                isCustomStation: newEntry.isCustomStation || oldEntry.isCustomStation,
+                customGoingCheckpoint: newEntry.customGoingCheckpoint || oldEntry.customGoingCheckpoint,
+                customReturnCheckpoint: newEntry.customReturnCheckpoint || oldEntry.customReturnCheckpoint,
+              } : undefined,
+              undefined,
+              { session, touchedIds: touchedFuelIds }
+            );
+          } else if (manualFieldFor(newEntry)) {
+            // Automation off, but operator chose the checkpoint manually.
+            await updateFuelRecordForLPOEntry(
+              newEntry.doNo, newEntry.liters, newData.station || existingLpo.station, newEntry.truckNo,
+              undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
+            );
+            logger.info(`[fuelAutomation] lpoCancelRevert OFF — manual checkpoint ${manualFieldFor(newEntry)} re-deducted for ${newEntry.truckNo}`);
+          } else {
+            skippedAutomation.add('lpoCancelRevert');
+            logger.info(`[fuelAutomation] lpoCancelRevert OFF — skipping restore re-deduction for ${newEntry.truckNo}`);
+          }
         } else {
-          skippedAutomation.add('lpoCancelRevert');
-          logger.info(`[fuelAutomation] lpoCancelRevert OFF — skipping restore re-deduction for ${newEntry.truckNo}`);
+          logger.info(`Entry restored (DA/REF/NIL): ${key}, clearing cancel flags without fuel deduct`);
         }
 
         // Clear cancellation timestamp and reason
@@ -1363,13 +1425,19 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         continue; // Move to next entry
       }
       
-      // Skip if old entry was already cancelled or driver account (no fuel record to revert)
-      if (oldEntry.isCancelled || oldEntry.isDriverAccount) {
+      // Skip fuel/state diffs for entries that were already cancelled (restore handled above)
+      if (oldEntry.isCancelled) {
         continue;
       }
+
+      const oldSkipsFuel = entrySkipsFuelRecord(oldEntry);
       
       if (!newEntry) {
-        // Entry was removed - revert the fuel deduction
+        // Entry was removed - revert the fuel deduction (skip for DA/REF/NIL)
+        if (oldSkipsFuel) {
+          logger.info(`Entry removed (DA/REF/NIL): ${key}, skipping fuel revert`);
+          continue;
+        }
         logger.info(`Entry removed: ${key}, reverting ${oldEntry.liters}L`);
         if (fuelFlags.lpoEditAdjust) {
           await updateFuelRecordForLPOEntry(
@@ -1386,38 +1454,48 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
             undefined,
             { session, touchedIds: touchedFuelIds }
           );
+        } else if (manualFieldFor(oldEntry)) {
+          await updateFuelRecordForLPOEntry(
+            oldEntry.doNo, -oldEntry.liters, existingLpo.station, oldEntry.truckNo,
+            undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(oldEntry) }
+          );
+          logger.info(`[fuelAutomation] lpoEditAdjust OFF — manual checkpoint ${manualFieldFor(oldEntry)} reverted for removed entry ${oldEntry.truckNo}`);
         } else {
           skippedAutomation.add('lpoEditAdjust');
           logger.info(`[fuelAutomation] lpoEditAdjust OFF — skipping revert for removed entry ${oldEntry.truckNo}`);
         }
       } else if (newEntry.isCancelled && !oldEntry.isCancelled) {
-        // Entry was just marked as cancelled - revert the fuel deduction
-        logger.info(`Entry cancelled: ${key}, reverting ${oldEntry.liters}L`);
-        if (fuelFlags.lpoCancelRevert) {
-          await updateFuelRecordForLPOEntry(
-            oldEntry.doNo,
-            -oldEntry.liters,
-            existingLpo.station,
-            oldEntry.truckNo,
-            oldEntry.cancellationPoint,
-            oldEntry.isCustomStation ? {
-              isCustomStation: oldEntry.isCustomStation,
-              customGoingCheckpoint: oldEntry.customGoingCheckpoint,
-              customReturnCheckpoint: oldEntry.customReturnCheckpoint,
-            } : undefined,
-            undefined,
-            { session, touchedIds: touchedFuelIds }
-          );
-        } else if (manualFieldFor(newEntry)) {
-          // Automation off, but operator chose the checkpoint manually.
-          await updateFuelRecordForLPOEntry(
-            oldEntry.doNo, -oldEntry.liters, existingLpo.station, oldEntry.truckNo,
-            undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
-          );
-          logger.info(`[fuelAutomation] lpoCancelRevert OFF — manual checkpoint ${manualFieldFor(newEntry)} reverted for ${oldEntry.truckNo}`);
+        // Entry was just marked as cancelled - revert fuel only for regular entries
+        if (!oldSkipsFuel) {
+          logger.info(`Entry cancelled: ${key}, reverting ${oldEntry.liters}L`);
+          if (fuelFlags.lpoCancelRevert) {
+            await updateFuelRecordForLPOEntry(
+              oldEntry.doNo,
+              -oldEntry.liters,
+              existingLpo.station,
+              oldEntry.truckNo,
+              oldEntry.cancellationPoint,
+              oldEntry.isCustomStation ? {
+                isCustomStation: oldEntry.isCustomStation,
+                customGoingCheckpoint: oldEntry.customGoingCheckpoint,
+                customReturnCheckpoint: oldEntry.customReturnCheckpoint,
+              } : undefined,
+              undefined,
+              { session, touchedIds: touchedFuelIds }
+            );
+          } else if (manualFieldFor(newEntry)) {
+            // Automation off, but operator chose the checkpoint manually.
+            await updateFuelRecordForLPOEntry(
+              oldEntry.doNo, -oldEntry.liters, existingLpo.station, oldEntry.truckNo,
+              undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
+            );
+            logger.info(`[fuelAutomation] lpoCancelRevert OFF — manual checkpoint ${manualFieldFor(newEntry)} reverted for ${oldEntry.truckNo}`);
+          } else {
+            skippedAutomation.add('lpoCancelRevert');
+            logger.info(`[fuelAutomation] lpoCancelRevert OFF — skipping cancellation revert for ${oldEntry.truckNo}`);
+          }
         } else {
-          skippedAutomation.add('lpoCancelRevert');
-          logger.info(`[fuelAutomation] lpoCancelRevert OFF — skipping cancellation revert for ${oldEntry.truckNo}`);
+          logger.info(`Entry cancelled (DA/REF/NIL): ${key}, marking cancelled without fuel revert`);
         }
 
         // Mark cancellation time
@@ -1425,28 +1503,40 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
         newlyCancelledEntries.push(newEntry);
       } else if (newEntry.isDriverAccount && !oldEntry.isDriverAccount) {
         // Entry was converted to driver account - revert fuel only (flag-only DA, no side collection)
-        logger.info(`Entry converted to driver account: ${key}, reverting ${oldEntry.liters}L`);
-        if (fuelFlags.lpoEditAdjust) {
-          await updateFuelRecordForLPOEntry(
-            oldEntry.doNo,
-            -oldEntry.liters,
-            existingLpo.station,
-            oldEntry.truckNo,
-            oldEntry.cancellationPoint,
-            oldEntry.isCustomStation ? {
-              isCustomStation: oldEntry.isCustomStation,
-              customGoingCheckpoint: oldEntry.customGoingCheckpoint,
-              customReturnCheckpoint: oldEntry.customReturnCheckpoint,
-            } : undefined,
-            undefined,
-            { session, touchedIds: touchedFuelIds }
-          );
-        } else {
-          skippedAutomation.add('lpoEditAdjust');
-          logger.info(`[fuelAutomation] lpoEditAdjust OFF — skipping driver-account conversion revert for ${oldEntry.truckNo}`);
+        // Skip revert if the old row was already a non-fuel entry (REF/NIL)
+        if (!oldSkipsFuel) {
+          logger.info(`Entry converted to driver account: ${key}, reverting ${oldEntry.liters}L`);
+          if (fuelFlags.lpoEditAdjust) {
+            await updateFuelRecordForLPOEntry(
+              oldEntry.doNo,
+              -oldEntry.liters,
+              existingLpo.station,
+              oldEntry.truckNo,
+              oldEntry.cancellationPoint,
+              oldEntry.isCustomStation ? {
+                isCustomStation: oldEntry.isCustomStation,
+                customGoingCheckpoint: oldEntry.customGoingCheckpoint,
+                customReturnCheckpoint: oldEntry.customReturnCheckpoint,
+              } : undefined,
+              undefined,
+              { session, touchedIds: touchedFuelIds }
+            );
+          } else {
+            skippedAutomation.add('lpoEditAdjust');
+            logger.info(`[fuelAutomation] lpoEditAdjust OFF — skipping driver-account conversion revert for ${oldEntry.truckNo}`);
+          }
         }
       } else if (newEntry.liters !== oldEntry.liters) {
-        // Entry liters changed - adjust the difference
+        // Entry liters changed - adjust the difference (never for DA/REF/NIL)
+        if (oldSkipsFuel || entrySkipsFuelRecord(newEntry)) {
+          logger.info(`Entry ${key} liters changed but DA/REF/NIL — skipping fuel adjust`);
+          // Still track amendment metadata on the LPO row
+          const originalLiters = oldEntry.originalLiters ?? oldEntry.liters;
+          newEntry.originalLiters = originalLiters;
+          newEntry.amendedAt = new Date();
+          entriesToUpdate.push(newEntry);
+          continue;
+        }
         const difference = newEntry.liters - oldEntry.liters;
         logger.info(`Entry ${key} liters changed: ${oldEntry.liters} -> ${newEntry.liters} (diff: ${difference})`);
         
@@ -1502,9 +1592,9 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           continue;
         }
         
-        // Driver account: flag-only — skip fuel, no side-collection write
-        if (newEntry.isDriverAccount) {
-          logger.info(`New driver account entry: ${key}, skipping fuel record update`);
+        // Driver account / REF / NIL: flag-only — skip fuel, no side-collection write
+        if (entrySkipsFuelRecord(newEntry)) {
+          logger.info(`New non-fuel entry (DA/REF/NIL): ${key}, skipping fuel record update`);
           continue;
         }
         
@@ -1527,6 +1617,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
             undefined,
             { session, touchedIds: touchedFuelIds }
           );
+        } else if (manualFieldFor(newEntry)) {
+          await updateFuelRecordForLPOEntry(
+            newEntry.doNo, newEntry.liters, newData.station || existingLpo.station, newEntry.truckNo,
+            undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
+          );
+          logger.info(`[fuelAutomation] lpoEditAdjust OFF — manual checkpoint ${manualFieldFor(newEntry)} deducted for newly-added entry ${newEntry.truckNo}`);
         } else {
           skippedAutomation.add('lpoEditAdjust');
           logger.info(`[fuelAutomation] lpoEditAdjust OFF — skipping deduction for newly-added entry ${newEntry.truckNo}`);
