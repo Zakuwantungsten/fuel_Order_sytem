@@ -2962,7 +2962,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const trucksWithMissingReturnDo = formData.entries
       .filter(e => e != null)
       .map((entry, idx) => ({ entry, af: entryAutoFillData[idx] }))
-      .filter(({ af }) => af && af.direction === 'returning' && af.returnDoMissing && af.fetched)
+      .filter(({ af }) => af && af.direction === 'returning' && af.returnDoMissing && af.fuelRecord)
       .map(({ entry }) => entry.truckNo);
     if (trucksWithMissingReturnDo.length > 0) {
       toast.error(`Cannot submit: Trucks set to "Return" but missing a Return DO: ${trucksWithMissingReturnDo.join(', ')}. Switch them back to "Going" or wait until the Return DO is entered.`);
@@ -3404,7 +3404,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       (af.warningType === 'ambiguous_do' && !af.loading) ||
       hasDup ||
       (af.fetched && af.allJourneys) ||
-      (af.direction === 'returning' && af.returnDoMissing && af.fetched) ||
+      (af.direction === 'returning' && af.returnDoMissing && af.fuelRecord) ||
       (af.allJourneys && (
         (af.allJourneys.active && af.allJourneys.queued.length > 0) ||
         (!af.allJourneys.active && af.allJourneys.queued.length > 1)
@@ -3416,7 +3416,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // Separate flag used to gate the submit button style — avoids re-computing inside JSX twice
   const hasReturnDoMissingBlock = (formData.entries || []).some((_, idx) => {
     const af = entryAutoFillData[idx];
-    return !!(af && af.direction === 'returning' && af.returnDoMissing && af.fetched);
+    return !!(af && af.direction === 'returning' && af.returnDoMissing && af.fuelRecord);
   });
 
   return (
@@ -4263,7 +4263,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 const isNilDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount && !!duplicateInfo?.isNilDo;
                 const hasNoRecordWarning = (autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && autoFill.entryType !== 'ref')
                   || (autoFill.warningType === 'ambiguous_do' && !autoFill.loading);
-                const mobileReturnDoMissing = autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched;
+                const mobileReturnDoMissing = autoFill.direction === 'returning' && autoFill.returnDoMissing && !!autoFill.fuelRecord;
                 return (
                   <div key={index} className={`border rounded-lg p-2 transition-colors ${
                     autoFill.entryType === 'ref' ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/10'
@@ -4836,7 +4836,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                   </div>
                                 )}
                                 {/* No Return DO warning — pending return icon beside status */}
-                                {autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched && (
+                                {autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fuelRecord && (
                                   <div className="inline-flex items-center gap-1.5 w-fit">
                                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" title="No Return DO found in the fuel record — cannot submit. Create a pending return DO or switch back to Going.">
                                       ⛔ No Return DO
