@@ -31,10 +31,17 @@ export function pendingDoStatusLabel(record: {
   returnDo?: string;
 }): string | null {
   const status = record.journeyStatus || 'active';
-  if (status !== 'active' && status !== 'queued') return null;
-
   const pendingGoing = record.isPendingGoing === true || isPendingGoingDo(record.goingDo);
   const pendingReturn = record.isPendingReturn === true || isPendingReturnDo(record.returnDo);
+
+  if (status === 'completed') {
+    if (pendingGoing && pendingReturn) return 'Completed — Going & Return DO pending';
+    if (pendingGoing) return 'Completed — DO pending';
+    if (pendingReturn) return 'Completed — Return DO pending';
+    return null;
+  }
+
+  if (status !== 'active' && status !== 'queued') return null;
 
   if (pendingGoing && pendingReturn) return 'Active — Going & Return DO pending';
   if (pendingGoing) return 'Active — DO pending';

@@ -115,9 +115,9 @@ export default function PendingDoFollowUpModal({
               <tbody>
                 {rows.map((r) => {
                   const id = String(r.id || r._id);
-                  const label = r.displayStatus
-                    ? String(r.displayStatus).replace(/_/g, ' ')
-                    : pendingDoStatusLabel(r) || r.journeyStatus;
+                  const label = pendingDoStatusLabel(r)
+                    || (r.displayStatus ? String(r.displayStatus).replace(/_/g, ' ') : null)
+                    || r.journeyStatus;
                   return (
                     <tr
                       key={id}

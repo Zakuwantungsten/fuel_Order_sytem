@@ -22,7 +22,21 @@ export type PendingDoDisplayStatus =
   | 'active_both_do_pending'
   | 'queued'
   | 'completed'
+  | 'completed_do_pending'
+  | 'completed_return_do_pending'
+  | 'completed_both_do_pending'
   | 'cancelled';
+
+/** Pending follow-up lists include completed journeys (imported going legs often land as completed). */
+const PENDING_LIST_JOURNEY_STATUSES = ['active', 'queued', 'completed'] as const;
+
+function pendingFuelRecordBaseFilter(): Record<string, unknown> {
+  return {
+    isDeleted: false,
+    isCancelled: { $ne: true },
+    journeyStatus: { $in: [...PENDING_LIST_JOURNEY_STATUSES] },
+  };
+}
 
 export function derivePendingDoDisplayStatus(record: {
   journeyStatus?: string;
@@ -32,12 +46,18 @@ export function derivePendingDoDisplayStatus(record: {
   returnDo?: string;
 }): PendingDoDisplayStatus {
   const status = record.journeyStatus || 'active';
-  if (status === 'queued') return 'queued';
-  if (status === 'completed') return 'completed';
   if (status === 'cancelled') return 'cancelled';
+  if (status === 'queued') return 'queued';
 
   const pendingGoing = record.isPendingGoing === true || isPendingGoingDo(record.goingDo);
   const pendingReturn = record.isPendingReturn === true || isPendingReturnDo(record.returnDo);
+
+  if (status === 'completed') {
+    if (pendingGoing && pendingReturn) return 'completed_both_do_pending';
+    if (pendingGoing) return 'completed_do_pending';
+    if (pendingReturn) return 'completed_return_do_pending';
+    return 'completed';
+  }
 
   if (pendingGoing && pendingReturn) return 'active_both_do_pending';
   if (pendingGoing) return 'active_do_pending';
@@ -616,7 +636,7 @@ export async function countPendingDos(): Promise<{
   goingPending: number;
   returnPending: number;
 }> {
-  const base = { isDeleted: false, isCancelled: { $ne: true }, journeyStatus: { $in: ['active', 'queued'] } };
+  const base = pendingFuelRecordBaseFilter();
 
   const [goingPending, returnPending] = await Promise.all([
     FuelRecord.countDocuments({
@@ -649,11 +669,7 @@ export async function listPendingDos(opts?: {
 }): Promise<any[]> {
   const kind = opts?.kind || 'all';
   const limit = opts?.limit ?? 100;
-  const base: Record<string, any> = {
-    isDeleted: false,
-    isCancelled: { $ne: true },
-    journeyStatus: { $in: ['active', 'queued'] },
-  };
+  const base: Record<string, any> = { ...pendingFuelRecordBaseFilter() };
 
   if (kind === 'going') {
     base.$or = [{ isPendingGoing: true }, { goingDo: { $regex: /^PG\d{1,4}$/i } }];
@@ -755,11 +771,7 @@ export async function fetchPendingDoListItems(opts: {
   limit?: number;
 }): Promise<any[]> {
   const kind = opts.kind || 'all';
-  const query: Record<string, any> = {
-    isDeleted: false,
-    isCancelled: { $ne: true },
-    journeyStatus: { $in: ['active', 'queued'] },
-  };
+  const query: Record<string, any> = { ...pendingFuelRecordBaseFilter() };
 
   if (kind === 'going') {
     query.$or = [{ isPendingGoing: true }, { goingDo: { $regex: /^PG\d{1,4}$/i } }];
@@ -774,10 +786,26 @@ export async function fetchPendingDoListItems(opts: {
     ];
   }
 
+  // Active/queued: match journey date. Completed imports often keep an old going date —
+  // also match updatedAt so a PR#### created today appears in the current-month DO list.
   if (opts.dateFrom || opts.dateTo) {
-    query.date = {};
-    if (opts.dateFrom) query.date.$gte = opts.dateFrom;
-    if (opts.dateTo) query.date.$lte = opts.dateTo;
+    const dateRange: Record<string, string> = {};
+    if (opts.dateFrom) dateRange.$gte = opts.dateFrom;
+    if (opts.dateTo) dateRange.$lte = opts.dateTo;
+
+    const updatedRange: Record<string, Date> = {};
+    if (opts.dateFrom) updatedRange.$gte = new Date(`${opts.dateFrom}T00:00:00.000Z`);
+    if (opts.dateTo) updatedRange.$lte = new Date(`${opts.dateTo}T23:59:59.999Z`);
+
+    query.$and = [
+      ...(query.$and || []),
+      {
+        $or: [
+          { date: dateRange },
+          { journeyStatus: 'completed', updatedAt: updatedRange },
+        ],
+      },
+    ];
   }
 
   if (opts.truckNo) {
@@ -789,6 +817,7 @@ export async function fetchPendingDoListItems(opts: {
     if (s) {
       const rx = s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$and = [
+        ...(query.$and || []),
         { $or: query.$or },
         {
           $or: [
