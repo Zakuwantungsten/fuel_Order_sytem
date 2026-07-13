@@ -1703,7 +1703,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     
     setEntryAutoFillData(prev => ({
       ...prev,
-      [newIndex]: { direction: 'going', loading: false, fetched: false, fuelRecord: null }
+      [newIndex]: { direction: 'going', loading: false, fetched: false, fuelRecord: null, entryType: 'regular' }
     }));
     
     setFormData((prev) => ({
@@ -2185,6 +2185,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             allJourneys: result.allJourneys,
             selectedJourneyIndex: result.allJourneys?.active ? -1 : 0, // -1 for active, 0 for first queued
             selectedJourneyType: result.allJourneys?.active ? 'active' : 'queued',
+            entryType: prev[index]?.entryType || 'regular',
           }
         }));
 
@@ -4351,7 +4352,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             <span className="inline-flex items-center px-2 py-0.5 rounded font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" title="No Return DO found in the fuel record — cannot submit">
                               ⛔ No Return DO
                             </span>
-                            {autoFill.entryType === 'regular' && (
+                            {(autoFill.entryType || 'regular') === 'regular' && (
                               <button
                                 type="button"
                                 onClick={() => handleCreatePendingDo(index, 'return')}
@@ -4374,7 +4375,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                             </span>
                         )}
                         {(autoFill.warningType === 'not_found' || autoFill.warningType === 'no_active_record') &&
-                          autoFill.entryType === 'regular' &&
+                          (autoFill.entryType || 'regular') === 'regular' &&
                           isPendingGoingCreateMonth() &&
                           (entry?.truckNo?.length || 0) >= 4 && (
                           <button
@@ -4790,7 +4791,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                       {autoFill.warningMessage?.includes('DUPLICATE') ? 'Remove duplicate or use different truck' : 'Manual entry allowed'}
                                     </span>
                                     {(autoFill.warningType === 'not_found' || autoFill.warningType === 'no_active_record') &&
-                                      autoFill.entryType === 'regular' &&
+                                      (autoFill.entryType || 'regular') === 'regular' &&
                                       isPendingGoingCreateMonth() && (
                                       <button
                                         type="button"
@@ -4841,7 +4842,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" title="No Return DO found in the fuel record — cannot submit. Create a pending return DO or switch back to Going.">
                                       ⛔ No Return DO
                                     </span>
-                                    {autoFill.entryType === 'regular' && (
+                                    {(autoFill.entryType || 'regular') === 'regular' && (
                                       <button
                                         type="button"
                                         onClick={() => handleCreatePendingDo(index, 'return')}
