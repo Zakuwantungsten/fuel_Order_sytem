@@ -545,6 +545,10 @@ export interface IFuelRecord {
   originalGoingTo?: string;
   /** EXPORT route liters currently included in totalLts (0 if none matched) */
   outboundLiters?: number;
+  /** True while goingDo is a temporary PG#### pending DO */
+  isPendingGoing?: boolean;
+  /** True while returnDo is a temporary PR#### pending DO */
+  isPendingReturn?: boolean;
   // Cancellation fields
   isCancelled?: boolean;
   cancelledAt?: Date;

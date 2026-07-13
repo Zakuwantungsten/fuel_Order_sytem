@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar, Link2 } from 'lucide-react';
+import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar, Link2, Clock } from 'lucide-react';
 import { DeliveryOrder } from '../types';
-import { deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI, resourceLockAPI } from '../services/api';
+import { deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI, resourceLockAPI, fuelRecordsAPI } from '../services/api';
 import DODetailModal from '../components/DODetailModal';
 import DOForm from '../components/DOForm';
 import BulkDOForm from '../components/BulkDOForm';
@@ -13,6 +13,7 @@ import DOWorkbook from '../components/DOWorkbook';
 import CancelDOModal from '../components/CancelDOModal';
 import AmendedDOsModal from '../components/AmendedDOsModal';
 import ExportLinkModal from '../components/ExportLinkModal';
+import PendingDoFollowUpModal from '../components/PendingDoFollowUpModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import Pagination from '../components/Pagination';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
@@ -76,6 +77,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [isAmendedDOsModalOpen, setIsAmendedDOsModalOpen] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState<DeliveryOrder | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showPendingDoModal, setShowPendingDoModal] = useState(false);
+  const [pendingDoStats, setPendingDoStats] = useState({ total: 0, goingPending: 0, returnPending: 0 });
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
   const [linkingExportOrder, setLinkingExportOrder] = useState<DeliveryOrder | null>(null);
   const [conflictData, setConflictData] = useState<{ currentRecord: any; pendingData: any } | null>(null);
@@ -149,6 +152,15 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   // Ref to track if we've processed a highlight to avoid re-processing
   const highlightProcessedRef = useRef<string | null>(null);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
+
+  // Pending DO follow-up counts
+  useEffect(() => {
+    let cancelled = false;
+    fuelRecordsAPI.getPendingDoStats()
+      .then((s) => { if (!cancelled) setPendingDoStats(s); })
+      .catch(() => { /* non-blocking */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Click-outside detection for filter dropdowns
   useEffect(() => {
@@ -696,6 +708,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   };
 
   const handleViewOrder = (order: DeliveryOrder) => {
+    if (order.isPendingDo) {
+      toast.info(`Pending ${order.pendingKind === 'return' ? 'return' : 'going'} DO ${order.doNumber} — it will be replaced when the real DO is created or linked.`);
+      return;
+    }
     setSelectedOrder(order);
     setIsModalOpen(true);
   };
@@ -714,6 +730,12 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   };
 
   const handleEditOrder = async (order: DeliveryOrder) => {
+    if (order.isPendingDo) {
+      // Pending rows are fuel-record backed — no DO edit lock
+      setEditingOrder(order);
+      setIsFormOpen(true);
+      return;
+    }
     console.log('Editing order:', order);
     console.log('Order ID:', order.id, 'Order _id:', (order as any)._id);
     const orderId = order.id || (order as any)._id;
@@ -759,6 +781,39 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       // Check for id in multiple formats
       const orderId = editingOrder?.id || (editingOrder as any)?._id;
       console.log('Determined orderId:', orderId);
+
+      // Pending DO rows sync to the fuel record (not DeliveryOrder collection)
+      if (editingOrder?.isPendingDo && editingOrder.fuelRecordId) {
+        console.log('=== PENDING DO UPDATE MODE ===');
+        const res = await fuelRecordsAPI.updatePendingDo(editingOrder.fuelRecordId, {
+          truckNo: orderData.truckNo,
+          date: orderData.date,
+          from: orderData.loadingPoint,
+          to: orderData.destination,
+          start: orderData.loadingPoint,
+          trailerNo: orderData.trailerNo,
+        });
+        const fr = res?.data?.fuelRecord || res?.fuelRecord;
+        savedOrder = {
+          ...editingOrder,
+          truckNo: fr?.truckNo || orderData.truckNo || editingOrder.truckNo,
+          date: fr?.date || orderData.date || editingOrder.date,
+          loadingPoint: fr?.from || orderData.loadingPoint || editingOrder.loadingPoint,
+          destination: fr?.to || orderData.destination || editingOrder.destination,
+          trailerNo: orderData.trailerNo || editingOrder.trailerNo,
+        };
+        toast.success(`Pending DO ${editingOrder.doNumber} updated (fuel record synced)`);
+        queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+        try {
+          const s = await fuelRecordsAPI.getPendingDoStats();
+          setPendingDoStats(s);
+        } catch { /* non-blocking */ }
+        setEditingOrder(null);
+        setIsFormOpen(false);
+        console.log('=== handleSaveOrder END - PENDING OK ===');
+        return savedOrder;
+      }
       
       if (orderId) {
         console.log('=== UPDATE MODE ===');
@@ -1036,7 +1091,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             Manage all delivery orders and transportation records
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex flex-wrap gap-2 sm:gap-3">
+        <div className="mt-4 sm:mt-0 flex flex-wrap gap-2 sm:gap-3 overflow-visible pt-1.5 pr-1.5">
           <button 
             onClick={() => handleExportWorkbook(new Date().getFullYear())}
             disabled={exportingYear !== null}
@@ -1057,19 +1112,36 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
               </>
             )}
           </button>
-          <button 
-            onClick={() => setIsAmendedDOsModalOpen(true)}
-            className="relative inline-flex items-center px-3 py-1.5 border border-orange-300 dark:border-orange-600 rounded-md shadow-sm text-sm font-medium text-orange-700 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40"
-            title="Download amended/cancelled DOs as PDF"
-          >
-            <FileEdit className="w-4 h-4 mr-2" />
-            Amended/Cancelled DOs
-            {amendedDOsCount > 0 && (
-              <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-orange-600 rounded-full">
-                {amendedDOsCount}
-              </span>
-            )}
-          </button>
+          <div className="relative flex border border-gray-300 dark:border-gray-600 rounded-md">
+            <button
+              onClick={() => setIsAmendedDOsModalOpen(true)}
+              className="relative inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-l-md text-orange-700 dark:text-orange-200 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40"
+              title="Download amended/cancelled DOs as PDF"
+            >
+              <FileEdit className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Amended/Cancelled DOs</span>
+              <span className="sm:hidden">Amended</span>
+              {amendedDOsCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 z-10 min-w-[1.125rem] h-[1.125rem] px-1 inline-flex items-center justify-center rounded-full bg-orange-600 text-white text-[10px] font-bold leading-none shadow-sm ring-2 ring-white dark:ring-gray-900">
+                  {amendedDOsCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setShowPendingDoModal(true)}
+              className="relative inline-flex items-center px-3 py-1.5 text-sm font-medium border-l dark:border-gray-600 rounded-r-md text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+              title="Follow up trucks with pending going/return DOs"
+            >
+              <Clock className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Pending DOs</span>
+              <span className="sm:hidden">Pending</span>
+              {pendingDoStats.total > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 z-10 min-w-[1.125rem] h-[1.125rem] px-1 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold leading-none shadow-sm ring-2 ring-white dark:ring-gray-900">
+                  {pendingDoStats.total > 99 ? '99+' : pendingDoStats.total}
+                </span>
+              )}
+            </button>
+          </div>
           <button 
             onClick={() => setIsBulkFormOpen(true)}
             className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white"
@@ -1584,20 +1656,32 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span className="truncate min-w-0">
-                    {filterType === 'ALL' ? 'All Types' : 
-                     filterType === 'IMPORT' ? 'Import' : 
-                     'Export'}
+                    {filterType === 'ALL' ? 'All Types' :
+                     filterType === 'IMPORT' ? 'Import' :
+                     filterType === 'EXPORT' ? 'Export' :
+                     filterType === 'PENDING_GOING' ? 'Pending Going' :
+                     filterType === 'PENDING_RETURN' ? 'Pending Return' :
+                     filterType === 'PENDING' ? 'All Pending' :
+                     filterType}
                   </span>
                   <ChevronDown className="w-4 h-4 text-gray-400" />
                 </button>
                 {showFilterTypeDropdown && (
                   <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
-                    {[{value: 'ALL', label: 'All Types'}, {value: 'IMPORT', label: 'Import'}, {value: 'EXPORT', label: 'Export'}].map((option) => (
+                    {[
+                      { value: 'ALL', label: 'All Types' },
+                      { value: 'IMPORT', label: 'Import' },
+                      { value: 'EXPORT', label: 'Export' },
+                      { value: 'PENDING_GOING', label: 'Pending Going' },
+                      { value: 'PENDING_RETURN', label: 'Pending Return' },
+                      { value: 'PENDING', label: 'All Pending' },
+                    ].map((option) => (
                       <button
                         key={option.value}
                         type="button"
                         onClick={() => {
                           setFilterType(option.value);
+                          setCurrentPage(1);
                           setShowFilterTypeDropdown(false);
                         }}
                         className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
@@ -1699,10 +1783,12 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                       key={order.id || `order-${order.doNumber}`}
                       data-do-number={order.doNumber}
                       onClick={() => handleViewOrder(order)}
-                      className={`border rounded-xl p-4 transition-all cursor-pointer ${
-                        order.isCancelled
-                          ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'
-                          : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 hover:shadow-md'
+                      className={`border rounded-xl p-4 transition-all ${
+                        order.isPendingDo
+                          ? 'border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/15 cursor-default'
+                          : order.isCancelled
+                            ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10 cursor-pointer'
+                            : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 hover:shadow-md cursor-pointer'
                       }`}
                     >
                       {/* Header with S/N and DO number */}
@@ -1726,21 +1812,31 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           <span className={`px-2 py-1 text-xs font-semibold rounded-full text-center ${
                               order.isCancelled
                                 ? 'bg-gray-100 text-gray-500'
-                                : order.importOrExport === 'IMPORT'
+                                : order.isPendingDo
                                   ? ''
-                                  : ''
+                                  : order.importOrExport === 'IMPORT'
+                                    ? ''
+                                    : ''
                             }`}
                             style={!order.isCancelled ? (
-                              order.importOrExport === 'IMPORT'
-                                ? { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }
-                                : { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }
+                              order.isPendingDo
+                                ? { background: isDark ? 'rgba(245,158,11,0.2)' : '#FEF3C7', color: isDark ? '#FCD34D' : '#B45309' }
+                                : order.importOrExport === 'IMPORT'
+                                  ? { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }
+                                  : { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }
                             ) : {}}>
-                            {order.importOrExport}
+                            {order.isPendingDo
+                              ? (order.pendingKind === 'return' ? 'PENDING RETURN' : 'PENDING GOING')
+                              : order.importOrExport}
                           </span>
                           {order.isCancelled ? (
                             <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 inline-flex items-center justify-center">
                               <Ban className="w-3 h-3 mr-1" />
                               Cancelled
+                            </span>
+                          ) : order.isPendingDo ? (
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full text-center" style={{ background: isDark ? 'rgba(245,158,11,0.2)' : '#FEF3C7', color: isDark ? '#FCD34D' : '#B45309' }}>
+                              DO pending
                             </span>
                           ) : (
                             <span className="px-2 py-1 text-xs font-semibold rounded-full text-center" style={{ background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }}>
@@ -1795,7 +1891,23 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
 
                       {/* Actions */}
                       <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
-                        {!order.isCancelled && (
+                        {order.isPendingDo ? (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditOrder(order);
+                              }}
+                              className="flex-1 px-3 py-2 text-xs font-medium text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg hover:bg-yellow-100 dark:hover:bg-yellow-900/30 inline-flex items-center justify-center"
+                            >
+                              <Edit className="w-4 h-4 mr-1" />
+                              Edit
+                            </button>
+                            <div className="flex-[1.5] text-[10px] text-amber-700 dark:text-amber-300 italic leading-tight">
+                              Pending {order.pendingKind === 'return' ? 'return' : 'going'} — edits sync to fuel record
+                            </div>
+                          </>
+                        ) : !order.isCancelled && (
                           <>
                             <button
                               onClick={(e) => {
@@ -1867,8 +1979,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                         <tr
                           key={order.id || `order-${order.doNumber}`}
                           data-do-number={order.doNumber}
-                          onClick={() => handleViewOrder(order)}
-                          className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
+                          onClick={() => !order.isPendingDo && handleViewOrder(order)}
+                          className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                            order.isPendingDo ? 'bg-amber-50/50 dark:bg-amber-900/10' : 'cursor-pointer'
+                          } ${
                             order.isCancelled ? 'bg-red-50 dark:bg-red-900/10' : ''
                           }`}
                         >
@@ -1894,11 +2008,15 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                                 : ''
                             }`}
                             style={!order.isCancelled ? (
-                              order.importOrExport === 'IMPORT'
-                                ? { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }
-                                : { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }
+                              order.isPendingDo
+                                ? { background: isDark ? 'rgba(245,158,11,0.2)' : '#FEF3C7', color: isDark ? '#FCD34D' : '#B45309' }
+                                : order.importOrExport === 'IMPORT'
+                                  ? { background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF', color: isDark ? '#93C5FD' : '#2563EB' }
+                                  : { background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }
                             ) : {}}>
-                              {order.importOrExport}
+                              {order.isPendingDo
+                                ? (order.pendingKind === 'return' ? 'PENDING RETURN' : 'PENDING GOING')
+                                : order.importOrExport}
                             </span>
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
@@ -1908,12 +2026,16 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                                   <Ban className="w-3 h-3 mr-1" />
                                   Cancelled
                                 </span>
+                              ) : order.isPendingDo ? (
+                                <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" style={{ background: isDark ? 'rgba(245,158,11,0.2)' : '#FEF3C7', color: isDark ? '#FCD34D' : '#B45309' }}>
+                                  DO pending
+                                </span>
                               ) : (
                                 <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" style={{ background: isDark ? 'rgba(22,163,74,0.2)' : '#DCFCE7', color: isDark ? '#86EFAC' : '#15803D' }}>
                                   Active
                                 </span>
                               )}
-                              {!order.isCancelled && (order.editHistory?.length ?? 0) > 0 && (
+                              {!order.isCancelled && !order.isPendingDo && (order.editHistory?.length ?? 0) > 0 && (
                                 <span
                                   className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded"
                                   title={`Amended ${order.editHistory!.length} time(s)${order.lastEditedAt ? ` — last on ${order.lastEditedAt}` : ''}${order.lastEditedBy ? ` by ${order.lastEditedBy}` : ''}`}
@@ -1949,7 +2071,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                             {order.tonnages ?? 0} tons
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-xs font-medium">
-                            {!order.isCancelled && (
+                            {order.isPendingDo ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditOrder(order);
+                                }}
+                                className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300"
+                                title="Edit pending DO (syncs fuel record)"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            ) : !order.isCancelled && (
                               <>
                                 <button
                                   onClick={(e) => {
@@ -2070,6 +2203,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       <AmendedDOsModal
         isOpen={isAmendedDOsModalOpen}
         onClose={() => setIsAmendedDOsModalOpen(false)}
+      />
+
+      <PendingDoFollowUpModal
+        isOpen={showPendingDoModal}
+        onClose={() => setShowPendingDoModal(false)}
       />
 
       {/* Manual EXPORT DO → fuel record linking */}

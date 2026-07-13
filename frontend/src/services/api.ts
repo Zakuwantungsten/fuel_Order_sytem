@@ -1265,6 +1265,34 @@ export const fuelRecordsAPI = {
     const response = await apiClient.get('/fuel-records/available-routes', { params });
     return response.data.data || { routes: [] };
   },
+
+  createPendingGoingDo: async (data: { truckNo: string; date?: string }) => {
+    const response = await apiClient.post('/fuel-records/pending-dos/going', data);
+    return response.data;
+  },
+
+  createPendingReturnDo: async (data: { truckNo: string; fuelRecordId?: string; month?: string }) => {
+    const response = await apiClient.post('/fuel-records/pending-dos/return', data);
+    return response.data;
+  },
+
+  updatePendingDo: async (
+    fuelRecordId: string,
+    data: { truckNo?: string; date?: string; from?: string; to?: string; start?: string; trailerNo?: string }
+  ) => {
+    const response = await apiClient.put(`/fuel-records/pending-dos/${fuelRecordId}`, data);
+    return response.data;
+  },
+
+  getPendingDoStats: async (): Promise<{ total: number; goingPending: number; returnPending: number }> => {
+    const response = await apiClient.get('/fuel-records/pending-dos/stats');
+    return response.data.data || { total: 0, goingPending: 0, returnPending: 0 };
+  },
+
+  getPendingDoList: async (params?: { kind?: 'going' | 'return' | 'all'; limit?: number }) => {
+    const response = await apiClient.get('/fuel-records/pending-dos', { params });
+    return response.data.data || [];
+  },
   
   getById: async (id: string | number): Promise<FuelRecord> => {
     const response = await apiClient.get(`/fuel-records/${id}`);

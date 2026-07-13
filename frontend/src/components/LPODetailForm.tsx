@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight, MessageSquare } from 'lucide-react';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight, MessageSquare, Clock } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
@@ -17,6 +17,7 @@ import { useGridNav } from '../hooks/useGridNav';
 import ForwardLPOModal from './ForwardLPOModal';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
 import { toast } from 'react-toastify';
+import { isReturnDoMissing, pendingDoStatusLabel, isPendingDo } from '../utils/pendingDo';
 
 // STATIONS array removed - now using dynamic stations from database
 // CASH and CUSTOM are always available in the dropdown
@@ -2104,8 +2105,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         const direction = entryAutoFillData[index]?.direction || 'going';
         const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
         
-        // Check if return DO is missing
-        const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
+        // Check if return DO is missing (PR#### pending return counts as present)
+        const returnDoMissing = isReturnDoMissing(result.returnDo);
         
         // IMPORTANT: Use goingDestination for going journey fuel allocation
         // This ensures we use the original destination before EXPORT DO changed it
@@ -2261,8 +2262,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       ? result.direction
       : (result.fuelRecord && result.fuelRecord.returnDo === doNoUpper ? 'returning' : 'going');
 
-    // Check if return DO is missing
-    const returnDoMissing = !result.returnDo || result.returnDo === 'NIL' || result.returnDo === '';
+    // Check if return DO is missing (PR#### pending return counts as present)
+    const returnDoMissing = isReturnDoMissing(result.returnDo);
 
     // Use correct destination based on direction
     const destinationForAllocation = direction === 'going'
@@ -2484,9 +2485,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
     // Update the DO number and liters based on new direction
     if (fuelRecord) {
-      // Check the raw DB field directly — covers system records (null/undefined) and
-      // imported records where the CSV importer stores '' for a blank Return Do column.
-      const returnDoMissing = !fuelRecord.returnDo || (fuelRecord.returnDo as string).trim() === '' || fuelRecord.returnDo === 'NIL';
+      // Check the raw DB field — blank/NIL only. PR#### pending return counts as present.
+      const returnDoMissing = isReturnDoMissing(fuelRecord.returnDo as string);
 
       // When toggling to returning with no return DO, leave the field blank so the
       // user immediately sees something is wrong rather than seeing the going DO.
@@ -2558,6 +2558,102 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       setEntryAutoFillData(prev => ({
         ...prev,
         [index]: { ...prev[index], direction: newDirection }
+      }));
+    }
+  };
+
+  /** Pending going DO create is only allowed when the LPO date is in the current calendar month. Return pending is allowed any month. */
+  const isPendingGoingCreateMonth = () => {
+    const raw = (formData.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+    if (!parts) return false;
+    const now = new Date();
+    return Number(parts[1]) === now.getFullYear() && Number(parts[2]) === now.getMonth() + 1;
+  };
+
+  /**
+   * Create a pending going (PG####) or pending return (PR####) DO for this entry's truck,
+   * then re-fetch so LPO detail form can dispense against the temporary fuel record.
+   */
+  const handleCreatePendingDo = async (index: number, kind: 'going' | 'return') => {
+    if (kind === 'going' && !isPendingGoingCreateMonth()) {
+      toast.error('Pending going DOs can only be created for the current calendar month');
+      return;
+    }
+    const entry = formData.entries?.[index];
+    const truckNo = formatTruckNumber((entry?.truckNo || '').trim());
+    if (!truckNo || truckNo.length < 4) {
+      toast.error('Enter a valid truck number first');
+      return;
+    }
+
+    const autoFill = entryAutoFillData[index];
+    try {
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: { ...prev[index], loading: true },
+      }));
+
+      if (kind === 'going') {
+        const res = await fuelRecordsAPI.createPendingGoingDo({
+          truckNo,
+          date: formData.date || undefined,
+        });
+        toast.success(res?.message || `Pending going DO created for ${truckNo}`);
+      } else {
+        const fuelRecordId = autoFill?.fuelRecordId
+          ? String(autoFill.fuelRecordId)
+          : autoFill?.fuelRecord?.id
+            ? String(autoFill.fuelRecord.id)
+            : autoFill?.fuelRecord?._id
+              ? String(autoFill.fuelRecord._id)
+              : undefined;
+        const res = await fuelRecordsAPI.createPendingReturnDo({ truckNo, fuelRecordId });
+        toast.success(res?.message || `Pending return DO created for ${truckNo}`);
+      }
+
+      const result = await fetchTruckData(truckNo);
+      const direction: 'going' | 'returning' = kind === 'return' ? 'returning' : (autoFill?.direction || 'going');
+      const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
+      const returnDoMissing = isReturnDoMissing(result.returnDo);
+      const destinationForAllocation = direction === 'going' ? result.goingDestination : result.destination;
+
+      setFormData(prev => {
+        const newEntries = [...(prev.entries || [])];
+        if (!newEntries[index]) return prev;
+        newEntries[index] = {
+          ...newEntries[index],
+          truckNo,
+          doNo: doNumber,
+          dest: destinationForAllocation || 'TBA',
+        };
+        return { ...prev, entries: newEntries };
+      });
+
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: {
+          ...prev[index],
+          direction,
+          loading: false,
+          fetched: result.success,
+          fuelRecord: result.fuelRecord,
+          fuelRecordId: result.fuelRecord?.id || result.fuelRecord?._id,
+          goingDestination: result.goingDestination,
+          returnDoMissing,
+          warningType: result.success ? null : result.warningType || null,
+          warningMessage: result.message,
+          allJourneys: result.allJourneys,
+          selectedJourneyType: result.fuelRecord?.journeyStatus === 'queued' ? 'queued' : 'active',
+          entryType: prev[index]?.entryType || 'regular',
+        },
+      }));
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to create pending DO';
+      toast.error(msg);
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: { ...prev[index], loading: false },
       }));
     }
   };
@@ -4251,9 +4347,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     {(hasNoRecordWarning || isExactDuplicate || isDifferentAmount || mobileReturnDoMissing) && (
                       <div className="mb-1.5 text-[10px] leading-tight flex flex-col gap-0.5">
                         {mobileReturnDoMissing && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 w-fit" title="No Return DO found in the fuel record — cannot submit">
-                            ⛔ No Return DO
-                          </span>
+                          <div className="inline-flex items-center gap-1.5 w-fit">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" title="No Return DO found in the fuel record — cannot submit">
+                              ⛔ No Return DO
+                            </span>
+                            {autoFill.entryType === 'regular' && (
+                              <button
+                                type="button"
+                                onClick={() => handleCreatePendingDo(index, 'return')}
+                                disabled={autoFill.loading}
+                                className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 shrink-0"
+                                title="Create pending return DO (PR####)"
+                              >
+                                <Clock className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         )}
                         {hasNoRecordWarning && (autoFill.warningMessage?.includes('DUPLICATE')
                           ? <span className="text-red-600 dark:text-red-400 font-semibold">⚠️ Duplicate — use different truck</span>
@@ -4263,6 +4372,21 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
                               {autoFill.warningType === 'ambiguous_do' && '⚠️ DO on multiple trucks — pick one'}
                             </span>
+                        )}
+                        {(autoFill.warningType === 'not_found' || autoFill.warningType === 'no_active_record') &&
+                          autoFill.entryType === 'regular' &&
+                          isPendingGoingCreateMonth() &&
+                          (entry?.truckNo?.length || 0) >= 4 && (
+                          <button
+                            type="button"
+                            onClick={() => handleCreatePendingDo(index, 'going')}
+                            disabled={autoFill.loading}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
+                            title="Create temporary PG#### going DO and fuel record for this truck"
+                          >
+                            <PlusCircle className="w-3 h-3" />
+                            Create pending going DO
+                          </button>
                         )}
                         {isExactDuplicate && duplicateInfo && <span className="text-red-600 dark:text-red-400">⛔ Dup LPO #{duplicateInfo.lpoNo} ({duplicateInfo.liters}L)</span>}
                         {isDifferentAmount && duplicateInfo && <span className="text-blue-600 dark:text-blue-400">➕ Top-up +{duplicateInfo.newLiters}L (existing {duplicateInfo.liters}L)</span>}
@@ -4665,6 +4789,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                     <span className="block text-[10px] text-gray-500 dark:text-gray-400">
                                       {autoFill.warningMessage?.includes('DUPLICATE') ? 'Remove duplicate or use different truck' : 'Manual entry allowed'}
                                     </span>
+                                    {(autoFill.warningType === 'not_found' || autoFill.warningType === 'no_active_record') &&
+                                      autoFill.entryType === 'regular' &&
+                                      isPendingGoingCreateMonth() && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCreatePendingDo(index, 'going')}
+                                        disabled={autoFill.loading}
+                                        className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
+                                      >
+                                        <PlusCircle className="w-3 h-3" />
+                                        Create pending going DO
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                                 {/* Duplicate allocation warning */}
@@ -4698,10 +4835,31 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                     )}
                                   </div>
                                 )}
-                                {/* No Return DO warning — blocks submission */}
+                                {/* No Return DO warning — pending return icon beside status */}
                                 {autoFill.direction === 'returning' && autoFill.returnDoMissing && autoFill.fetched && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 w-fit" title="No Return DO found in the fuel record — cannot submit. Switch back to Going or wait until the Return DO is entered.">
-                                    ⛔ No Return DO
+                                  <div className="inline-flex items-center gap-1.5 w-fit">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" title="No Return DO found in the fuel record — cannot submit. Create a pending return DO or switch back to Going.">
+                                      ⛔ No Return DO
+                                    </span>
+                                    {autoFill.entryType === 'regular' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCreatePendingDo(index, 'return')}
+                                        disabled={autoFill.loading}
+                                        className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 shrink-0"
+                                        title="Create pending return DO (PR####)"
+                                      >
+                                        <Clock className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                                {autoFill.fetched && autoFill.fuelRecord && pendingDoStatusLabel(autoFill.fuelRecord) && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 w-fit">
+                                    {pendingDoStatusLabel(autoFill.fuelRecord)}
+                                    {isPendingDo(autoFill.fuelRecord.goingDo) || isPendingDo(autoFill.fuelRecord.returnDo)
+                                      ? ` (${[isPendingDo(autoFill.fuelRecord.goingDo) ? autoFill.fuelRecord.goingDo : null, isPendingDo(autoFill.fuelRecord.returnDo) ? autoFill.fuelRecord.returnDo : null].filter(Boolean).join(', ')})`
+                                      : ''}
                                   </span>
                                 )}
                                 {/* Journey navigation: active + queued */}

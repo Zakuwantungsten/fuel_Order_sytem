@@ -32,7 +32,7 @@ export interface DeliveryOrderFilters {
   page: number;
   limit: number;
   search?: string;
-  importOrExport?: string;   // 'ALL' | 'IMPORT' | 'EXPORT'
+  importOrExport?: string;   // 'ALL' | 'IMPORT' | 'EXPORT' | 'PENDING' | 'PENDING_GOING' | 'PENDING_RETURN'
   doType?: 'DO' | 'SDO';     // undefined = all
   status?: 'all' | 'active' | 'cancelled';
   dateFrom?: string;          // ISO date
@@ -102,7 +102,7 @@ export function useDeliveryOrdersList(filters: DeliveryOrderFilters, enabled = t
 // the month(s) the user is actually looking at.
 export interface AllDeliveryOrderFilters {
   search?: string;
-  importOrExport?: string;   // 'ALL' | 'IMPORT' | 'EXPORT'
+  importOrExport?: string;   // 'ALL' | 'IMPORT' | 'EXPORT' | 'PENDING' | 'PENDING_GOING' | 'PENDING_RETURN'
   doType?: 'DO' | 'SDO';     // undefined = all
   status?: 'all' | 'active' | 'cancelled';
   dateFrom?: string;

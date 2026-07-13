@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, XCircle, RotateCcw, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { Search, Plus, Download, Edit, XCircle, RotateCcw, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check, Clock } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { FuelRecord } from '../types';
 import { fuelRecordsAPI, configAPI, StandardAllocations } from '../services/api';
@@ -23,9 +23,11 @@ import { countRelevantNewRecords } from '../utils/realtimeRelevance';
 import ConflictModal from '../components/ConflictModal';
 import EditLockBadge from '../components/EditLockBadge';
 import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
+import PendingDoFollowUpModal from '../components/PendingDoFollowUpModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 import { replaceUrlPreservingState } from '../utils/historyState';
+import { pendingDoStatusLabel } from '../utils/pendingDo';
 
 // Map fuel record field names to their primary standard allocation key
 const ALLOCATION_FIELD_MAP: Record<string, keyof StandardAllocations> = {
@@ -155,6 +157,12 @@ const FuelRecords = () => {
   // Details modal state
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | number | null>(null);
+  const [showPendingDoModal, setShowPendingDoModal] = useState(false);
+  const [pendingDoStats, setPendingDoStats] = useState({ total: 0, goingPending: 0, returnPending: 0 });
+  const [showCreatePending, setShowCreatePending] = useState(false);
+  const [pendingCreateKind, setPendingCreateKind] = useState<'going' | 'return'>('going');
+  const [pendingCreateTruck, setPendingCreateTruck] = useState('');
+  const [pendingCreateBusy, setPendingCreateBusy] = useState(false);
   const [cancelPending, setCancelPending] = useState<string | number | null>(null);
   const [uncancelPending, setUncancelPending] = useState<string | number | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -635,6 +643,62 @@ const FuelRecords = () => {
     setIsFormOpen(true);
   };
 
+  const getCurrentMonthKey = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    fuelRecordsAPI.getPendingDoStats()
+      .then((s) => { if (!cancelled) setPendingDoStats(s); })
+      .catch(() => { /* non-blocking */ });
+    return () => { cancelled = true; };
+  }, [recordsData]);
+
+  // If month filter leaves current month while creating "going", force return-only mode
+  useEffect(() => {
+    if (selectedMonth !== getCurrentMonthKey() && pendingCreateKind === 'going') {
+      setPendingCreateKind('return');
+    }
+  }, [selectedMonth, pendingCreateKind]);
+
+  const handleSubmitPendingCreate = async () => {
+    const isCurrentMonth = selectedMonth === getCurrentMonthKey();
+    if (pendingCreateKind === 'going' && !isCurrentMonth) {
+      toast.error('Pending going DOs can only be created for the current month');
+      setPendingCreateKind('return');
+      return;
+    }
+    const truckNo = pendingCreateTruck.trim();
+    if (!truckNo || truckNo.length < 3) {
+      toast.error('Enter a valid truck number');
+      return;
+    }
+    setPendingCreateBusy(true);
+    try {
+      if (pendingCreateKind === 'going') {
+        const res = await fuelRecordsAPI.createPendingGoingDo({ truckNo });
+        toast.success(res?.message || 'Pending going DO created');
+      } else {
+        const res = await fuelRecordsAPI.createPendingReturnDo({
+          truckNo,
+          month: selectedMonth || undefined,
+        });
+        toast.success(res?.message || 'Pending return DO created');
+      }
+      setShowCreatePending(false);
+      setPendingCreateTruck('');
+      const s = await fuelRecordsAPI.getPendingDoStats();
+      setPendingDoStats(s);
+      refetchRecords();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to create pending DO');
+    } finally {
+      setPendingCreateBusy(false);
+    }
+  };
+
   const handleEdit = async (record: FuelRecord, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent row click
     const recordId = record.id || (record as any)._id;
@@ -966,12 +1030,6 @@ const FuelRecords = () => {
     return new Date(monthKey + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
-  // Compute current month key
-  const getCurrentMonthKey = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  };
-
   // True when any filter differs from its default
   const isAnyFilterActive = () => {
     const currentMonth = getCurrentMonthKey();
@@ -1017,13 +1075,13 @@ const FuelRecords = () => {
             Track fuel consumption and usage across all trips
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex flex-wrap gap-2 sm:gap-3">
-          {/* View Toggle */}
-          <div className="flex border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
+        <div className="mt-4 sm:mt-0 flex flex-wrap gap-2 sm:gap-3 overflow-visible pt-1.5 pr-1.5">
+          {/* View Toggle + Pending DOs */}
+          <div className="relative flex border border-gray-300 dark:border-gray-600 rounded-md">
             <button
               onClick={() => setViewMode('records')}
               style={viewMode === 'records' ? { background: '#2563EB', color: '#FFFFFF' } : {}}
-              className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium inline-flex items-center ${
+              className={`px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium inline-flex items-center rounded-l-md ${
                 viewMode === 'records'
                   ? ''
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -1043,6 +1101,19 @@ const FuelRecords = () => {
             >
               <BarChart3 className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Analytics</span>
+            </button>
+            <button
+              onClick={() => setShowPendingDoModal(true)}
+              className="relative px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium border-l dark:border-gray-600 inline-flex items-center rounded-r-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              title="Trucks with pending going (PG) or return (PR) DOs"
+            >
+              <Clock className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Pending DOs</span>
+              {pendingDoStats.total > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 z-10 min-w-[1.125rem] h-[1.125rem] px-1 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold leading-none shadow-sm ring-2 ring-white dark:ring-gray-900">
+                  {pendingDoStats.total > 99 ? '99+' : pendingDoStats.total}
+                </span>
+              )}
             </button>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
@@ -1086,6 +1157,24 @@ const FuelRecords = () => {
               <span className="hidden sm:inline">Export</span>
             </button>
           </div>
+          <button
+            onClick={() => {
+              const isCurrent = selectedMonth === getCurrentMonthKey();
+              setPendingCreateKind(isCurrent ? 'going' : 'return');
+              setShowCreatePending(true);
+            }}
+            className="inline-flex items-center px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+            title={
+              selectedMonth === getCurrentMonthKey()
+                ? 'Create pending going (PG) or return (PR) DO'
+                : 'Create pending return (PR) DO for this month'
+            }
+          >
+            <Plus className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">
+              {selectedMonth === getCurrentMonthKey() ? 'Pending DO' : 'Pending Return'}
+            </span>
+          </button>
           <button
             onClick={handleCreate}
             className="inline-flex items-center px-2 sm:px-4 py-1.5 sm:py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white"
@@ -1387,6 +1476,11 @@ const FuelRecords = () => {
                               queueOrder={record.queueOrder}
                               size="sm"
                             />
+                          )}
+                          {!isCancelled && pendingDoStatusLabel(record) && (
+                            <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
+                              {pendingDoStatusLabel(record)}
+                            </span>
                           )}
                           <EditLockBadge editLock={(record as any).editLock} />
                         </div>
@@ -1749,6 +1843,79 @@ const FuelRecords = () => {
         }}
         recordId={selectedRecordId}
       />
+
+      <PendingDoFollowUpModal
+        isOpen={showPendingDoModal}
+        onClose={() => setShowPendingDoModal(false)}
+        onSelectRecord={(id) => {
+          setShowPendingDoModal(false);
+          setSelectedRecordId(id);
+          setIsDetailsModalOpen(true);
+        }}
+      />
+
+      {showCreatePending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+              Create pending {pendingCreateKind === 'going' ? 'going' : 'return'} DO
+            </h3>
+            {selectedMonth === getCurrentMonthKey() ? (
+              <div className="flex gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setPendingCreateKind('going')}
+                  className={`flex-1 px-2 py-1.5 rounded text-xs font-medium ${pendingCreateKind === 'going' ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700'}`}
+                >
+                  Going (PG####)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingCreateKind('return')}
+                  className={`flex-1 px-2 py-1.5 rounded text-xs font-medium ${pendingCreateKind === 'return' ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700'}`}
+                >
+                  Return (PR####)
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 mb-3">
+                Previous months: pending return (PR####) only. Switch to the current month to create a pending going DO.
+              </p>
+            )}
+            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Truck number</label>
+            <input
+              value={pendingCreateTruck}
+              onChange={(e) => setPendingCreateTruck(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm mb-4"
+              placeholder="e.g. T123 ABC"
+              autoFocus
+            />
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-4">
+              {pendingCreateKind === 'going'
+                ? 'Creates a temporary fuel record with from/to = TBA. Replaced when the real IMPORT DO is created.'
+                : 'Attaches a temporary return DO to the truck’s going journey in this month. Replaced when the real EXPORT DO is linked.'}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCreatePending(false)}
+                className="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600"
+                disabled={pendingCreateBusy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitPendingCreate}
+                disabled={pendingCreateBusy}
+                className="px-3 py-1.5 text-sm rounded bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
+              >
+                {pendingCreateBusy ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConflictModal
         isOpen={!!conflictData}

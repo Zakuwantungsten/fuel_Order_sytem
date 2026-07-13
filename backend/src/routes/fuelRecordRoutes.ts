@@ -16,6 +16,8 @@ router.use(authenticate);
 // Get routes
 router.get('/available-periods', asyncHandler(fuelRecordController.getAvailablePeriods));
 router.get('/available-routes', asyncHandler(fuelRecordController.getAvailableRoutes));
+router.get('/pending-dos/stats', authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'yard_personnel', 'station_manager'), asyncHandler(fuelRecordController.getPendingDoStats));
+router.get('/pending-dos', authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'yard_personnel', 'station_manager'), asyncHandler(fuelRecordController.getPendingDoList));
 router.get('/', commonValidation.pagination, validate, asyncHandler(fuelRecordController.getAllFuelRecords));
 router.get('/monthly-summary', asyncHandler(fuelRecordController.getMonthlyFuelSummary));
 router.get('/lpo-truck-lookup/:truckNo', asyncHandler(fuelRecordController.getFuelRecordsForLpoTruckLookup));
@@ -32,6 +34,25 @@ router.post(
   fuelRecordValidation.create,
   validate,
   asyncHandler(fuelRecordController.createFuelRecord)
+);
+
+// Pending DO create (going PG#### / return PR####)
+router.post(
+  '/pending-dos/going',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'yard_personnel', 'station_manager', 'dar_yard', 'tanga_yard', 'mmsa_yard'),
+  asyncHandler(fuelRecordController.createPendingGoingDo)
+);
+router.post(
+  '/pending-dos/return',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'yard_personnel', 'station_manager', 'dar_yard', 'tanga_yard', 'mmsa_yard'),
+  asyncHandler(fuelRecordController.createPendingReturnDo)
+);
+router.put(
+  '/pending-dos/:id',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'yard_personnel', 'station_manager', 'dar_yard', 'tanga_yard', 'mmsa_yard'),
+  validate,
+  asyncHandler(fuelRecordController.updatePendingDo)
 );
 
 // Update route

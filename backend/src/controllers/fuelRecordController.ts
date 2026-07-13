@@ -1557,3 +1557,175 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
     throw error;
   }
 };
+
+/**
+ * Create a temporary fuel record with pending going DO (PG####).
+ * Body: { truckNo, date? }
+ */
+export const createPendingGoingDo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const truckNo = formatTruckNumber(
+      String(req.body?.truckNo || matchedData(req, { locations: ['body'] })?.truckNo || '').trim()
+    );
+    if (!truckNo || truckNo.length < 3) {
+      throw new ApiError(400, 'Valid truck number is required');
+    }
+
+    const { createPendingGoingFuelRecord } = await import('../services/pendingDoService');
+    const { fuelRecord, pendingDo } = await createPendingGoingFuelRecord({
+      truckNo,
+      date: req.body?.date,
+      username,
+    });
+
+    await AuditService.logCreate(
+      req.user?.userId || 'system',
+      username,
+      'FuelRecord',
+      fuelRecord._id.toString(),
+      { truckNo, goingDo: pendingDo, pending: true, kind: 'going' },
+      req.ip
+    );
+
+    emitDataChange('fuel_records', 'create');
+
+    res.status(201).json({
+      success: true,
+      message: `Pending going DO ${pendingDo} created for truck ${truckNo}`,
+      data: { fuelRecord, pendingDo, kind: 'going' },
+    });
+  } catch (error: any) {
+    if (error?.statusCode) throw new ApiError(error.statusCode, error.message);
+    throw error;
+  }
+};
+
+/**
+ * Attach a pending return DO (PR####) to an existing going fuel record.
+ * Body: { truckNo, fuelRecordId? }
+ */
+export const createPendingReturnDo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const truckNo = formatTruckNumber(String(req.body?.truckNo || '').trim());
+    if (!truckNo || truckNo.length < 3) {
+      throw new ApiError(400, 'Valid truck number is required');
+    }
+
+    const { createPendingReturnDo: createPendingReturn } = await import('../services/pendingDoService');
+    const { fuelRecord, pendingDo } = await createPendingReturn({
+      truckNo,
+      fuelRecordId: req.body?.fuelRecordId,
+      month: typeof req.body?.month === 'string' ? req.body.month.trim() : undefined,
+      username,
+    });
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username,
+      action: 'UPDATE',
+      resourceType: 'FuelRecord',
+      resourceId: String(fuelRecord._id),
+      details: `Pending return DO ${pendingDo} attached to truck ${truckNo}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
+    emitDataChange('fuel_records', 'update');
+
+    res.status(201).json({
+      success: true,
+      message: `Pending return DO ${pendingDo} created for truck ${truckNo}`,
+      data: { fuelRecord, pendingDo, kind: 'return' },
+    });
+  } catch (error: any) {
+    if (error?.statusCode) throw new ApiError(error.statusCode, error.message);
+    throw error;
+  }
+};
+
+/**
+ * Update a pending DO journey (PG/PR) — syncs truck/date/route on the fuel record.
+ * Body: { truckNo?, date?, from?, to?, start? }
+ */
+export const updatePendingDo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const { id } = req.params;
+    if (!id) throw new ApiError(400, 'Fuel record id is required');
+
+    const { updatePendingDoFuelRecord } = await import('../services/pendingDoService');
+    const { fuelRecord } = await updatePendingDoFuelRecord({
+      fuelRecordId: id,
+      username,
+      truckNo: req.body?.truckNo ? formatTruckNumber(String(req.body.truckNo).trim()) : undefined,
+      date: req.body?.date,
+      from: req.body?.from,
+      to: req.body?.to,
+      start: req.body?.start,
+      trailerNo: req.body?.trailerNo,
+    });
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username,
+      action: 'UPDATE',
+      resourceType: 'FuelRecord',
+      resourceId: String(fuelRecord._id),
+      details: `Pending DO updated (truck=${fuelRecord.truckNo}, going=${fuelRecord.goingDo}, return=${fuelRecord.returnDo || ''})`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
+    emitDataChange('fuel_records', 'update');
+    emitDataChange('delivery_orders', 'update');
+
+    res.status(200).json({
+      success: true,
+      message: `Pending DO updated for truck ${fuelRecord.truckNo}`,
+      data: { fuelRecord },
+    });
+  } catch (error: any) {
+    if (error?.statusCode) throw new ApiError(error.statusCode, error.message);
+    throw error;
+  }
+};
+
+/** Count trucks/records with pending going and/or return DOs */
+export const getPendingDoStats = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { countPendingDos } = await import('../services/pendingDoService');
+    const stats = await countPendingDos();
+    res.status(200).json({
+      success: true,
+      message: 'Pending DO stats retrieved',
+      data: stats,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/** List fuel records that still have pending going/return DOs */
+export const getPendingDoList = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const kind = (req.query.kind as 'going' | 'return' | 'all') || 'all';
+    const limit = Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 500);
+    const { listPendingDos } = await import('../services/pendingDoService');
+    const rows = await listPendingDos({ kind, limit });
+    res.status(200).json({
+      success: true,
+      message: `${rows.length} pending DO record(s)`,
+      data: rows,
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};

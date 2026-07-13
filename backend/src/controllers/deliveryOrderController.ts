@@ -36,6 +36,12 @@ import {
   type RouteLike,
   type DeliveryOrderLike,
 } from '../utils/fuelRecordCalculator';
+import {
+  promotePendingGoingToImport,
+  promotePendingReturnToExport,
+  fetchPendingDoListItems,
+} from '../services/pendingDoService';
+import { returnDoOpenFilter, isReturnDoOpen, pickBestExportFuelMatch, compareExportFuelCandidates } from '../utils/pendingDoNumber';
 
 // Month names for sheet naming
 const MONTH_NAMES = [
@@ -949,7 +955,59 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
     }
 
     if (importOrExport && importOrExport !== 'ALL') {
-      filter.importOrExport = importOrExport;
+      // Pending filters are handled via fuel-record merge below — don't apply
+      // IMPORT/EXPORT equality to the DeliveryOrder query for those values.
+      if (importOrExport === 'IMPORT' || importOrExport === 'EXPORT') {
+        filter.importOrExport = importOrExport;
+      }
+    }
+
+    const pendingFilterValue = String(importOrExport || 'ALL').toUpperCase();
+    const pendingOnly =
+      pendingFilterValue === 'PENDING_GOING' ||
+      pendingFilterValue === 'PENDING_RETURN' ||
+      pendingFilterValue === 'PENDING';
+    const includePendingGoing =
+      pendingFilterValue === 'ALL' ||
+      pendingFilterValue === 'IMPORT' ||
+      pendingFilterValue === 'PENDING' ||
+      pendingFilterValue === 'PENDING_GOING';
+    const includePendingReturn =
+      pendingFilterValue === 'ALL' ||
+      pendingFilterValue === 'EXPORT' ||
+      pendingFilterValue === 'PENDING' ||
+      pendingFilterValue === 'PENDING_RETURN';
+    // Pending journeys are DO-type fuel placeholders — skip when browsing SDOs or cancelled-only.
+    const shouldIncludePending =
+      doType !== 'SDO' &&
+      status !== 'cancelled' &&
+      (includePendingGoing || includePendingReturn);
+
+    let pendingItems: any[] = [];
+    if (shouldIncludePending) {
+      try {
+        const kind: 'going' | 'return' | 'all' =
+          pendingFilterValue === 'PENDING_GOING'
+            ? 'going'
+            : pendingFilterValue === 'PENDING_RETURN'
+              ? 'return'
+              : pendingFilterValue === 'IMPORT'
+                ? 'going'
+                : pendingFilterValue === 'EXPORT'
+                  ? 'return'
+                  : 'all';
+
+        pendingItems = await fetchPendingDoListItems({
+          kind,
+          dateFrom: effectiveDateFrom as string | undefined,
+          dateTo: effectiveDateTo as string | undefined,
+          search: search as string | undefined,
+          truckNo: req.user?.role === 'driver' ? req.user.username : (truckNo as string | undefined),
+        });
+      } catch (pendErr: any) {
+        logger.warn(`Pending DO list merge failed: ${pendErr.message}`);
+        pendingItems = [];
+      }
     }
 
     // A date filter used to force the slow "merged" path below, which loads
@@ -959,7 +1017,7 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
     // archive actually contains matching rows (a cheap indexed count) —
     // otherwise the normal indexed skip/limit query handles the date range.
     let includeArchived = false;
-    if (effectiveDateFrom || effectiveDateTo) {
+    if (!pendingOnly && (effectiveDateFrom || effectiveDateTo)) {
       try {
         const archivedCount = await ArchivedDeliveryOrder.countDocuments({
           ...filter,
@@ -972,8 +1030,14 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
     }
     let deliveryOrders: any[];
     let total: number;
+    const pendingCount = pendingItems.length;
 
-    if (includeArchived) {
+    if (pendingOnly) {
+      // Pending-only filter: paginate synthetic rows only
+      total = pendingCount;
+      const skip = calculateSkip(page, limit);
+      deliveryOrders = pendingItems.slice(skip, skip + limit);
+    } else if (includeArchived) {
       // Use unified export service to get both active and archived data
       const startDate = effectiveDateFrom ? new Date(effectiveDateFrom as string) : undefined;
       const endDate = effectiveDateTo ? new Date(effectiveDateTo as string) : undefined;
@@ -999,14 +1063,14 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
         const regex = new RegExp(sanitizeRegexInput(destination as string), 'i');
         filteredOrders = filteredOrders.filter(o => regex.test(o.destination || ''));
       }
-      if (importOrExport && importOrExport !== 'ALL') {
+      if (importOrExport && (importOrExport === 'IMPORT' || importOrExport === 'EXPORT')) {
         filteredOrders = filteredOrders.filter(o => o.importOrExport === importOrExport);
       }
       if (doType) {
         filteredOrders = filteredOrders.filter(o => o.doType === doType);
       }
 
-      // Sort
+      // Pending first, then normal sort among real DOs
       const sortField = sort || 'date';
       const sortDir = order === 'asc' ? 1 : -1;
       filteredOrders.sort((a, b) => {
@@ -1017,34 +1081,48 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
         return 0;
       });
 
-      // Paginate in memory
-      total = filteredOrders.length;
+      const merged = [...pendingItems, ...filteredOrders];
+      total = merged.length;
       const skip = calculateSkip(page, limit);
-      deliveryOrders = filteredOrders.slice(skip, skip + limit);
+      deliveryOrders = merged.slice(skip, skip + limit);
     } else {
-      // No date filter - only query active data (normal pagination)
-      const skip = calculateSkip(page, limit);
-      const sortOrder = order === 'asc' ? 1 : -1;
+      // Normal path — pin pending rows to the top of page 1 (and account for them in skip)
+      const realTotal = await DeliveryOrder.countDocuments(filter);
+      total = realTotal + pendingCount;
 
-      [deliveryOrders, total] = await Promise.all([
-        DeliveryOrder.find(filter)
-          .sort({ [sort]: sortOrder })
+      if (page === 1) {
+        const realLimit = Math.max(0, limit - pendingCount);
+        const realOrders = realLimit > 0
+          ? await DeliveryOrder.find(filter)
+              .sort({ [sort]: order === 'asc' ? 1 : -1 })
+              .skip(0)
+              .limit(realLimit)
+              .lean()
+          : [];
+        deliveryOrders = [...pendingItems, ...realOrders];
+      } else {
+        const skip = Math.max(0, (page - 1) * limit - pendingCount);
+        deliveryOrders = await DeliveryOrder.find(filter)
+          .sort({ [sort]: order === 'asc' ? 1 : -1 })
           .skip(skip)
           .limit(limit)
-          .lean(),
-        DeliveryOrder.countDocuments(filter),
-      ]);
+          .lean();
+      }
     }
 
     // Attach live edit-lock info so the "Editing: …" badge shows on load.
-    await attachLocks('delivery_orders', deliveryOrders);
+    // Skip synthetic pending rows (string ids) — attachLocks expects ObjectIds.
+    const realForLocks = (deliveryOrders as any[]).filter((o) => o && !o.isPendingDo);
+    if (realForLocks.length > 0) {
+      await attachLocks('delivery_orders', realForLocks);
+    }
 
     // Annotate EXPORT DOs with whether they already have a linked fuel record
     // (a fuel record whose returnDo == this DO number). Lets the DO list show a
     // Link button / status only for unlinked EXPORT DOs without an extra call per row.
     try {
       const exportDoNumbers = (deliveryOrders as any[])
-        .filter((o) => o.importOrExport === 'EXPORT' && o.doType === 'DO' && o.doNumber)
+        .filter((o) => !o.isPendingDo && o.importOrExport === 'EXPORT' && o.doType === 'DO' && o.doNumber)
         .map((o) => o.doNumber);
       if (exportDoNumbers.length > 0) {
         const linkedRecords = await FuelRecord.find({
@@ -1055,7 +1133,7 @@ export const getAllDeliveryOrders = async (req: AuthRequest, res: Response): Pro
           .lean();
         const linkedSet = new Set(linkedRecords.map((r: any) => r.returnDo));
         for (const o of deliveryOrders as any[]) {
-          if (o.importOrExport === 'EXPORT' && o.doType === 'DO') {
+          if (!o.isPendingDo && o.importOrExport === 'EXPORT' && o.doType === 'DO') {
             o.isLinkedToFuelRecord = linkedSet.has(o.doNumber);
           }
         }
@@ -1240,10 +1318,44 @@ const applyImportFuelRecords = async (
     // Mirror the client: unmatched batch → null extra → record is locked
     const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
 
+    // If this truck already has a PG#### pending going journey, promote it
+    // instead of inserting a second fuel record.
+    const promoted = await promotePendingGoingToImport(
+      order as unknown as DeliveryOrderLike,
+      totalLiters,
+      extraFuel,
+      session
+    );
+    if (promoted.promoted && promoted.fuelRecordId) {
+      linkTargets.push({
+        id: promoted.fuelRecordId,
+        truckNo: order.truckNo,
+        doNumber: order.doNumber,
+        date: order.date,
+      });
+      if (totalLiters === null || extraFuel === null) {
+        const missingFields: Array<'totalLiters' | 'extraFuel'> = [];
+        if (totalLiters === null) missingFields.push('totalLiters');
+        if (extraFuel === null) missingFields.push('extraFuel');
+        lockedNotifs.push({
+          id: promoted.fuelRecordId,
+          missingFields,
+          doNumber: order.doNumber,
+          truckNo: order.truckNo,
+          destination: order.destination,
+          loadingPoint: order.loadingPoint || '',
+          truckSuffix: (batchMatch.truckSuffix || '').toUpperCase(),
+        });
+      }
+      continue;
+    }
+
     const built = buildImportFuelRecord(order as unknown as DeliveryOrderLike, totalLiters, extraFuel);
     const rec = built.fuelRecord;
     const _id = new mongoose.Types.ObjectId();
     rec._id = _id;
+    rec.isPendingGoing = false;
+    rec.isPendingReturn = false;
 
     const state = truckState.get(order.truckNo)!;
     if (state.activeId) {
@@ -1277,14 +1389,16 @@ const applyImportFuelRecords = async (
   // With a session: ordered + rethrow so DO+fuel commit/abort together.
   // Without a session: ordered:false is safer for bulk partial writes, but still
   // rethrow so callers never silently keep a DO without its fuel rows.
-  try {
-    await FuelRecord.insertMany(fuelRecordsToInsert, {
-      ordered: !!session,
-      ...(session ? { session } : {}),
-    });
-  } catch (err: any) {
-    logger.error('Fuel record insert had errors:', err?.message || err);
-    throw err;
+  if (fuelRecordsToInsert.length > 0) {
+    try {
+      await FuelRecord.insertMany(fuelRecordsToInsert, {
+        ordered: !!session,
+        ...(session ? { session } : {}),
+      });
+    } catch (err: any) {
+      logger.error('Fuel record insert had errors:', err?.message || err);
+      throw err;
+    }
   }
 
   const shouldLinkYard = opts.linkYardFuel ?? !session;
@@ -1292,23 +1406,21 @@ const applyImportFuelRecords = async (
     await linkYardFuelAfterCommit(linkTargets, username);
   }
 
-  const createdFuelDates = fuelRecordsToInsert
-    .map((r: any) => r.date)
+  const createdFuelDates = linkTargets
+    .map((t) => t.date)
     .filter((d: any) => d != null)
     .map((d: any) => String(d));
-  const createdFuelIds = fuelRecordsToInsert
-    .map((r: any) => r._id)
-    .filter((idv: any) => idv != null)
-    .map((idv: any) => String(idv));
+  const createdFuelIds = linkTargets.map((t) => t.id);
 
   return { queuedCount, lockedNotifs, createdFuelDates, createdFuelIds, linkTargets };
 };
 
 /**
  * Update the matching going record with return-leg fuel for a set of EXPORT DOs.
- * Each export matches the most recent going record for its truck that has no
- * return DO yet; unmatched exports are returned for notification. Returns the
- * unlinked exports the caller should notify on.
+ * Each export matches the truck's active going record with an open return
+ * (empty or pending PR####); prefers PR when multiple actives exist. Unmatched
+ * exports are returned for notification. (Queued/older journeys are linked via
+ * the manual Link flow, not create auto-match.)
  *
  * When `opts.session` is set, updates participate in that transaction and any
  * bulkWrite failure is rethrown so the caller can roll back the DO(s).
@@ -1322,30 +1434,41 @@ const applyExportFuelUpdates = async (
   if (exportDOs.length === 0) return { unlinkedExports, updatedFuelIds: [] };
 
   const session = opts.session;
-  const exportTrucks = [...new Set(exportDOs.map((o: any) => o.truckNo))];
+  const exportTrucks = [
+    ...new Set(
+      exportDOs
+        .map((o: any) => formatTruckNumber(String(o.truckNo || '').trim()))
+        .filter(Boolean)
+    ),
+  ];
+  // Active journey only + open/pending return (PR#### counts as open)
   const goingQuery = FuelRecord.find({
     truckNo: { $in: exportTrucks },
     journeyStatus: 'active',
     isDeleted: false,
     isCancelled: { $ne: true },
-    $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
-  })
-    .sort({ date: -1 })
-    .lean();
+    $and: [returnDoOpenFilter()],
+  }).lean();
   if (session) goingQuery.session(session);
   const goingRecords = await goingQuery;
 
-  // Most recent unmatched going record per truck
-  const recordByTruck = new Map<string, any>();
+  const recordsByTruck = new Map<string, any[]>();
   for (const r of goingRecords) {
-    if (!recordByTruck.has(r.truckNo)) recordByTruck.set(r.truckNo, r);
+    const key = formatTruckNumber(String(r.truckNo || '').trim()) || r.truckNo;
+    const list = recordsByTruck.get(key) || [];
+    list.push(r);
+    recordsByTruck.set(key, list);
   }
 
   const usedRecordIds = new Set<string>();
   const bulkOps: any[] = [];
   for (const order of exportDOs) {
-    const match = recordByTruck.get(order.truckNo);
-    if (!match || usedRecordIds.has(String(match._id))) {
+    const truckKey = formatTruckNumber(String(order.truckNo || '').trim()) || order.truckNo;
+    const remaining = (recordsByTruck.get(truckKey) || []).filter(
+      (r) => !usedRecordIds.has(String(r._id))
+    );
+    const match = pickBestExportFuelMatch(remaining);
+    if (!match) {
       unlinkedExports.push({ id: String(order._id), doNumber: order.doNumber, truckNo: order.truckNo, destination: order.destination, loadingPoint: order.loadingPoint });
       continue;
     }
@@ -1357,7 +1480,12 @@ const applyExportFuelUpdates = async (
         `EXPORT route not found for ${order.loadingPoint} → ${order.destination}. Linking without adding liters.`
       );
     }
-    const { update } = buildReturnUpdate(match, order as unknown as DeliveryOrderLike, exportLiters);
+    const { update } = await promotePendingReturnToExport(
+      match,
+      order as unknown as DeliveryOrderLike,
+      exportLiters,
+      session
+    );
     bulkOps.push({ updateOne: { filter: { _id: match._id }, update: { $set: update } } });
   }
 
@@ -1668,28 +1796,42 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
   // When export fuel automation is ON, drop exports that cannot be linked before
   // the transaction — they become failedReasons instead of orphan DOs.
   if (needsExportFuel) {
-    const exportTrucks = [...new Set(pendingExport.map((o: any) => o.truckNo))];
+    const exportTrucks = [
+      ...new Set(
+        pendingExport
+          .map((o: any) => formatTruckNumber(String(o.truckNo || '').trim()))
+          .filter(Boolean)
+      ),
+    ];
     const goingRecords = await FuelRecord.find({
       truckNo: { $in: exportTrucks },
       journeyStatus: 'active',
       isDeleted: false,
       isCancelled: { $ne: true },
-      $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
+      $and: [returnDoOpenFilter()],
     })
-      .sort({ date: -1 })
-      .select('_id truckNo')
+      .select('_id truckNo returnDo isPendingReturn date journeyStatus queueOrder')
       .lean();
     const availableByTruck = new Map<string, string[]>();
+    const grouped = new Map<string, typeof goingRecords>();
     for (const r of goingRecords) {
-      const list = availableByTruck.get(r.truckNo) || [];
-      list.push(String(r._id));
-      availableByTruck.set(r.truckNo, list);
+      const key = formatTruckNumber(String(r.truckNo || '').trim()) || r.truckNo;
+      const list = grouped.get(key) || [];
+      list.push(r);
+      grouped.set(key, list);
+    }
+    for (const [key, list] of grouped) {
+      availableByTruck.set(
+        key,
+        [...list].sort(compareExportFuelCandidates).map((r) => String(r._id))
+      );
     }
     const claimedIds = new Set<string>();
     for (let i = normalized.length - 1; i >= 0; i--) {
       const o = normalized[i];
       if (!(o.doType === 'DO' && o.importOrExport === 'EXPORT')) continue;
-      const list = availableByTruck.get(o.truckNo) || [];
+      const key = formatTruckNumber(String(o.truckNo || '').trim()) || o.truckNo;
+      const list = availableByTruck.get(key) || [];
       const matchId = list.find(id => !claimedIds.has(id));
       if (!matchId) {
         failedReasons.push({
@@ -4608,14 +4750,18 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
       return;
     }
 
-    // Find the active going journey for this truck (one without a return DO yet)
-    const matchingFuelRecord = await FuelRecord.findOne({
+    // Find the active going journey for this truck (empty return OR pending PR####)
+    const activeCandidates = await FuelRecord.find({
       truckNo: deliveryOrder.truckNo,
       journeyStatus: 'active',
-      returnDo: { $in: [null, '', undefined] },
       isDeleted: false,
       isCancelled: { $ne: true },
-    }).sort({ date: -1 });
+      $and: [returnDoOpenFilter()],
+    }).lean();
+    const matchingFuelRecordDoc = pickBestExportFuelMatch(activeCandidates);
+    const matchingFuelRecord = matchingFuelRecordDoc
+      ? await FuelRecord.findById(matchingFuelRecordDoc._id)
+      : null;
 
     if (!matchingFuelRecord) {
       res.status(200).json({
@@ -4650,7 +4796,7 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
       );
     }
 
-    const { update: updateData, info } = buildReturnUpdate(
+    const { update: updateData, info } = await promotePendingReturnToExport(
       matchingFuelRecord.toObject(),
       deliveryOrder as unknown as DeliveryOrderLike,
       exportRouteLiters
@@ -4715,7 +4861,7 @@ const findExportLinkCandidates = async (truckNo: string): Promise<any[]> => {
     truckNo: { $regex: new RegExp(pattern, 'i') },
     isDeleted: false,
     isCancelled: { $ne: true },
-    $or: [{ returnDo: { $exists: false } }, { returnDo: null }, { returnDo: '' }],
+    $and: [returnDoOpenFilter()],
   })
     .sort({ date: -1 })
     .limit(50)
@@ -4840,7 +4986,7 @@ export const confirmExportLink = async (req: AuthRequest, res: Response): Promis
     if (!fuelRecord) {
       throw new ApiError(404, 'Selected fuel record not found or is cancelled');
     }
-    if (fuelRecord.returnDo && String(fuelRecord.returnDo).trim() !== '') {
+    if (fuelRecord.returnDo && String(fuelRecord.returnDo).trim() !== '' && !isReturnDoOpen(fuelRecord.returnDo, fuelRecord.isPendingReturn)) {
       throw new ApiError(400, `Selected fuel record already has a return DO (${fuelRecord.returnDo})`);
     }
 
@@ -4858,13 +5004,17 @@ export const confirmExportLink = async (req: AuthRequest, res: Response): Promis
       );
     }
 
-    const { update, info } = buildReturnUpdate(
+    const { update, info } = await promotePendingReturnToExport(
       fuelRecord.toObject(),
       deliveryOrder as unknown as DeliveryOrderLike,
       exportRouteLiters
     );
 
-    const updatedFuelRecord = await FuelRecord.findByIdAndUpdate(fuelRecord._id, update, { new: true });
+    const updatedFuelRecord = await FuelRecord.findByIdAndUpdate(
+      fuelRecord._id,
+      { $set: update },
+      { new: true }
+    );
 
     // Resolve any pending unlinked-DO notification for this DO.
     try {
@@ -4880,7 +5030,7 @@ export const confirmExportLink = async (req: AuthRequest, res: Response): Promis
       action: 'UPDATE',
       resourceType: 'FuelRecord',
       resourceId: String(fuelRecord._id),
-      details: `EXPORT DO ${deliveryOrder.doNumber} (truck: ${deliveryOrder.truckNo}) manually linked to fuel record ${fuelRecord._id} by ${username}${routeMatch.matched ? `, added ${exportRouteLiters}L from export route (${info.originalTotalLiters}L → ${info.newTotalLiters}L)` : ' (no export route matched — liters unchanged)'}`,
+      details: `EXPORT DO ${deliveryOrder.doNumber} (truck: ${deliveryOrder.truckNo}) manually linked to fuel record ${fuelRecord._id} by ${username}${routeMatch.matched ? `, added ${exportRouteLiters}L from export route (${info.originalTotalLiters}L → ${info.newTotalLiters}L)` : ' (no export route matched — liters unchanged)'}${update.isPendingReturn === false ? ' (promoted pending return)' : ''}`,
       ipAddress: req.ip,
       severity: 'medium',
     }).catch((err: any) => logger.warn(`Failed to write audit for manual export link (DO ${deliveryOrder.doNumber}): ${err?.message}`));

@@ -215,6 +215,15 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
       min: [0, 'Outbound liters cannot be negative'],
       required: false,
     },
+    // Temporary pending DO placeholders (PG#### / PR####) before real IMPORT/EXPORT exists
+    isPendingGoing: {
+      type: Boolean,
+      default: false,
+    },
+    isPendingReturn: {
+      type: Boolean,
+      default: false,
+    },
     // Cancellation fields
     isCancelled: {
       type: Boolean,
@@ -277,6 +286,8 @@ fuelRecordSchema.index({ truckNo: 1, date: -1 });
 fuelRecordSchema.index({ date: -1, isDeleted: 1 });
 fuelRecordSchema.index({ truckNo: 1, journeyStatus: 1, queueOrder: 1 }); // For queue management
 fuelRecordSchema.index({ truckNo: 1, journeyStatus: 1, isDeleted: 1 }); // For finding active/queued journeys
+fuelRecordSchema.index({ isPendingGoing: 1, journeyStatus: 1, isDeleted: 1 });
+fuelRecordSchema.index({ isPendingReturn: 1, journeyStatus: 1, isDeleted: 1 });
 // Index for yard fuel auto-linking queries (optimized for finding active records)
 fuelRecordSchema.index({ truckNo: 1, date: -1, isDeleted: 1, isCancelled: 1 });
 // Covers the Fuel Records list's default view: month equality + soft-delete flag,

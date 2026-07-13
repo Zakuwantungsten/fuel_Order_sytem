@@ -42,6 +42,10 @@ export interface DeliveryOrder {
   cancelledAt?: string;
   cancellationReason?: string;
   cancelledBy?: string;
+  // Temporary PG#### / PR#### placeholders (synthetic list rows from fuel records)
+  isPendingDo?: boolean;
+  pendingKind?: 'going' | 'return';
+  fuelRecordId?: string;
   // Edit history tracking
   editHistory?: DeliveryOrderEditHistory[];
   lastEditedAt?: string;
@@ -321,6 +325,10 @@ export interface FuelRecord {
   // Original going journey locations (stored before EXPORT DO changes them)
   originalGoingFrom?: string;
   originalGoingTo?: string;
+  /** True while goingDo is a temporary PG#### pending DO */
+  isPendingGoing?: boolean;
+  /** True while returnDo is a temporary PR#### pending DO */
+  isPendingReturn?: boolean;
   // Cancellation fields
   isCancelled?: boolean;
   cancelledAt?: string;
