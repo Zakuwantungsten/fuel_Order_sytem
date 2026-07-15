@@ -1519,6 +1519,11 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     const payload = matchedData(req, { locations: ['body'] }) as any;
 
+    // Normalize truck plate to T{digits} {letters} (e.g. T103DVL → T103 DVL)
+    if (payload.truckNo) {
+      payload.truckNo = formatTruckNumber(String(payload.truckNo).trim());
+    }
+
     // If sn is not provided, derive it from doNumber
     if (!payload.sn && payload.doNumber) {
       payload.sn = parseInt(payload.doNumber.replace(/^0+/, '')) || 1;
@@ -1713,6 +1718,10 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
       continue;
     }
     const payload: any = { ...raw };
+
+    if (payload.truckNo) {
+      payload.truckNo = formatTruckNumber(String(payload.truckNo).trim());
+    }
 
     if (!payload.sn && payload.doNumber) {
       payload.sn = parseInt(String(payload.doNumber).replace(/^0+/, ''), 10) || 1;
@@ -2056,6 +2065,11 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     // Strip fields the caller’s role is not allowed to write
     const payload = filterDeliveryOrderFields(rawPayload, userRole) as any;
+
+    // Normalize truck plate to T{digits} {letters} (e.g. T103DVL → T103 DVL)
+    if (payload.truckNo) {
+      payload.truckNo = formatTruckNumber(String(payload.truckNo).trim());
+    }
 
     // Get the original DO first to track changes
     const originalDO = await DeliveryOrder.findOne({ _id: id, isDeleted: false }).lean();

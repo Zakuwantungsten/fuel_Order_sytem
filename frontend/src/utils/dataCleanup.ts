@@ -64,6 +64,11 @@ export const cleanDriverName = (driverName: string | undefined | null): string =
  */
 export const cleanDeliveryOrder = (order: Partial<DeliveryOrder>): Partial<DeliveryOrder> => {
   const cleaned = { ...order };
+
+  // Normalize truck plate to T{digits} {letters}
+  if (cleaned.truckNo) {
+    cleaned.truckNo = formatTruckNumber(cleaned.truckNo);
+  }
   
   // Clean driver name
   if (cleaned.driverName) {

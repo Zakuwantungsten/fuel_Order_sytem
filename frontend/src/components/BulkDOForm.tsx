@@ -4,6 +4,7 @@ import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
+import { formatTruckNumber } from '../utils/dataCleanup';
 import { toast } from 'react-toastify';
 
 interface BulkDOFormProps {
@@ -323,7 +324,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
             const tonnage = parseFloat(parts[3]) || 0;
             const rate = parseFloat(parts[4]) || 0;
             rows.push({
-              truckNo: parts[0].toUpperCase(),
+              truckNo: formatTruckNumber(parts[0]),
               trailerNo: parts[1].toUpperCase(),
               driverName: parts[2].toUpperCase(),
               tonnages: tonnage,
@@ -337,7 +338,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
             const tonnage = parseFloat(parts[3]) || 0;
             const totalAmount = parseFloat(parts[4]) || 0;
             rows.push({
-              truckNo: parts[0].toUpperCase(),
+              truckNo: formatTruckNumber(parts[0]),
               trailerNo: parts[1].toUpperCase(),
               driverName: parts[2].toUpperCase(),
               tonnages: tonnage,

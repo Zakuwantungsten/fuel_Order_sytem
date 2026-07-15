@@ -5,7 +5,7 @@ import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import axios from 'axios';
-import { cleanDeliveryOrder, isCorruptedDriverName } from '../utils/dataCleanup';
+import { cleanDeliveryOrder, isCorruptedDriverName, formatTruckNumber } from '../utils/dataCleanup';
 
 interface DOFormProps {
   order?: DeliveryOrder;
@@ -210,13 +210,15 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   ) => {
     const { name, value } = e.target;
     
-    // Auto-uppercase text fields for consistency
-    const uppercaseFields = ['truckNo', 'trailerNo', 'destination', 'loadingPoint', 'clientName', 'haulier', 'containerNo', 'driverName', 'invoiceNos', 'borderEntryDRC'];
-    const finalValue = ['tonnages', 'ratePerTon'].includes(name) 
-      ? parseFloat(value) || 0 
-      : uppercaseFields.includes(name) 
-        ? value.toUpperCase() 
-        : value;
+    // Auto-uppercase text fields for consistency; truck plates → T{digits} {letters}
+    const uppercaseFields = ['trailerNo', 'destination', 'loadingPoint', 'clientName', 'haulier', 'containerNo', 'driverName', 'invoiceNos', 'borderEntryDRC'];
+    const finalValue = ['tonnages', 'ratePerTon'].includes(name)
+      ? parseFloat(value) || 0
+      : name === 'truckNo'
+        ? formatTruckNumber(value)
+        : uppercaseFields.includes(name)
+          ? value.toUpperCase()
+          : value;
     
     setFormData((prev) => ({
       ...prev,

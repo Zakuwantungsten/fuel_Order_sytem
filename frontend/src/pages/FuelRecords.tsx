@@ -28,6 +28,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 import { replaceUrlPreservingState } from '../utils/historyState';
 import { pendingDoStatusLabel } from '../utils/pendingDo';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 // Map fuel record field names to their primary standard allocation key
 const ALLOCATION_FIELD_MAP: Record<string, keyof StandardAllocations> = {
@@ -670,7 +671,7 @@ const FuelRecords = () => {
       setPendingCreateKind('return');
       return;
     }
-    const truckNo = pendingCreateTruck.trim();
+    const truckNo = formatTruckNumber(pendingCreateTruck.trim());
     if (!truckNo || truckNo.length < 3) {
       toast.error('Enter a valid truck number');
       return;
@@ -1885,7 +1886,7 @@ const FuelRecords = () => {
             <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Truck number</label>
             <input
               value={pendingCreateTruck}
-              onChange={(e) => setPendingCreateTruck(e.target.value)}
+              onChange={(e) => setPendingCreateTruck(formatTruckNumber(e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm mb-4"
               placeholder="e.g. T123 ABC"
               autoFocus
