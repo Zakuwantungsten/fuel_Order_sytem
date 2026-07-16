@@ -6,6 +6,7 @@ import { deliveryOrdersAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import axios from 'axios';
 import { cleanDeliveryOrder, isCorruptedDriverName, formatTruckNumber } from '../utils/dataCleanup';
+import ConfirmModal from './SuperAdmin/ConfirmModal';
 
 interface DOFormProps {
   order?: DeliveryOrder;
@@ -103,8 +104,11 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Whether a saved draft was restored on open (drives the "draft restored" banner)
   const [hasDraft, setHasDraft] = useState(false);
+  const [flipConfirmOpen, setFlipConfirmOpen] = useState(false);
+  const [pendingSaveData, setPendingSaveData] = useState<Partial<DeliveryOrder> | null>(null);
   const { data: journeyConfig } = useJourneyConfig();
   const autoDownloadPdf = journeyConfig?.autoDownloadDOPdf ?? true;
+  const fuelAutomation = journeyConfig?.fuelAutomation;
   const isEditMode = !!order;
 
   // Dropdown states
@@ -237,64 +241,97 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    
-    console.log('=== DOForm handleSubmit START ===');
-    console.log('Form data before clean:', formData);
-    
-    // Check for corrupted data and alert user if found
-    if (isCorruptedDriverName(formData.driverName)) {
-      toast.warn('Driver name field contains invalid data (appears to be tonnage data). Please enter a valid driver name.');
-      return;
-    }
-    
-    // Clean and validate data before saving
-    const cleanedFormData = cleanDeliveryOrder(
-      formData
-    );
-    
-    console.log('Cleaned form data:', cleanedFormData);
-    
-    // For new orders, remove id/_id to prevent MongoDB conflicts
-    if (!order) {
-      delete cleanedFormData.id;
-      delete (cleanedFormData as any)._id;
-      console.log('Creating new DO (removed id/_id)');
+  const preventNumberInputScroll = (e: React.WheelEvent<HTMLInputElement>) => {
+    e.currentTarget.blur();
+  };
+
+  const needsImportToExportConfirm =
+    !!order &&
+    order.doType === 'DO' &&
+    order.importOrExport === 'IMPORT' &&
+    formData.importOrExport === 'EXPORT' &&
+    fuelAutomation?.doCancelCascade !== false;
+
+  const getImportToExportConfirmMessage = () => {
+    const doLabel = `${order?.doType || 'DO'}-${order?.doNumber}`;
+    const truck = formData.truckNo || order?.truckNo || 'this truck';
+    const lines = [
+      `You are changing ${doLabel} from IMPORT to EXPORT.`,
+      '',
+      'If you continue:',
+      `• The fuel journey created for this IMPORT DO will be cancelled`,
+    ];
+    if (fuelAutomation?.doExportUpdate !== false) {
+      lines.push(`• This DO will be linked as the EXPORT return leg on truck ${truck}'s active going journey`);
     } else {
-      console.log('Updating existing DO:', order.id || (order as any)._id);
+      lines.push(`• Export fuel automation is off — you will need to manually link this DO to truck ${truck} using the Link action`);
     }
-    
-    console.log('Calling onSave with data:', cleanedFormData);
-    
+    lines.push('', 'Click OK to confirm and save the update.');
+    return lines.join('\n');
+  };
+
+  const executeSave = async (cleanedFormData: Partial<DeliveryOrder>) => {
+    setIsSubmitting(true);
     try {
       const savedOrder = await onSave(cleanedFormData);
-      console.log('onSave returned:', savedOrder);
-      
+
       if (!order && savedOrder) {
-        // New DO created — the draft is spent, discard it.
         clearDODraft();
         setHasDraft(false);
         if (autoDownloadPdf) {
-          console.log('Auto-downloading PDF for new DO...');
           await handleDownload(savedOrder as DeliveryOrder);
         }
         onClose();
       } else {
-        // For edits, just close
-        console.log('Edit complete, closing form');
         onClose();
       }
     } catch (error) {
-      console.error('Error in handleSubmit:', error);
+      console.error('Error in executeSave:', error);
       toast.error('Failed to save delivery order. Check console for details.');
+      throw error;
     } finally {
       setIsSubmitting(false);
     }
-    
-    console.log('=== DOForm handleSubmit END ===');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    if (isCorruptedDriverName(formData.driverName)) {
+      toast.warn('Driver name field contains invalid data (appears to be tonnage data). Please enter a valid driver name.');
+      return;
+    }
+
+    const cleanedFormData = cleanDeliveryOrder(formData);
+
+    if (!order) {
+      delete cleanedFormData.id;
+      delete (cleanedFormData as any)._id;
+    }
+
+    if (needsImportToExportConfirm) {
+      setPendingSaveData(cleanedFormData);
+      setFlipConfirmOpen(true);
+      return;
+    }
+
+    await executeSave(cleanedFormData);
+  };
+
+  const handleConfirmImportToExportFlip = async () => {
+    if (!pendingSaveData) return;
+    setFlipConfirmOpen(false);
+    try {
+      await executeSave(pendingSaveData);
+    } finally {
+      setPendingSaveData(null);
+    }
+  };
+
+  const handleCancelImportToExportFlip = () => {
+    setFlipConfirmOpen(false);
+    setPendingSaveData(null);
   };
 
   const handleDownload = async (targetOrder: DeliveryOrder) => {
@@ -355,6 +392,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-2 md:px-4 pt-2 md:pt-4 pb-10 md:pb-20 text-center sm:block sm:p-0">
         {/* Background overlay */}
@@ -758,6 +796,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                       name="tonnages"
                       value={formData.tonnages || ''}
                       onChange={handleChange}
+                      onWheel={preventNumberInputScroll}
                       required
                       min="0"
                       step="0.1"
@@ -775,6 +814,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                       name="ratePerTon"
                       value={formData.ratePerTon || ''}
                       onChange={handleChange}
+                      onWheel={preventNumberInputScroll}
                       required
                       min="0"
                       step="0.01"
@@ -802,6 +842,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                       name="tonnages"
                       value={formData.tonnages || ''}
                       onChange={handleChange}
+                      onWheel={preventNumberInputScroll}
                       required
                       min="0"
                       step="0.1"
@@ -818,6 +859,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                       name="ratePerTon"
                       value={formData.ratePerTon || ''}
                       onChange={handleChange}
+                      onWheel={preventNumberInputScroll}
                       required
                       min="0"
                       step="0.01"
@@ -867,6 +909,19 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
         </div>
       </div>
     </div>
+
+    <ConfirmModal
+      open={flipConfirmOpen}
+      title="Change IMPORT to EXPORT?"
+      message={getImportToExportConfirmMessage()}
+      confirmLabel="OK, update DO"
+      cancelLabel="Cancel"
+      variant="warning"
+      loading={isSubmitting}
+      onConfirm={handleConfirmImportToExportFlip}
+      onCancel={handleCancelImportToExportFlip}
+    />
+    </>
   );
 };
 

@@ -368,11 +368,12 @@ export const deliveryOrdersAPI = {
     return response.data.data;
   },
 
-  update: async (id: string | number, data: Partial<DeliveryOrder>): Promise<{ order: DeliveryOrder; cascadeResults?: any }> => {
+  update: async (id: string | number, data: Partial<DeliveryOrder>): Promise<{ order: DeliveryOrder; cascadeResults?: any; message?: string }> => {
     const response = await apiClient.put(`/delivery-orders/${id}`, data);
     return {
       order: response.data.data,
       cascadeResults: response.data.cascadeResults,
+      message: response.data.message,
     };
   },
   

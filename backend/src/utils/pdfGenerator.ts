@@ -90,6 +90,12 @@ export const generateAmendedDOsPDF = (
     });
   };
 
+  const getOrderTotal = (order: IDeliveryOrder): number => {
+    if (typeof order.totalAmount === 'number') return order.totalAmount;
+    if (order.rateType === 'fixed_total') return order.ratePerTon || 0;
+    return (order.ratePerTon || 0) * (order.tonnages || 0);
+  };
+
   // Generate cover page
   const generateCoverPage = () => {
     // Header
@@ -245,8 +251,14 @@ export const generateAmendedDOsPDF = (
     // Rate Information
     doc.rect(40, currentY, 515, 30).stroke(colors.border);
     doc.fontSize(10);
-    doc.text(`Rate per Ton: $${order.ratePerTon}`, 50, currentY + 10);
-    doc.text(`Total Rate: $${(order.ratePerTon * order.tonnages).toFixed(2)}`, 250, currentY + 10);
+    doc.text(
+      order.rateType === 'fixed_total'
+        ? `Fixed Total: $${(order.ratePerTon || 0).toLocaleString()}`
+        : `Rate per Ton: $${order.ratePerTon || 0}`,
+      50,
+      currentY + 10
+    );
+    doc.text(`Total Rate: $${getOrderTotal(order).toFixed(2)}`, 250, currentY + 10);
     doc.text(`Import/Export: ${order.importOrExport}`, 400, currentY + 10);
     
     currentY += 40;

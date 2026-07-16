@@ -819,7 +819,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         console.log('=== UPDATE MODE ===');
         // Track which fields changed for amended DOs tracking
         const originalOrder = editingOrder!;
-        const editableFields = ['truckNo', 'trailerNo', 'destination', 'loadingPoint', 'tonnages', 'ratePerTon', 'driverName', 'clientName', 'haulier', 'containerNo', 'invoiceNos', 'cargoType'];
+        const editableFields = [
+          'truckNo', 'trailerNo', 'destination', 'loadingPoint', 'tonnages', 'ratePerTon',
+          'driverName', 'clientName', 'haulier', 'containerNo', 'invoiceNos', 'cargoType',
+          'importOrExport', 'rateType', 'borderEntryDRC'
+        ];
         
         editableFields.forEach(field => {
           const oldValue = originalOrder[field as keyof DeliveryOrder];
@@ -853,6 +857,16 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           if (result.cascadeResults.lpoEntriesUpdated > 0) {
             console.log(`${result.cascadeResults.lpoEntriesUpdated} LPO entries updated`);
           }
+        }
+
+        const manualFlipSteps = result.cascadeResults?.importExportFlip?.manualSteps as string[] | undefined;
+        if (manualFlipSteps?.length) {
+          toast.warn(
+            `DO ${savedOrder.doType}-${savedOrder.doNumber} updated. Manual fuel steps required:\n• ${manualFlipSteps.join('\n• ')}`,
+            { autoClose: 12000 }
+          );
+        } else if (result.message && result.message !== 'Delivery order updated successfully') {
+          toast.info(result.message, { autoClose: 8000 });
         }
 
         // Check if this is an EXPORT DO with truck number changed - try to re-link to fuel record

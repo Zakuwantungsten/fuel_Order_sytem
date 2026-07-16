@@ -13,6 +13,12 @@ export const addMonthlySummarySheets = (
   year: number,
   orderType: 'DO' | 'SDO' = 'DO'
 ): void => {
+  const resolveOrderTotal = (order: any) => {
+    if (typeof order.totalAmount === 'number') return order.totalAmount;
+    if (order.rateType === 'fixed_total') return order.ratePerTon || 0;
+    return (order.tonnages || 0) * (order.ratePerTon || 0);
+  };
+
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const ordersByMonth: { [key: string]: any[] } = {};
   
@@ -108,7 +114,7 @@ export const addMonthlySummarySheets = (
           order.haulier || '',
           order.tonnages,
           order.ratePerTon,
-          order.tonnages * order.ratePerTon,
+          resolveOrderTotal(order),
         ];
 
         // Center align all cells

@@ -14,6 +14,12 @@ const centerAlign: Partial<ExcelJS.Alignment> = {
   vertical: 'middle',
 };
 
+const resolveOrderTotal = (order: any): number => {
+  if (typeof order.totalAmount === 'number') return order.totalAmount;
+  if (order.rateType === 'fixed_total') return order.ratePerTon || 0;
+  return (order.tonnages || 0) * (order.ratePerTon || 0);
+};
+
 /** Parse "Jan-2026" → { monthIdx, year, dateFrom, dateTo } */
 export function parseMonthYearLabel(label: string): {
   monthIdx: number;
@@ -140,7 +146,7 @@ export function addDoSummaryTabSheets(
         order.haulier || '',
         order.tonnages,
         order.ratePerTon,
-        (order.tonnages || 0) * (order.ratePerTon || 0),
+        resolveOrderTotal(order),
       ];
       styleDataRow(row, headers.length, !!order.isCancelled);
     });

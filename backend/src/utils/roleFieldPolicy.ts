@@ -63,17 +63,19 @@ const DELIVERY_ORDER_FIELDS: Record<string, string[]> = {
     'date', 'truckNo', 'trailerNo', 'loadingPoint', 'destination',
     'tonnages', 'ratePerTon', 'driverName', 'clientName', 'containerNo',
     'editReason', 'status', 'haulier', 'invoiceNos', 'borderEntryDRC',
-    'doNumber', 'cargoType', 'rateType', 'totalAmount',
+    'doNumber', 'cargoType', 'rateType', 'totalAmount', 'importOrExport',
   ],
   fuel_order_maker: [
     'date', 'truckNo', 'trailerNo', 'loadingPoint', 'destination',
-    'tonnages', 'driverName', 'clientName', 'containerNo', 'editReason',
-    'haulier', 'invoiceNos', 'borderEntryDRC', 'cargoType',
+    'tonnages', 'ratePerTon', 'driverName', 'clientName', 'containerNo', 'editReason',
+    'haulier', 'invoiceNos', 'borderEntryDRC', 'cargoType', 'rateType', 'totalAmount',
+    'importOrExport',
   ],
   clerk: [
     'date', 'truckNo', 'trailerNo', 'loadingPoint', 'destination',
-    'tonnages', 'driverName', 'clientName', 'containerNo', 'editReason',
-    'haulier', 'invoiceNos', 'borderEntryDRC', 'cargoType',
+    'tonnages', 'ratePerTon', 'driverName', 'clientName', 'containerNo', 'editReason',
+    'haulier', 'invoiceNos', 'borderEntryDRC', 'cargoType', 'rateType', 'totalAmount',
+    'importOrExport',
   ],
 };
 

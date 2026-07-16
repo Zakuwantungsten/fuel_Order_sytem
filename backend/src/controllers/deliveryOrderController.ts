@@ -759,7 +759,18 @@ export const getDeliveryOrderSummaryAggregate = async (req: AuthRequest, res: Re
       if (dateTo) match.date.$lte = dateTo;
     }
 
-    const revenueExpr = { $multiply: [{ $ifNull: ['$tonnages', 0] }, { $ifNull: ['$ratePerTon', 0] }] };
+    const revenueExpr = {
+      $ifNull: [
+        '$totalAmount',
+        {
+          $cond: [
+            { $eq: ['$rateType', 'fixed_total'] },
+            { $ifNull: ['$ratePerTon', 0] },
+            { $multiply: [{ $ifNull: ['$tonnages', 0] }, { $ifNull: ['$ratePerTon', 0] }] },
+          ],
+        },
+      ],
+    };
 
     const pipeline: any[] = [
       { $match: match },
@@ -2084,7 +2095,11 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     }
 
     // Track changes for edit history
-    const trackableFields = ['truckNo', 'trailerNo', 'loadingPoint', 'destination', 'tonnages', 'ratePerTon', 'driverName', 'clientName', 'containerNo'];
+    const trackableFields = [
+      'truckNo', 'trailerNo', 'loadingPoint', 'destination', 'tonnages', 'ratePerTon',
+      'driverName', 'clientName', 'containerNo', 'haulier', 'invoiceNos', 'cargoType',
+      'borderEntryDRC', 'importOrExport', 'rateType',
+    ];
     const changes: { field: string; oldValue: any; newValue: any }[] = [];
 
     for (const field of trackableFields) {
@@ -2099,6 +2114,21 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     // Prepare the update data - exclude fields that shouldn't be directly set
     const { editHistory, editReason, _id, __v, createdAt, ...fieldsToUpdate } = payload;
+
+    const importExportChanged =
+      payload.importOrExport !== undefined &&
+      payload.importOrExport !== originalDO.importOrExport;
+    const shouldRecalculateTotal = ['tonnages', 'ratePerTon', 'rateType'].some(
+      field => payload[field] !== undefined
+    );
+    if (shouldRecalculateTotal) {
+      const nextRateType = fieldsToUpdate.rateType ?? originalDO.rateType ?? 'per_ton';
+      const nextTonnages = Number(fieldsToUpdate.tonnages ?? originalDO.tonnages ?? 0);
+      const nextRatePerTon = Number(fieldsToUpdate.ratePerTon ?? originalDO.ratePerTon ?? 0);
+      fieldsToUpdate.totalAmount = nextRateType === 'fixed_total'
+        ? nextRatePerTon
+        : nextTonnages * nextRatePerTon;
+    }
     
     // Build the update object
     const updateData: any = {
@@ -2143,6 +2173,11 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       routeNotificationCreated?: boolean;
       lpoEntriesUpdated: number;
       affectedFuelRecordIds: string[];
+      importExportFlip?: {
+        from: string;
+        to: string;
+        manualSteps: string[];
+      };
     } = {
       fuelRecordUpdated: false,
       fuelRecordChanges: [],
@@ -2170,8 +2205,128 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           throw new ApiError(404, 'Delivery order not found');
         }
 
+        const mergeAffectedFuelRecordIds = (ids?: string[]) => {
+          if (!ids || ids.length === 0) return;
+          cascadeResults.affectedFuelRecordIds = Array.from(
+            new Set([...cascadeResults.affectedFuelRecordIds, ...ids])
+          );
+        };
+
+        if (importExportChanged && originalDO.doType === 'DO' && deliveryOrder.doType === 'DO') {
+          const flippedFromImport = originalDO.importOrExport === 'IMPORT';
+          const flippedFromExport = originalDO.importOrExport === 'EXPORT';
+          const flippedToImport = deliveryOrder.importOrExport === 'IMPORT';
+          const flippedToExport = deliveryOrder.importOrExport === 'EXPORT';
+          const manualSteps: string[] = [];
+
+          cascadeResults.importExportFlip = {
+            from: originalDO.importOrExport,
+            to: deliveryOrder.importOrExport,
+            manualSteps,
+          };
+
+          // Undo the previous direction's fuel side-effect when cancel cascade is on.
+          if (fuelAutomationFlags.doCancelCascade) {
+            const rollbackResult = await cascadeCancelFuelRecord(
+              originalDO,
+              `Changed DO direction from ${originalDO.importOrExport} to ${deliveryOrder.importOrExport}`,
+              username,
+              session
+            );
+            if (rollbackResult.cancelled) {
+              cascadeResults.fuelRecordUpdated = true;
+              cascadeResults.fuelRecordId = rollbackResult.fuelRecordId || cascadeResults.fuelRecordId;
+              mergeAffectedFuelRecordIds(rollbackResult.affectedFuelRecordIds);
+              cascadeResults.fuelRecordChanges.push(
+                rollbackResult.action === 'fully_cancelled'
+                  ? `Removed original IMPORT fuel journey for ${originalDO.doNumber}`
+                  : `Removed original EXPORT return-leg link for ${originalDO.doNumber}`
+              );
+            }
+          } else if (flippedFromExport) {
+            manualSteps.push(
+              'The EXPORT return-leg link is still on the fuel record — revert it manually in Fuel Records.'
+            );
+            amendCascadeSkipped = true;
+            logger.info(
+              `[fuelAutomation] doCancelCascade OFF — EXPORT link kept for DO ${originalDO.doNumber} after flip to IMPORT`
+            );
+          } else if (flippedFromImport) {
+            manualSteps.push(
+              'The IMPORT fuel journey may still exist — cancel it manually in Fuel Records.'
+            );
+            amendCascadeSkipped = true;
+            logger.info(
+              `[fuelAutomation] doCancelCascade OFF — IMPORT fuel journey kept for DO ${originalDO.doNumber} after flip to EXPORT`
+            );
+          }
+
+          if (flippedToImport) {
+            // EXPORT → IMPORT always creates a new going fuel record, even when doImportCreate is off.
+            const shouldCreateImport = fuelAutomationFlags.doImportCreate || flippedFromExport;
+            if (shouldCreateImport) {
+              const { routes, truckBatches, batchDestinationRules: bdr } = await loadFuelConfig();
+              const importResult = await applyImportFuelRecords(
+                [deliveryOrder.toObject()],
+                routes,
+                truckBatches,
+                username,
+                bdr,
+                { session }
+              );
+              if (importResult.createdFuelIds.length > 0) {
+                cascadeResults.fuelRecordUpdated = true;
+                cascadeResults.fuelRecordId = importResult.createdFuelIds[0];
+                mergeAffectedFuelRecordIds(importResult.createdFuelIds);
+                cascadeResults.fuelRecordChanges.push(
+                  `Created IMPORT fuel journey for ${deliveryOrder.doNumber}`
+                );
+              }
+              if (flippedFromExport && !fuelAutomationFlags.doImportCreate) {
+                logger.info(
+                  `[fuelAutomation] doImportCreate OFF — created IMPORT fuel journey anyway for EXPORT→IMPORT flip on DO ${deliveryOrder.doNumber}`
+                );
+              }
+            } else {
+              manualSteps.push('Create the IMPORT fuel journey manually in Fuel Records.');
+              amendCascadeSkipped = true;
+            }
+          } else if (flippedToExport) {
+            if (fuelAutomationFlags.doExportUpdate) {
+              const { routes } = await loadFuelConfig();
+              const exportResult = await applyExportFuelUpdates(
+                [deliveryOrder.toObject()],
+                routes,
+                { session }
+              );
+              if (exportResult.unlinkedExports.length > 0) {
+                throw new ApiError(
+                  422,
+                  `Cannot change DO ${deliveryOrder.doNumber} to EXPORT: no matching active going fuel record for truck ${deliveryOrder.truckNo}. Create/link the going journey first, or turn off export fuel automation.`
+                );
+              }
+              if (exportResult.updatedFuelIds.length > 0) {
+                cascadeResults.fuelRecordUpdated = true;
+                cascadeResults.fuelRecordId = exportResult.updatedFuelIds[0];
+                mergeAffectedFuelRecordIds(exportResult.updatedFuelIds);
+                cascadeResults.fuelRecordChanges.push(
+                  `Linked EXPORT return leg for ${deliveryOrder.doNumber}`
+                );
+              }
+            } else {
+              manualSteps.push(
+                'Manually link this EXPORT DO to the truck fuel record using the Link action on the DO row.'
+              );
+              amendCascadeSkipped = true;
+              logger.info(
+                `[fuelAutomation] doExportUpdate OFF — DO ${deliveryOrder.doNumber} changed to EXPORT; manual link required`
+              );
+            }
+          }
+        }
+
         // Cascade to fuel records if relevant fields changed — gated by automation toggle.
-        if (changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
+        if (!importExportChanged && changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
           if (fuelAutomationFlags.doAmendCascade) {
             const bodyWithRole = { ...payload, userRole, userId: req.user?.userId };
             const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username, session);
@@ -2179,7 +2334,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
             cascadeResults.fuelRecordChanges = fuelResult.changes || [];
             cascadeResults.fuelRecordId = fuelResult.fuelRecordId;
             cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
-            cascadeResults.affectedFuelRecordIds = fuelResult.affectedFuelRecordIds || [];
+            mergeAffectedFuelRecordIds(fuelResult.affectedFuelRecordIds || []);
             if (fuelResult.routeNotificationCreated) {
               cascadeResults.fuelRecordLocked = true;
             }
@@ -2236,7 +2391,9 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     if (cascadeResults.routeNotificationCreated) {
       responseMessage += '. Note: Route configuration not found - fuel record locked and notification created for admin';
     }
-    if (amendCascadeSkipped) {
+    if (cascadeResults.importExportFlip?.manualSteps.length) {
+      responseMessage += `. Manual fuel steps: ${cascadeResults.importExportFlip.manualSteps.join(' ')}`;
+    } else if (amendCascadeSkipped) {
       responseMessage += '. Note: fuel-record automation is disabled — adjust the fuel record manually.';
     }
 

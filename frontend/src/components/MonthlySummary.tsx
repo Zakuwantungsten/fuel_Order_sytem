@@ -51,6 +51,12 @@ interface GroupedOrders {
   [key: string]: DeliveryOrder[];
 }
 
+const getOrderTotal = (order: DeliveryOrder): number => {
+  if (typeof order.totalAmount === 'number') return order.totalAmount;
+  if (order.rateType === 'fixed_total') return order.ratePerTon || 0;
+  return (order.tonnages || 0) * (order.ratePerTon || 0);
+};
+
 const MonthlySummary = ({ importOrExport = 'ALL', doType = 'DO', fuelRecords = [], lpoEntries = [] }: MonthlySummaryProps) => {
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
@@ -752,10 +758,10 @@ const MonthlySummary = ({ importOrExport = 'ALL', doType = 'DO', fuelRecords = [
                           {order.tonnages}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600">
-                          ${order.ratePerTon}
+                          {order.rateType === 'fixed_total' ? `Fixed $${order.ratePerTon}` : `$${order.ratePerTon}`}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-semibold text-primary-600 dark:text-primary-400 border border-gray-300 dark:border-gray-600">
-                          ${(order.tonnages * order.ratePerTon).toFixed(2)}
+                          ${getOrderTotal(order).toFixed(2)}
                         </td>
                       </tr>
                     ))}
@@ -769,7 +775,7 @@ const MonthlySummary = ({ importOrExport = 'ALL', doType = 'DO', fuelRecords = [
                       </td>
                       <td className="px-4 py-3 border border-gray-300 dark:border-gray-600"></td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-primary-600 dark:text-primary-400 border border-gray-300 dark:border-gray-600">
-                        ${groupOrders.reduce((sum, o) => sum + (o.tonnages * o.ratePerTon), 0).toFixed(2)}
+                        ${groupOrders.reduce((sum, o) => sum + getOrderTotal(o), 0).toFixed(2)}
                       </td>
                     </tr>
                   </tbody>
