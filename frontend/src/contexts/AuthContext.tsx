@@ -5,6 +5,7 @@ import apiClient, { authAPI } from '../services/api';
 import { activityTracker } from '../utils/activityTracker';
 import { setSystemTimezone, setSystemDateFormat, setSystemName } from '../utils/timezone';
 import systemConfigAPI from '../services/systemConfigService';
+import { toUserFacingErrorMessage } from '../utils/userFacingErrors';
 
 // Auth Actions
 type AuthAction =
@@ -495,7 +496,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       return authResponse;
     } catch (error: any) {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Login failed';
+      const errorMessage = toUserFacingErrorMessage(error);
       dispatch({ type: 'AUTH_ERROR', payload: errorMessage });
       throw error;
     }

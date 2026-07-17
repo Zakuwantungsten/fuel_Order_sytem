@@ -8,7 +8,8 @@ import {
   authRateLimiter,
   mfaSetupRateLimiter,
   passwordResetRateLimiter,
-  registrationRateLimiter
+  registrationRateLimiter,
+  refreshTokenRateLimiter,
 } from '../middleware/rateLimiters';
 
 const router = Router();
@@ -63,7 +64,7 @@ router.post(
   asyncHandler(authController.setupMFAEmailVerify)
 );
 
-router.post('/refresh', asyncHandler(authController.refreshToken));
+router.post('/refresh', refreshTokenRateLimiter, asyncHandler(authController.refreshToken));
 
 // ── Passkeys / WebAuthn (see PASSKEY_IMPLEMENTATION.md) ──────────────────
 // Passwordless login (public, rate-limited)

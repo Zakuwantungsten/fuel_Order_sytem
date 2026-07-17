@@ -2,6 +2,7 @@ import { config } from '../config';
 import { BlockedIP, BlockReason } from '../models/BlockedIP';
 import { IPRule } from '../models/IPRule';
 import { SystemConfig } from '../models/SystemConfig';
+import { matchesRule } from '../middleware/ipFilter';
 import logger from '../utils/logger';
 import { securityAlertService } from './securityAlertService';
 
@@ -40,6 +41,18 @@ const TRUSTED_IP_TTL_MS = 60 * 60 * 1000; // 1 hour after last successful auth
 // 10-minute window into a forever-outage for a shared IP. Manual admin blocks
 // can still be permanent.
 const AUTO_BLOCK_FALLBACK_MS = 10 * 60 * 1000;
+
+/**
+ * Probe/noise events reject the individual request but do NOT escalate to an
+ * IP-wide ban — shared mobile CGNAT egress must not lock out whole driver cohorts.
+ */
+const NON_ESCALATING_REASONS = new Set<BlockReason>([
+  'path_probe',
+  'suspicious_404',
+  'ua_blocked',
+  'honeypot',
+  'rate_limit',
+]);
 
 // Track when we last synced from DB
 let _lastDbSync = 0;
@@ -232,6 +245,51 @@ const BlocklistService = {
     return true;
   },
 
+  /** Configured office/VPN egress from TRUSTED_ADMIN_IPS — never auto-blocked. */
+  isConfiguredTrustedAdmin(ip: string): boolean {
+    const rules = config.trustedAdminIps;
+    if (!rules.length) return false;
+    return rules.some((rule) => matchesRule(normalizeIP(ip), rule));
+  },
+
+  /** Trusted post-auth IP or configured admin egress — skip auto-escalation. */
+  isExemptFromAutoBlock(ip: string): boolean {
+    const normalized = normalizeIP(ip);
+    return this.isTrusted(normalized) || this.isConfiguredTrustedAdmin(normalized);
+  },
+
+  /** Fast in-memory block check (no DB sync) — for sync rate-limit skip logic. */
+  isBlockedSync(ip: string): { blocked: boolean; reason?: BlockReason; retryAfterMs?: number } {
+    if (!config.securityIpBlocking) return { blocked: false };
+
+    pruneExpired();
+    const record = blockedIPs.get(normalizeIP(ip));
+    if (!record) return { blocked: false };
+
+    if (record.expiresAt !== null && record.expiresAt <= Date.now()) {
+      blockedIPs.delete(normalizeIP(ip));
+      return { blocked: false };
+    }
+
+    const retryAfterMs = record.expiresAt !== null ? record.expiresAt - Date.now() : undefined;
+    return { blocked: true, reason: record.reason, retryAfterMs };
+  },
+
+  /** Current suspicious strike count within the sliding window (in-memory). */
+  getSuspiciousStrikeCount(ip: string): number {
+    const record = suspiciousIPs.get(normalizeIP(ip));
+    if (!record) return 0;
+    pruneSuspiciousWindow(record);
+    return record.count;
+  },
+
+  /** Clear in-memory blocks immediately after emergency unblock (DB already updated). */
+  flushMemoryBlocks(): void {
+    blockedIPs.clear();
+    suspiciousIPs.clear();
+    _lastDbSync = 0;
+  },
+
   /**
    * Record a suspicious event from an IP.
    * After N events within the sliding window → auto-block.
@@ -244,11 +302,16 @@ const BlocklistService = {
     const normalized = normalizeIP(ip);
     const now = Date.now();
 
-    // Never escalate against an IP that real users are actively logged in from.
-    // The individual offending requests are still rejected by their middleware
-    // (403/404); this only prevents the IP-wide auto-block.
-    if (this.isTrusted(normalized)) {
-      logger.info(`BlocklistService: Suspicious event from trusted (authenticated) IP ${normalized} ignored (${reason})`);
+    // Never escalate against an IP that real users are actively logged in from,
+    // or configured admin/office egress (TRUSTED_ADMIN_IPS).
+    if (this.isExemptFromAutoBlock(normalized)) {
+      logger.info(`BlocklistService: Suspicious event from exempt IP ${normalized} ignored (${reason})`);
+      return { blocked: false };
+    }
+
+    // Probe/noise: log the strike but do not accumulate toward IP-wide ban.
+    if (NON_ESCALATING_REASONS.has(reason)) {
+      logger.debug(`BlocklistService: Non-escalating event from ${normalized} (${reason}) — request rejected only`);
       return { blocked: false };
     }
 

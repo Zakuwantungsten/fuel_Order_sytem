@@ -4,6 +4,10 @@ import BlocklistService from '../services/blocklistService';
 import { getClientIP } from '../utils/getClientIP';
 import logger from '../utils/logger';
 import { securityLogService } from '../services/securityLogService';
+import {
+  hasValidAccessToken,
+  SERVICE_UNAVAILABLE_MESSAGE,
+} from '../utils/requestSecurityContext';
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
 
@@ -25,6 +29,16 @@ export async function ipReputationMiddleware(req: Request, res: Response, next: 
 
   // Skip check for loopback/unknown
   if (clientIP === 'unknown' || clientIP === '127.0.0.1' || clientIP === '::1') {
+    return next();
+  }
+
+  // Active sessions must keep working — never hard-block authenticated traffic.
+  if (hasValidAccessToken(req)) {
+    return next();
+  }
+
+  // Configured admin egress is never hard-blocked (credentials/MFA still required).
+  if (BlocklistService.isConfiguredTrustedAdmin(clientIP)) {
     return next();
   }
 
@@ -61,7 +75,7 @@ export async function ipReputationMiddleware(req: Request, res: Response, next: 
 
       res.status(403).json({
         success: false,
-        message: 'Access denied',
+        message: SERVICE_UNAVAILABLE_MESSAGE,
       });
       return;
     }

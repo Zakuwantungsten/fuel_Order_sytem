@@ -11,6 +11,8 @@ interface CriticalEmailOptions {
   message: string;
   priority: 'low' | 'medium' | 'high' | 'critical';
   additionalRecipients?: string[];
+  /** When set, send ONLY to these addresses (skip super_admin lookup). */
+  recipientsOverride?: string[];
 }
 
 interface PasswordResetEmailOptions {
@@ -277,21 +279,27 @@ class EmailService {
     }
 
     try {
-      const superAdmins = await User.find({
-        role: 'super_admin',
-        isActive: true,
-        isDeleted: false,
-      }).select('email firstName lastName');
+      let recipients: string[];
 
-      if (superAdmins.length === 0) {
-        logger.warn('No super admin users found to send critical email');
-        return;
+      if (options.recipientsOverride?.length) {
+        recipients = options.recipientsOverride;
+      } else {
+        const superAdmins = await User.find({
+          role: 'super_admin',
+          isActive: true,
+          isDeleted: false,
+        }).select('email firstName lastName');
+
+        if (superAdmins.length === 0 && !options.additionalRecipients?.length) {
+          logger.warn('No super admin users found to send critical email');
+          return;
+        }
+
+        recipients = [
+          ...superAdmins.map((a) => a.email),
+          ...(options.additionalRecipients || []),
+        ];
       }
-
-      const recipients = [
-        ...superAdmins.map((a) => a.email),
-        ...(options.additionalRecipients || []),
-      ];
 
       const priorityEmoji: Record<string, string> = {
         critical: '🔴', high: '🟠', medium: '🟡', low: '🟢',

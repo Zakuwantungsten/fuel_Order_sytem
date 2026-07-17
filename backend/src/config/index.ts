@@ -80,12 +80,21 @@ export const config = {
   securityPathBlocking: process.env.SECURITY_PATH_BLOCKING !== 'false',   // enabled by default
   securityBlockPaths: process.env.SECURITY_BLOCK_PATHS || '',             // comma-separated extra paths/regex
   securityIpBlocking: process.env.SECURITY_IP_BLOCKING !== 'false',       // enabled by default
-  securitySuspiciousThreshold: parseInt(process.env.SECURITY_SUSPICIOUS_THRESHOLD || '5', 10),
+  securitySuspiciousThreshold: parseInt(process.env.SECURITY_SUSPICIOUS_THRESHOLD || '10', 10),
   securityBlockDurationMs: parseInt(process.env.SECURITY_BLOCK_DURATION_MS || '600000', 10), // 10 min
-  security404CountThreshold: parseInt(process.env.SECURITY_404_COUNT_THRESHOLD || '30', 10),
+  security404CountThreshold: parseInt(process.env.SECURITY_404_COUNT_THRESHOLD || '50', 10),
   security404WindowMs: parseInt(process.env.SECURITY_404_WINDOW_MS || '300000', 10),         // 5 min
   securityEventLogging: process.env.SECURITY_EVENT_LOGGING !== 'false',   // enabled by default
   securityAlertEmail: process.env.SECURITY_ALERT_EMAIL || '',
+  // When set, critical security emails go ONLY here (not every super_admin account)
+  securityAlertEmailOnly: process.env.SECURITY_ALERT_EMAIL_ONLY !== 'false',
+  // Office / VPN egress — never auto-blocked (login still requires credentials)
+  trustedAdminIps: (process.env.TRUSTED_ADMIN_IPS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+  // Secret token for HTTP emergency bulk-unblock (ops-only; disabled when unset)
+  securityEmergencyUnblockToken: process.env.SECURITY_EMERGENCY_UNBLOCK_TOKEN || '',
   securityAlertCooldownMs: parseInt(process.env.SECURITY_ALERT_COOLDOWN_MS || '21600000', 10), // 6 hours
   securityUaBlocking: process.env.SECURITY_UA_BLOCKING !== 'false',       // enabled by default
   securityIpGating: process.env.SECURITY_IP_GATING === 'true',           // disabled by default
@@ -95,7 +104,7 @@ export const config = {
   securityDigestCron: process.env.SECURITY_DIGEST_CRON || '0 7 * * *',       // daily 07:00
   securityDigestWindowMs: parseInt(process.env.SECURITY_DIGEST_WINDOW_MS || '86400000', 10), // 24h
   // Coordinated-attack spike: N auto-blocks within the window → one critical alert
-  securityBlockSpikeThreshold: parseInt(process.env.SECURITY_BLOCK_SPIKE_THRESHOLD || '25', 10),
+  securityBlockSpikeThreshold: parseInt(process.env.SECURITY_BLOCK_SPIKE_THRESHOLD || '100', 10),
   securityBlockSpikeWindowMs: parseInt(process.env.SECURITY_BLOCK_SPIKE_WINDOW_MS || '600000', 10), // 10 min
 
   // Redis — used for Socket.io adapter, caching, and session sharing

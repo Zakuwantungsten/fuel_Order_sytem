@@ -116,6 +116,7 @@ const SEVERITY_TO_PRIORITY: Record<AlertSeverity, 'critical' | 'high' | 'medium'
 const HIGH_SEVERITY_EMAIL_EVENTS = new Set([
   'brute_force',       // targeted account attack
   'break_glass',       // emergency access used
+  'emergency_unblock', // ops bulk-unblock invoked
   'impossible_travel', // account likely compromised
   'policy_change',     // security config modified
   'mfa_bypass',        // MFA defeated
@@ -181,16 +182,20 @@ class SecurityAlertService {
     //     go to DB + WebSocket + Slack only — the block is already working.
     if (shouldSendEmail(input.severity, input.eventType)) {
       try {
-        const additionalRecipients = config.securityAlertEmail
-          ? [config.securityAlertEmail]
-          : undefined;
-
-        await sendCriticalEmail({
+        const emailOpts: Parameters<typeof sendCriticalEmail>[0] = {
           subject: `${emoji} Security Alert: ${input.title}`,
           message: this.buildEmailBody(input),
           priority: SEVERITY_TO_PRIORITY[input.severity],
-          additionalRecipients,
-        });
+        };
+
+        // Private SOC channel: when configured, critical alerts go only to you.
+        if (config.securityAlertEmailOnly && config.securityAlertEmail) {
+          emailOpts.recipientsOverride = [config.securityAlertEmail];
+        } else if (config.securityAlertEmail) {
+          emailOpts.additionalRecipients = [config.securityAlertEmail];
+        }
+
+        await sendCriticalEmail(emailOpts);
       } catch (err) {
         logger.error('[SecurityAlert] Email dispatch failed:', err);
       }

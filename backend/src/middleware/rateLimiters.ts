@@ -1,66 +1,72 @@
 import rateLimit from 'express-rate-limit';
 import { config } from '../config';
+import {
+  shouldSkipRateLimit,
+  shouldApplyAuthRateLimit,
+  SERVICE_UNAVAILABLE_MESSAGE,
+} from '../utils/requestSecurityContext';
 
 /**
- * Strict rate limiter for authentication endpoints
- * Prevents brute force attacks on login
+ * Strict rate limiter for authentication endpoints.
+ * Only applies to IPs already flagged suspicious or auto-blocked — clean IPs
+ * (typical first-time clerk/driver login) are not throttled.
  */
 export const authRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5, // 5 per minute
-  message: { success: false, message: 'Too many login attempts. Please try again after 1 minute.' },
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { success: false, message: SERVICE_UNAVAILABLE_MESSAGE },
   standardHeaders: true,
   legacyHeaders: false,
-  // Skip successful requests to allow legitimate users
-  skipSuccessfulRequests: true, // Don't count successful logins
+  skipSuccessfulRequests: true,
+  skip: (req) => !shouldApplyAuthRateLimit(req),
 });
 
 /**
  * Rate limiter for MFA setup endpoints (generate / verify)
- * More lenient than auth — these are post-login setup steps, not brute-force targets
  */
 export const mfaSetupRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 15,
-  message: { success: false, message: 'Too many requests. Please try again after 1 minute.' },
+  message: { success: false, message: SERVICE_UNAVAILABLE_MESSAGE },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: shouldSkipRateLimit,
 });
 
 /**
  * Rate limiter for password reset requests
- * Prevents account enumeration and spam
  */
 export const passwordResetRateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // Limit each IP to 3 requests per hour
-  message: { success: false, message: 'Too many password reset requests. Please try again after 1 hour.' },
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: { success: false, message: SERVICE_UNAVAILABLE_MESSAGE },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: shouldSkipRateLimit,
 });
 
 /**
  * Rate limiter for user registration
- * Prevents spam account creation
  */
 export const registrationRateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // Limit each IP to 5 registrations per hour
-  message: { success: false, message: 'Too many registration attempts. Please try again after 1 hour.' },
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: SERVICE_UNAVAILABLE_MESSAGE },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: shouldSkipRateLimit,
 });
 
 /**
  * Rate limiter for driver authentication
- * Stricter than regular auth due to simplified auth flow
  */
 export const driverAuthRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 3, // Limit each IP to 3 attempts per windowMs
-  message: { success: false, message: 'Too many driver authentication attempts. Please try again after 15 minutes.' },
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: SERVICE_UNAVAILABLE_MESSAGE },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => !shouldApplyAuthRateLimit(req),
 });
 
 /**
@@ -69,34 +75,44 @@ export const driverAuthRateLimiter = rateLimit({
 export const generalRateLimiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMaxRequests,
-  message: { success: false, message: 'Too many requests from this IP, please try again later.' },
+  message: { success: false, message: SERVICE_UNAVAILABLE_MESSAGE },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: shouldSkipRateLimit,
 });
 
 /**
- * Data endpoints rate limiter (standard traffic).
- * This SPA makes 20-40 parallel requests on every page load, so the per-IP
- * ceiling must be high enough for a legitimate user navigating normally.
- * 500 req/min gives comfortable headroom while still blocking automated abuse.
- * Configurable via API_RATE_LIMIT_MAX env var (default 500).
+ * Data endpoints rate limiter — authenticated users are never throttled.
  */
 export const apiRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
   max: parseInt(process.env.API_RATE_LIMIT_MAX || '500', 10),
-  message: { success: false, message: 'Too many requests from this IP, please try again later.' },
+  message: { success: false, message: SERVICE_UNAVAILABLE_MESSAGE },
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: false,
+  skip: shouldSkipRateLimit,
+});
+
+/**
+ * Token refresh — light limit, skipped for trusted/clean IPs
+ */
+export const refreshTokenRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { success: false, message: SERVICE_UNAVAILABLE_MESSAGE },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: shouldSkipRateLimit,
 });
 
 /**
  * Export/download rate limiter
  */
 export const exportRateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5, // 5 req/min
-  message: { success: false, message: 'Too many export requests. Please try again later.' },
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { success: false, message: SERVICE_UNAVAILABLE_MESSAGE },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: shouldSkipRateLimit,
 });

@@ -20,7 +20,10 @@
 import { BlockedIP } from '../models/BlockedIP';
 import { IPRule } from '../models/IPRule';
 
-export async function unblockIPs(options: { ip?: string; includeManualRules?: boolean } = {}): Promise<void> {
+export async function unblockIPs(options: { ip?: string; includeManualRules?: boolean } = {}): Promise<{ blockedIPsCleared: number; ipRulesCleared: number }> {
+  let blockedIPsCleared = 0;
+  let ipRulesCleared = 0;
+
   const blockFilter: any = { isActive: true };
   if (options.ip) blockFilter.ip = options.ip;
 
@@ -37,6 +40,7 @@ export async function unblockIPs(options: { ip?: string; includeManualRules?: bo
       unblockedAt: new Date(),
       unblockedBy: 'script:unblock-ips',
     });
+    blockedIPsCleared = result.modifiedCount;
     console.log(`Deactivated ${result.modifiedCount} BlockedIP record(s).`);
   }
 
@@ -55,10 +59,12 @@ export async function unblockIPs(options: { ip?: string; includeManualRules?: bo
       console.log(`  ${r.ip}  by=${r.createdBy}  ${r.description}`);
     }
     const result = await IPRule.updateMany(ruleFilter, { isActive: false });
+    ipRulesCleared = result.modifiedCount;
     console.log(`Deactivated ${result.modifiedCount} IPRule(s).`);
   }
 
   console.log('\nDone. The running backend picks this up within 60s (or restart it to apply immediately).');
+  return { blockedIPsCleared, ipRulesCleared };
 }
 
 // Standalone script wrapper

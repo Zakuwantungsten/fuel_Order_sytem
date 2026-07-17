@@ -37,6 +37,13 @@ import { backfillFuelMonthKeys } from './scripts/backfillFuelMonthKeys';
 import databaseMonitor from './utils/databaseMonitor';
 import { isPrimaryWorker, getWorkerInstanceId } from './utils/workerRole';
 import { getClientIP } from './utils/getClientIP';
+import mongoose from 'mongoose';
+import { asyncHandler } from './middleware/errorHandler';
+import {
+  emergencyUnblock,
+  emergencyUnblockRateLimiter,
+} from './controllers/emergencyUnblockController';
+import { ensurePrivilegedMfaPolicy } from './scripts/ensurePrivilegedMfaPolicy';
 
 // Validate environment variables
 try {
@@ -144,6 +151,23 @@ app.get('/api/health', (_req, res) => {
     // unauthenticated endpoint is unnecessary and aids timing/fingerprint attacks.
   });
 });
+
+// Readiness probe — verifies MongoDB connectivity (for uptime monitors / load balancers)
+app.get('/api/health/ready', (_req, res) => {
+  const dbReady = mongoose.connection.readyState === 1;
+  if (!dbReady) {
+    res.status(503).json({ success: false, ready: false, message: 'Database unavailable' });
+    return;
+  }
+  res.status(200).json({ success: true, ready: true, message: 'Server is ready' });
+});
+
+// Emergency bulk-unblock — mounted BEFORE security middleware so a blocked IP can call it
+app.post(
+  '/api/v1/security/emergency-unblock',
+  emergencyUnblockRateLimiter,
+  asyncHandler(emergencyUnblock)
+);
 
 // Passkey discovery endpoint. Browsers and password managers automatically probe
 // this well-known path to learn whether the site supports passkeys (WebAuthn) and
@@ -395,6 +419,15 @@ const startServer = async () => {
 
     // Load persisted autoblock config from DB into runtime config
     await BlocklistService.initConfig();
+
+    // Require MFA for admin + super_admin (idempotent)
+    if (isPrimaryWorker()) {
+      try {
+        await ensurePrivilegedMfaPolicy();
+      } catch (mfaErr) {
+        logger.warn('Privileged MFA policy seed failed (non-fatal):', mfaErr);
+      }
+    }
 
     // Initialize WebSocket server (will attach Redis adapter if available)
     initializeWebSocket(httpServer);

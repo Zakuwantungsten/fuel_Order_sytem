@@ -136,12 +136,20 @@ apiClient.interceptors.response.use(
 
 /** Pull a human-friendly message out of an axios error. */
 export function getApiErrorMessage(error: unknown, fallback = 'Something went wrong'): string {
+  const QUIET = new Set([429, 503, 530, 502, 504]);
+  const SECURITY = ['access denied', 'ip blocked', 'too many', 'blocked', 'attack', 'forbidden'];
+
   if (axios.isAxiosError(error)) {
-    return (
-      (error.response?.data as { message?: string } | undefined)?.message ||
-      error.message ||
-      fallback
-    );
+    const status = error.response?.status;
+    if (status && QUIET.has(status)) {
+      return 'Service temporarily unavailable. Please try again in a moment.';
+    }
+    const msg = (error.response?.data as { message?: string } | undefined)?.message || error.message || '';
+    const lower = msg.toLowerCase();
+    if (SECURITY.some((p) => lower.includes(p))) {
+      return 'Service temporarily unavailable. Please try again in a moment.';
+    }
+    return msg || fallback;
   }
   if (error instanceof Error) return error.message;
   return fallback;
