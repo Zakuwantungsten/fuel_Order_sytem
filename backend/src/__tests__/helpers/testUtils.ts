@@ -100,6 +100,7 @@ export const createTestLPOEntry = async (overrides: any = {}) => {
       rate: overrides.pricePerLtr || 1.5,
       amount: (overrides.ltrs || 400) * (overrides.pricePerLtr || 1.5),
       dest: overrides.destinations || 'LUBUMBASHI',
+      pickedAtStation: overrides.pickedAtStation || null,
       isCancelled: false,
     }],
     total: (overrides.ltrs || 400) * (overrides.pricePerLtr || 1.5),

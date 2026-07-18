@@ -31,6 +31,8 @@ export interface LPOFilters {
   limit: number;
   search?: string;
   station?: string;
+  stations?: string[];
+  periods?: Array<{ year: number; month: number }>;
   dateFrom?: string;
   dateTo?: string;
   sort?: string;
@@ -54,7 +56,15 @@ export function periodsToDateRange(periods: Array<{ year: number; month: number 
   return { dateFrom: minDate, dateTo: maxDate };
 }
 
-export function useLPOList(filters: LPOFilters, enabled = true) {
+export function buildLPOQueryParams(filters: LPOFilters): Record<string, unknown> {
+  const stations = [...new Set(
+    (filters.stations ?? []).map((station) => station.trim().toUpperCase()).filter(Boolean)
+  )].sort();
+  const periods = [...new Set(
+    (filters.periods ?? []).map(
+      ({ year, month }) => `${year}-${String(month).padStart(2, '0')}`
+    )
+  )].sort();
   const queryParams: Record<string, unknown> = {
     page: filters.page,
     limit: filters.limit,
@@ -63,9 +73,16 @@ export function useLPOList(filters: LPOFilters, enabled = true) {
   };
   if (filters.search) queryParams.search = filters.search;
   if (filters.station) queryParams.station = filters.station;
+  if (stations.length) queryParams.stations = stations.join(',');
+  if (periods.length) queryParams.periods = periods.join(',');
   if (filters.dateFrom) queryParams.dateFrom = filters.dateFrom;
   if (filters.dateTo) queryParams.dateTo = filters.dateTo;
   if (filters.status && filters.status !== 'all') queryParams.status = filters.status;
+  return queryParams;
+}
+
+export function useLPOList(filters: LPOFilters, enabled = true) {
+  const queryParams = buildLPOQueryParams(filters);
 
   return useQuery({
     queryKey: lpoKeys.list(queryParams),
@@ -184,12 +201,26 @@ export function useLPOAvailableYears() {
 
 // ---------------------------------------------------------------------------
 // Available filters for the filter dropdowns.
-// Periods are global; dateRange only scopes the station list to selected period(s).
+// Periods are global; selected periods only scope the station list.
 // ---------------------------------------------------------------------------
-export function useLPOAvailableFilters(dateRange?: { dateFrom?: string; dateTo?: string }) {
+export function useLPOAvailableFilters(filters?: {
+  periods?: Array<{ year: number; month: number }>;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  const periods = [...new Set(
+    (filters?.periods ?? []).map(
+      ({ year, month }) => `${year}-${String(month).padStart(2, '0')}`
+    )
+  )].sort();
+  const params = {
+    ...(periods.length ? { periods: periods.join(',') } : {}),
+    ...(filters?.dateFrom ? { dateFrom: filters.dateFrom } : {}),
+    ...(filters?.dateTo ? { dateTo: filters.dateTo } : {}),
+  };
   return useQuery({
-    queryKey: [...lpoKeys.availableFilters(), dateRange?.dateFrom ?? '', dateRange?.dateTo ?? ''] as const,
-    queryFn: () => lposAPI.getAvailableFilters(dateRange),
+    queryKey: [...lpoKeys.availableFilters(), periods, filters?.dateFrom ?? '', filters?.dateTo ?? ''] as const,
+    queryFn: () => lposAPI.getAvailableFilters(Object.keys(params).length ? params : undefined),
     staleTime: 5 * 60 * 1000,
   });
 }

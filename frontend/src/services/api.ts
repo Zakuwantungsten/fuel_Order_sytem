@@ -730,7 +730,7 @@ export const lposAPI = {
     };
   },
 
-  getAvailableFilters: async (params?: { dateFrom?: string; dateTo?: string }): Promise<{ periods: Array<{ year: number; month: number }>; stations: string[] }> => {
+  getAvailableFilters: async (params?: { periods?: string; dateFrom?: string; dateTo?: string }): Promise<{ periods: Array<{ year: number; month: number }>; stations: string[] }> => {
     const response = await apiClient.get('/lpo-documents/entries/filters', { params });
     return response.data || { periods: [], stations: [] };
   },

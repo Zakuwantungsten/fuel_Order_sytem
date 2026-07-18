@@ -3947,6 +3947,34 @@ function applyManagerStationScope(
   }
 }
 
+function buildEffectiveStationMatch(stationNames: string[]): Record<string, any> | null {
+  const names = [...new Set(
+    stationNames.map((station) => sanitizeRegexInput(station.trim())).filter(Boolean)
+  )];
+  if (names.length === 0) return null;
+
+  return {
+    $or: names.flatMap((station) => {
+      const stationRegex = { $regex: `^${station}$`, $options: 'i' };
+      return [
+        { 'entries.pickedAtStation': stationRegex },
+        {
+          $and: [
+            { station: stationRegex },
+            {
+              $or: [
+                { 'entries.pickedAtStation': null },
+                { 'entries.pickedAtStation': '' },
+                { 'entries.pickedAtStation': { $exists: false } },
+              ],
+            },
+          ],
+        },
+      ];
+    }),
+  };
+}
+
 export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     let { page, limit, sort, order } = getPaginationParams(req.query);
@@ -3956,7 +3984,7 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
       limit = dashboardLimits.limit;
     }
 
-    const { dateFrom, dateTo, lpoNo, truckNo, station, stations, customZambiaOnly, search, status, isRefer, isDriverAccount } = req.query;
+    const { dateFrom, dateTo, periods, lpoNo, truckNo, station, stations, customZambiaOnly, search, status, isRefer, isDriverAccount } = req.query;
     const effectiveDateFrom = dashboardLimits?.dateFrom ?? dateFrom;
     const effectiveDateTo = dashboardLimits?.dateTo ?? dateTo;
 
@@ -3964,12 +3992,12 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
     const scopeEarly = await resolveManagerScope(req.user);
     const managerTier = !!scopeEarly;
 
-    if (lpoNo && !search) {
+    if (lpoNo) {
       const s = sanitizeRegexInput(lpoNo as string);
       if (s) docMatch.lpoNo = { $regex: `^${s}`, $options: 'i' };
     }
     if (!managerTier) {
-      if (station && !search) {
+      if (station) {
         const s = sanitizeRegexInput(station as string);
         if (s) {
           const stationRegex = { $regex: `^${s}`, $options: 'i' };
@@ -3979,7 +4007,7 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
           ];
         }
       }
-      if (stations && !station && !search) {
+      if (stations && !station) {
         const list = (stations as string)
           .split(',')
           .map((x) => sanitizeRegexInput(x.trim()))
@@ -4005,10 +4033,7 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
     const scope = scopeEarly;
     if (scope) {
       applyManagerStationScope(docMatch, scope, {
-        station: station as string | undefined,
-        stations: stations as string | undefined,
         customZambiaOnly: customZambiaOnly as string | undefined,
-        hasSearch: !!search,
       });
       // Date floor: tighten $gte, never loosen it.
       if (scope.dateFloor) {
@@ -4016,6 +4041,29 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
         const existingFrom = docMatch.date.$gte as string | undefined;
         docMatch.date.$gte = existingFrom && existingFrom > scope.dateFloor ? existingFrom : scope.dateFloor;
       }
+    }
+
+    const requestedPeriods = String(periods ?? '')
+      .split(',')
+      .map((period) => period.trim())
+      .filter((period) => /^\d{4}-(0[1-9]|1[0-2])$/.test(period))
+      .slice(0, 120);
+    if (periods && requestedPeriods.length === 0) {
+      docMatch.date = '\0__invalid_period__';
+    } else if (requestedPeriods.length > 0) {
+      const periodMatch = {
+        $or: requestedPeriods.map((period) => {
+          const [year, month] = period.split('-').map(Number);
+          const lastDay = new Date(year, month, 0).getDate();
+          return {
+            date: {
+              $gte: `${period}-01`,
+              $lte: `${period}-${String(lastDay).padStart(2, '0')}`,
+            },
+          };
+        }),
+      };
+      docMatch.$and = [...(Array.isArray(docMatch.$and) ? docMatch.$and : []), periodMatch];
     }
 
     const entryMatch: any = {};
@@ -4027,7 +4075,7 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
     if (isRefer === 'true') entryMatch['entries.isRefer'] = true;
     if (isDriverAccount === 'true') entryMatch['entries.isDriverAccount'] = true;
     if (req.user?.role === 'driver') entryMatch['entries.truckNo'] = req.user.username;
-    if (truckNo && !search) {
+    if (truckNo && req.user?.role !== 'driver') {
       const s = sanitizeRegexInput(truckNo as string);
       if (s) entryMatch['entries.truckNo'] = { $regex: `^${s}`, $options: 'i' };
     }
@@ -4043,45 +4091,20 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
     // OR rows whose picked-at override matches their station (exclude other trucks
     // on foreign LPOs that merely share a document).
     if (scope?.forcedStation) {
-      const s = sanitizeRegexInput(scope.forcedStation);
-      if (s) {
-        const stationRegex = { $regex: `^${s}$`, $options: 'i' };
-        pipeline.push({
-          $match: {
-            $or: [
-              { station: stationRegex },
-              { 'entries.pickedAtStation': stationRegex },
-            ],
-          },
-        });
-      }
+      const forcedStationMatch = buildEffectiveStationMatch([scope.forcedStation]);
+      if (forcedStationMatch) pipeline.push({ $match: forcedStationMatch });
     }
 
-    // Optional client station filter at entry level (effective dieselAt)
-    if (!managerTier && station && !search) {
-      const s = sanitizeRegexInput(station as string);
-      if (s) {
-        const stationRegex = { $regex: `^${s}`, $options: 'i' };
-        pipeline.push({
-          $match: {
-            $or: [
-              {
-                $and: [
-                  { station: stationRegex },
-                  {
-                    $or: [
-                      { 'entries.pickedAtStation': null },
-                      { 'entries.pickedAtStation': '' },
-                      { 'entries.pickedAtStation': { $exists: false } },
-                    ],
-                  },
-                ],
-              },
-              { 'entries.pickedAtStation': stationRegex },
-            ],
-          },
-        });
-      }
+    // Optional client station filter at entry level (effective dieselAt).
+    // It is deliberately independent of search so every active filter composes.
+    const requestedStations = stations && !station
+      ? String(stations).split(',')
+      : station
+        ? [String(station)]
+        : [];
+    const effectiveStationMatch = buildEffectiveStationMatch(requestedStations);
+    if (effectiveStationMatch) {
+      pipeline.push({ $match: effectiveStationMatch });
     }
 
     pipeline.push(ENTRY_DERIVE_STAGE);
@@ -4097,6 +4120,7 @@ export const getAllLPOEntriesFlat = async (req: AuthRequest, res: Response): Pro
               { lpoNo: { $regex: fuzzy, $options: 'i' } },
               { 'entries.truckNo': { $regex: fuzzy, $options: 'i' } },
               { station: { $regex: fuzzy, $options: 'i' } },
+              { 'entries.pickedAtStation': { $regex: fuzzy, $options: 'i' } },
               { doSdoDisplay: { $regex: fuzzy, $options: 'i' } },
             ],
           },
@@ -4143,7 +4167,7 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
     const baseMatch: any = { isDeleted: false };
     if (req.user?.role === 'driver') baseMatch['entries.truckNo'] = req.user.username;
 
-    const { dateFrom, dateTo } = req.query;
+    const { periods: requestedPeriodParam, dateFrom, dateTo } = req.query;
 
     // Scope the filter dropdowns to what a manager-tier user is actually allowed
     // to see, so the station list and period list don't leak other stations.
@@ -4189,24 +4213,79 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
     const now = new Date();
     const curKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
     if (!seen.has(curKey)) seen.set(curKey, { year: now.getFullYear(), month: now.getMonth() + 1 });
-    const periods = Array.from(seen.values()).sort((a, b) =>
+    const availablePeriods = Array.from(seen.values()).sort((a, b) =>
       b.year !== a.year ? b.year - a.year : b.month - a.month
     );
     const stationsMatch: any = { ...baseMatch };
-    // Preserve the "non-empty station" guard without clobbering a scoped station filter.
-    if (!stationsMatch.station) stationsMatch.station = { $nin: [null, ''] };
-    if (dateFrom || dateTo) {
+    const requestedPeriods = String(requestedPeriodParam ?? '')
+      .split(',')
+      .map((period) => period.trim())
+      .filter((period) => /^\d{4}-(0[1-9]|1[0-2])$/.test(period))
+      .slice(0, 120);
+    if (requestedPeriodParam && requestedPeriods.length === 0) {
+      stationsMatch.date = '\0__invalid_period__';
+    } else if (requestedPeriods.length > 0) {
+      stationsMatch.$and = [
+        ...(Array.isArray(stationsMatch.$and) ? stationsMatch.$and : []),
+        {
+          $or: requestedPeriods.map((period) => {
+            const [year, month] = period.split('-').map(Number);
+            const lastDay = new Date(year, month, 0).getDate();
+            return {
+              date: {
+                $gte: `${period}-01`,
+                $lte: `${period}-${String(lastDay).padStart(2, '0')}`,
+              },
+            };
+          }),
+        },
+      ];
+    } else if (dateFrom || dateTo) {
       stationsMatch.date = {};
-      if (dateFrom) stationsMatch.date.$gte = (dateFrom as string).substring(0, 10);
-      if (dateTo) stationsMatch.date.$lte = (dateTo as string).substring(0, 10);
+      if (dateFrom) stationsMatch.date.$gte = String(dateFrom).substring(0, 10);
+      if (dateTo) stationsMatch.date.$lte = String(dateTo).substring(0, 10);
     }
     applyDateFloor(stationsMatch);
-    const rawStations = await LPOSummary.distinct('station', stationsMatch) as string[];
-    const stations = rawStations
-      .filter(s => s && s.trim())
-      .map(s => s.trim().toUpperCase())
-      .filter((v, i, arr) => arr.indexOf(v) === i)
-      .sort();
+    const stationPipeline: any[] = [
+      { $match: stationsMatch },
+      { $unwind: '$entries' },
+    ];
+    if (req.user?.role === 'driver') {
+      stationPipeline.push({ $match: { 'entries.truckNo': req.user.username } });
+    }
+    if (scope?.forcedStation) {
+      const forcedStationMatch = buildEffectiveStationMatch([scope.forcedStation]);
+      if (forcedStationMatch) stationPipeline.push({ $match: forcedStationMatch });
+    }
+    stationPipeline.push(
+      {
+        $project: {
+          station: {
+            $toUpper: {
+              $trim: {
+                input: {
+                  $cond: [
+                    {
+                      $gt: [
+                        { $strLenCP: { $trim: { input: { $ifNull: ['$entries.pickedAtStation', ''] } } } },
+                        0,
+                      ],
+                    },
+                    '$entries.pickedAtStation',
+                    { $ifNull: ['$station', ''] },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+      { $match: { station: { $nin: [null, ''] } } },
+      { $group: { _id: '$station' } },
+      { $sort: { _id: 1 } },
+    );
+    const stationResults = await LPOSummary.aggregate(stationPipeline);
+    const stations = stationResults.map((result) => result._id as string);
 
     const includeCustom = scope?.includeCustomZambia === true;
     const regularSet = new Set(
@@ -4224,7 +4303,7 @@ export const getLPOEntriesFilters = async (req: AuthRequest, res: Response): Pro
       : [];
 
     res.json({
-      periods,
+      periods: availablePeriods,
       stations,
       regularStations,
       customStations,

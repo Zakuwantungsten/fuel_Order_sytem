@@ -27,7 +27,6 @@ import QueryErrorState from '../components/QueryErrorState';
 import { replaceUrlPreservingState } from '../utils/historyState';
 import {
   lpoKeys,
-  periodsToDateRange,
   useLPOList,
   useLPOWorkbooks,
   useLPOAvailableYears,
@@ -80,7 +79,20 @@ const LPOs = () => {
   });
   const { data: journeyConfig } = useJourneyConfig();
   const autoDownloadLPOPdf = journeyConfig?.autoDownloadLPOPdf ?? true;
-  const [stationFilter, setStationFilter] = usePersistedState('lpo:stationFilter', '');
+  const [selectedStations, setSelectedStations] = usePersistedState<string[]>(
+    'lpo:selectedStations',
+    () => {
+      try {
+        const stored = localStorage.getItem('fuel-order:lpo:stationFilter');
+        const legacyStation = stored ? JSON.parse(stored) : '';
+        return typeof legacyStation === 'string' && legacyStation.trim()
+          ? [legacyStation.trim().toUpperCase()]
+          : [];
+      } catch {
+        return [];
+      }
+    }
+  );
   const [statusFilter, setStatusFilter] = usePersistedState('lpo:statusFilter', 'all');
   const [dateFilter, setDateFilter] = usePersistedState('lpo:dateFilter', '');
   // Period filter — {year, month} pairs, same as DO management
@@ -89,20 +101,6 @@ const LPOs = () => {
     [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]
   );
 
-  // Reset to current month when a new month starts and the persisted value
-  // still points entirely at previous months.
-  useEffect(() => {
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth() + 1;
-    const includesCurrent = selectedPeriods.some(
-      p => p.year === curYear && p.month === curMonth
-    );
-    if (!includesCurrent && selectedPeriods.length > 0) {
-      setSelectedPeriods([{ year: curYear, month: curMonth }]);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [_searchParams] = useSearchParams();
   const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account', 'refer'] as const;
@@ -139,49 +137,31 @@ const LPOs = () => {
   const highlightProcessedRef = useRef<string | null>(null);
   const [pendingHighlight, setPendingHighlight] = useState<string | null>(null);
   const [pendingHighlightTruck, setPendingHighlightTruck] = useState<string | null>(null);
-  const [filtersInitialized, setFiltersInitialized] = useState(false);
 
   // --- React Query hooks (server-side pagination + caching) ---
-  const dateRange = periodsToDateRange(selectedPeriods);
   const lpoQuery = useLPOList({
     page: currentPage,
     limit: itemsPerPage,
     search: searchTerm || undefined,
-    station: stationFilter || undefined,
-    dateFrom: dateRange.dateFrom,
-    dateTo: dateRange.dateTo,
+    stations: selectedStations,
+    periods: selectedPeriods,
+    dateFrom: dateFilter || undefined,
+    dateTo: dateFilter || undefined,
     sort: 'lpo_desc',
     order: 'desc',
     status: statusFilter !== 'all' ? statusFilter : undefined,
   });
   const lpoEntries: LPOEntry[] = lpoQuery.data?.lpos ?? [];
 
-  // Separate query to discover all stations for the current search term,
-  // without the station filter so the dropdown stays fully populated even
-  // after the user picks a station.
-  const stationDiscoveryQuery = useLPOList(
-    {
-      page: 1,
-      limit: 1000,
-      search: searchTerm || undefined,
-      dateFrom: dateRange.dateFrom,
-      dateTo: dateRange.dateTo,
-      sort: 'lpo_desc',
-      order: 'desc',
-    },
-    !!searchTerm
-  );
-  const discoveryEntries: LPOEntry[] = stationDiscoveryQuery.data?.lpos ?? [];
-
   // Unified server-paginated list (regular, REF, NIL, DA — all entry types).
   // Client-side station guard only covers stale placeholder data during refetch.
   const orders = useMemo(() => {
-    if (!stationFilter) return lpoEntries;
-    const upper = stationFilter.trim().toUpperCase();
+    if (!selectedStations.length) return lpoEntries;
+    const selected = new Set(selectedStations.map((station) => station.trim().toUpperCase()));
     return lpoEntries.filter(
-      (e) => (e.dieselAt || '').trim().toUpperCase() === upper
+      (e) => selected.has((e.dieselAt || '').trim().toUpperCase())
     );
-  }, [lpoEntries, stationFilter]);
+  }, [lpoEntries, selectedStations]);
 
   const totalItems = lpoQuery.data?.pagination?.total ?? 0;
   const totalPages = lpoQuery.data?.pagination?.totalPages ?? 1;
@@ -191,7 +171,7 @@ const LPOs = () => {
 
   const { data: workbooks = [] } = useLPOWorkbooks();
   const { data: hookYears = [] } = useLPOAvailableYears();
-  const { data: filtersData } = useLPOAvailableFilters(dateRange);
+  const { data: filtersData } = useLPOAvailableFilters({ periods: selectedPeriods });
 
   const availablePeriods = useMemo(() => {
     return (filtersData?.periods ?? []).sort((a: {year: number; month: number}, b: {year: number; month: number}) =>
@@ -199,16 +179,10 @@ const LPOs = () => {
     );
   }, [filtersData]);
 
-  const availableStations: string[] = useMemo(() => {
-    if (searchTerm) {
-      return [...new Set(
-        discoveryEntries
-          .map((e) => (e.dieselAt || '').trim().toUpperCase())
-          .filter(Boolean)
-      )].sort();
-    }
-    return filtersData?.stations ?? [];
-  }, [filtersData, discoveryEntries, searchTerm]);
+  const availableStations: string[] = useMemo(
+    () => filtersData?.stations ?? [],
+    [filtersData]
+  );
 
   const availableYears = useMemo(() => {
     const yearsFromPeriods = availablePeriods.map((p: {year: number}) => p.year);
@@ -265,7 +239,6 @@ const LPOs = () => {
         // Clear the action param
         url.searchParams.delete('action');
         replaceUrlPreservingState(url.toString());
-        setFiltersInitialized(true);
       } else if (highlightId && highlightId !== highlightProcessedRef.current) {
         highlightProcessedRef.current = highlightId;
         console.log('%c=== LPO URL HANDLER ===', 'background: #f59e0b; color: white; padding: 4px;');
@@ -283,7 +256,7 @@ const LPOs = () => {
         // station, status, or date filter would otherwise exclude the LPO from
         // the query and the highlight would silently fail.
         setSearchTerm('');
-        setStationFilter('');
+        setSelectedStations([]);
         setStatusFilter('all');
         setDateFilter('');
         setCurrentPage(1);
@@ -306,9 +279,6 @@ const LPOs = () => {
           }
         }
         
-        // Set flag to allow filtering with the correct year/month
-        setFiltersInitialized(true);
-        
         // Trigger highlight after a brief delay to let filters apply
         console.log('Will trigger highlight in 200ms');
         setTimeout(() => {
@@ -316,9 +286,6 @@ const LPOs = () => {
           setPendingHighlightTruck(truckParam);
           setPendingHighlight(highlightId);
         }, 200);
-      } else {
-        // No highlight, just initialize
-        setFiltersInitialized(true);
       }
     };
     
@@ -342,8 +309,9 @@ const LPOs = () => {
           limit: 10000,
           sort: 'lpo_desc',
           order: 'desc',
-          ...(dateRange.dateFrom ? { dateFrom: dateRange.dateFrom } : {}),
-          ...(dateRange.dateTo ? { dateTo: dateRange.dateTo } : {}),
+          periods: selectedPeriods
+            .map(({ year, month }) => `${year}-${String(month).padStart(2, '0')}`)
+            .join(','),
         });
         if (cancelled) return;
 
@@ -468,14 +436,7 @@ const LPOs = () => {
   // React Query handles filtering server-side; reset page on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, stationFilter, dateFilter, selectedPeriods]);
-
-  // Auto-clear station filter when it's no longer valid for the selected period(s)
-  useEffect(() => {
-    if (stationFilter && availableStations.length > 0 && !availableStations.includes(stationFilter)) {
-      setStationFilter('');
-    }
-  }, [availableStations]);
+  }, [searchTerm, selectedStations, dateFilter, selectedPeriods]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -496,7 +457,7 @@ const LPOs = () => {
   }, []);
 
   // New-records pill for created LPOs relevant to the current list view.
-  const lpoPillResetKey = `${searchTerm}|${stationFilter}|${statusFilter}|${JSON.stringify(selectedPeriods)}|${currentPage}|${itemsPerPage}`;
+  const lpoPillResetKey = `${searchTerm}|${selectedStations.join(',')}|${statusFilter}|${JSON.stringify(selectedPeriods)}|${currentPage}|${itemsPerPage}`;
   const { pendingCount: pendingNewLPOs, addPending: addPendingLPOs, clearPending: clearPendingLPOs } = useNewRecordsPill(lpoPillResetKey);
 
   const loadNewLPOs = () => {
@@ -515,9 +476,12 @@ const LPOs = () => {
     if (event?.action !== 'create') return;
     // Creator already refreshed on mutation success — don't offer "click to load".
     if (isOwnDataChange(event, user?.id)) return;
-    const dr = periodsToDateRange(selectedPeriods);
-    const fromT = dr.dateFrom ? new Date(dr.dateFrom).getTime() : -Infinity;
-    const toT = dr.dateTo ? new Date(dr.dateTo).getTime() : Infinity;
+    const selectedPeriodKeys = new Set(
+      selectedPeriods.map(({ year, month }) => `${year}-${String(month).padStart(2, '0')}`)
+    );
+    const selectedStationSet = new Set(
+      selectedStations.map((station) => station.trim().toUpperCase())
+    );
     const relevant = countRelevantNewRecords(
       event,
       { visibleRows: lpoEntries, sortField: 'lpoSortNum', sortOrder: 'desc', page: currentPage, totalPages },
@@ -525,11 +489,9 @@ const LPOs = () => {
         dateField: 'lpoSortNum',
         matchesFilters: (rec) => {
           if (statusFilter === 'cancelled') return false; // new LPOs are active
-          if (stationFilter && String(rec?.station ?? '').trim().toUpperCase() !== stationFilter.trim().toUpperCase()) return false;
-          if (dr.dateFrom || dr.dateTo) {
-            const t = rec?.date ? new Date(rec.date).getTime() : NaN;
-            if (!Number.isNaN(t) && (t < fromT || t > toT)) return false;
-          }
+          if (selectedStationSet.size > 0 && !selectedStationSet.has(String(rec?.station ?? '').trim().toUpperCase())) return false;
+          if (rec?.date && !selectedPeriodKeys.has(String(rec.date).slice(0, 7))) return false;
+          if (dateFilter && String(rec?.date ?? '').slice(0, 10) !== dateFilter) return false;
           return true;
         },
         matchesBulk: () => statusFilter !== 'cancelled',
@@ -767,21 +729,6 @@ const LPOs = () => {
     if (selectedPeriods.length === availablePeriods.length && availablePeriods.length > 0) return 'All Periods';
     return `${selectedPeriods.length} periods`;
   };
-
-  // Auto-fallback: if the default current period (today's year+month) has no data,
-  // automatically switch to the most recent period that does.
-  useEffect(() => {
-    if (loading || !filtersInitialized) return;
-    if (searchTerm) return;
-    const now = new Date();
-    const defYear = now.getFullYear(), defMonth = now.getMonth() + 1;
-    if (selectedPeriods.length !== 1 || selectedPeriods[0].year !== defYear || selectedPeriods[0].month !== defMonth) return;
-    if (orders.length === 0 && availablePeriods.length > 0) {
-      // Skip the current month (backend always includes it even if empty)
-      const fallback = availablePeriods.find(p => !(p.year === defYear && p.month === defMonth));
-      if (fallback) setSelectedPeriods([fallback]);
-    }
-  }, [orders, loading, filtersInitialized, availablePeriods, searchTerm]);
 
   // Serial numbers come from the server (sorted by LPO number, highest first).
   const lposWithMonthlySerialNumbers = useMemo(() => {
@@ -1559,7 +1506,11 @@ const LPOs = () => {
               onClick={() => setShowStationDropdown(!showStationDropdown)}
               className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
             >
-              <span>{stationFilter || 'All Stations'}</span>
+              <span>
+                {selectedStations.length === 0
+                  ? 'All Stations'
+                  : `${selectedStations.length} Station${selectedStations.length === 1 ? '' : 's'}`}
+              </span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
             </button>
             {showStationDropdown && (
@@ -1567,26 +1518,29 @@ const LPOs = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setStationFilter('');
-                    setShowStationDropdown(false);
+                    setSelectedStations([]);
                   }}
                   className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                 >
                   <span>All Stations</span>
-                  {stationFilter === '' && <Check className="w-4 h-4 text-blue-600" />}
+                  {selectedStations.length === 0 && <Check className="w-4 h-4 text-blue-600" />}
                 </button>
                 {availableStations.map((station) => (
                   <button
                     key={station}
                     type="button"
                     onClick={() => {
-                      setStationFilter(station);
-                      setShowStationDropdown(false);
+                      setSelectedStations((current) => {
+                        const normalized = station.trim().toUpperCase();
+                        return current.includes(normalized)
+                          ? current.filter((value) => value !== normalized)
+                          : [...current, normalized].sort();
+                      });
                     }}
                     className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                   >
                     <span>{station}</span>
-                    {stationFilter === station && <Check className="w-4 h-4 text-blue-600" />}
+                    {selectedStations.includes(station.trim().toUpperCase()) && <Check className="w-4 h-4 text-blue-600" />}
                   </button>
                 ))}
               </div>
@@ -1611,7 +1565,7 @@ const LPOs = () => {
           <button
             onClick={() => {
               setSearchTerm('');
-              setStationFilter('');
+              setSelectedStations([]);
               setDateFilter('');
               setStatusFilter('all');
               setCurrentPage(1);
