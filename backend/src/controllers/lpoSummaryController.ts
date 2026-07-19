@@ -22,6 +22,7 @@ import { enforceEditLock } from './editLockController';
 import { acquireLock as acquireLockRecord, releaseLock as releaseLockRecord, getDisplayName } from '../services/lockService';
 import { checkAndPromoteStartedJourney, getFuelAutomationFlags, getManagerAccessConfig, buildCustomZambiaLpoFilter, buildSuperManagerStationOrClauses, resolveDashboardSearchLimits } from '../services/journeyService';
 import { formatDONumber, parseDONumber } from '../utils/doNumberFormatter';
+import { createUniqueWorksheetName } from '../utils/excelWorksheetName';
 import {
   createLPOCreatedNotification,
   createLPOCancelledNotification,
@@ -1857,10 +1858,15 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       vertical: 'middle',
     };
 
+    // Reserve the summary name and make every LPO worksheet Excel-safe and unique.
+    const usedSheetNames = new Set<string>(['summary']);
+
     // Create individual sheets for each LPO FIRST (before summary)
     for (const lpo of lpoDocuments) {
-      // Sheet name is just the LPO number (e.g., "2444")
-      const sheetName = lpo.lpoNo.substring(0, 31);
+      // Canonical LPO numbers contain "/" (for example "0001/26"), which Excel
+      // does not permit in worksheet names. Keep the displayed LPO number intact;
+      // only sanitize the tab name used inside the downloaded workbook.
+      const sheetName = createUniqueWorksheetName(lpo.lpoNo, usedSheetNames, 'LPO');
       const sheet = excelWorkbook.addWorksheet(sheetName);
 
       // Set column widths to match PDF layout
