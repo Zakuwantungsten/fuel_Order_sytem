@@ -18,6 +18,66 @@ interface ExportOptions {
   limit?: number;
 }
 
+const ARCHIVED_LPO_BATCH_SIZE = 5000;
+
+/**
+ * Read archived LPO summaries in bounded batches. A missing overall limit means
+ * "all matching records", not an implicit 10,000-record cap.
+ */
+async function getArchivedLPOSummaries(
+  query: any,
+  sort: any,
+  limit?: number
+): Promise<any[]> {
+  const archivedRecords: any[] = [];
+  const stableSort = { ...sort, _id: 1 };
+  let skip = 0;
+
+  while (limit === undefined || archivedRecords.length < limit) {
+    const remaining = limit === undefined ? ARCHIVED_LPO_BATCH_SIZE : limit - archivedRecords.length;
+    const batchLimit = Math.min(ARCHIVED_LPO_BATCH_SIZE, remaining);
+    if (batchLimit <= 0) break;
+
+    const batch = await archivalService.queryArchivedData(
+      'LPOSummary',
+      query,
+      { limit: batchLimit, skip, sort: stableSort }
+    );
+
+    archivedRecords.push(...batch);
+    if (batch.length < batchLimit) break;
+    skip += batch.length;
+  }
+
+  return archivedRecords;
+}
+
+/**
+ * Prefer active records and suppress archive duplicates left by interrupted
+ * archival runs. LPO numbers reset yearly, so their deduplication key includes
+ * the year.
+ */
+function deduplicateLPOSummaries(records: any[]): any[] {
+  const seenIds = new Set<string>();
+  const seenLpoNumbers = new Set<string>();
+
+  return records.filter((record) => {
+    const sourceId = record?.originalId ?? record?._id;
+    const idKey = sourceId ? String(sourceId) : '';
+    const lpoNo = String(record?.lpoNo ?? '').trim().toLowerCase();
+    const year = record?.year ?? String(record?.date ?? '').substring(0, 4);
+    const lpoKey = lpoNo ? `${year}:${lpoNo}` : '';
+
+    if ((idKey && seenIds.has(idKey)) || (lpoKey && seenLpoNumbers.has(lpoKey))) {
+      return false;
+    }
+
+    if (idKey) seenIds.add(idKey);
+    if (lpoKey) seenLpoNumbers.add(lpoKey);
+    return true;
+  });
+}
+
 /**
  * Get all fuel records (active + archived)
  */
@@ -175,20 +235,20 @@ export async function getAllLPOSummaries(options: ExportOptions = {}): Promise<a
     let archivedRecords: any[] = [];
     if (includeArchived) {
       try {
-        archivedRecords = await archivalService.queryArchivedData(
-          'LPOSummary',
-          query,
-          { limit: limit || 10000, sort }
-        );
+        archivedRecords = await getArchivedLPOSummaries(query, sort, limit);
       } catch (error: any) {
         logger.warn('Failed to fetch archived LPO summaries:', error.message);
       }
     }
 
-    const allRecords = [...activeRecords, ...archivedRecords];
+    const allRecords = deduplicateLPOSummaries([...activeRecords, ...archivedRecords]);
     allRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    logger.info(`Retrieved ${activeRecords.length} active + ${archivedRecords.length} archived LPO summaries`);
+    const duplicateCount = activeRecords.length + archivedRecords.length - allRecords.length;
+    logger.info(
+      `Retrieved ${activeRecords.length} active + ${archivedRecords.length} archived LPO summaries` +
+      (duplicateCount > 0 ? ` (${duplicateCount} duplicate records omitted)` : '')
+    );
 
     return limit ? allRecords.slice(0, limit) : allRecords;
   } catch (error: any) {

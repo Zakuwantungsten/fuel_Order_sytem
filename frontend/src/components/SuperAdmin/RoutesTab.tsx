@@ -287,9 +287,12 @@ export default function RoutesTab({ onMessage, initialDestination, initialLoadin
         routeName,
         origin,
         destination,
+        // Always send the array so clearing the input removes persisted aliases.
+        // `undefined` is omitted from JSON and would leave the old aliases unchanged.
         destinationAliases: routeForm.destinationAliases
-          ? routeForm.destinationAliases.split(',').map(a => a.trim()).filter(Boolean)
-          : undefined,
+          .split(',')
+          .map(a => a.trim())
+          .filter(Boolean),
         routeType: routeForm.routeType,
         defaultTotalLiters: litersValue,
         description: routeForm.description?.trim() || undefined,

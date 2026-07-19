@@ -1795,6 +1795,7 @@ export const exportWorkbook = async (req: AuthRequest, res: Response): Promise<v
       startDate,
       endDate,
       includeArchived: true,
+      filters: { year },
     });
 
     // Filter for this year and not deleted
