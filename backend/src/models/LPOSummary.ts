@@ -4,6 +4,7 @@ import { ILPOSummary, ILPODetail, CancellationPoint } from '../types';
 export interface ILPOSummaryDocument extends ILPOSummary, Document {}
 
 const CANCELLATION_POINTS: CancellationPoint[] = [
+  'TANGA_GOING',
   'DAR_GOING',
   'MORO_GOING',
   'MBEYA_GOING',

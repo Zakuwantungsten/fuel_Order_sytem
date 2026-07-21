@@ -228,6 +228,7 @@ const CANCELLATION_POINT_TO_FUEL_FIELD: Record<string, string> = {
   'ZAMBIA_GOING': 'zambiaGoing',
   'CONGO_GOING': 'congoFuel',        // Congo (Going) maps to congoFuel column
   // Returning direction checkpoints
+  'ZAMBIA_RETURNING': 'zambiaReturn', // Zambia returning (combined Ndola + Kapiri)
   'ZAMBIA_NDOLA': 'zambiaReturn',    // Part of Zambia Return (50L)
   'ZAMBIA_KAPIRI': 'zambiaReturn',   // Part of Zambia Return (350L)
   'TDM_RETURN': 'tundumaReturn',

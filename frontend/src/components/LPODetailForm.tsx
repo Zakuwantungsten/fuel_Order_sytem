@@ -2894,6 +2894,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }));
   };
 
+  // CASH checkpoints are required only when at least one truck is normal mode.
+  // All-REF / NIL / DA cash LPOs skip fuel-record updates, so checkpoints are optional.
+  const cashNeedsCheckpoints = (formData.entries || []).some((entry, idx) => {
+    if (entry == null) return false;
+    const mode = entryAutoFillData[idx]?.entryType || 'regular';
+    return mode === 'regular';
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -2921,10 +2929,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return;
     }
 
-    // CASH station requires at least one direction with checkpoint selection
-    if (formData.station === 'CASH') {
+    // CASH: require checkpoints only when any row is normal mode
+    if (formData.station === 'CASH' && cashNeedsCheckpoints) {
       if (!goingEnabled && !returningEnabled) {
-        toast.warn('For CASH payments, you must enable at least one direction (Going or Returning).');
+        toast.warn('For CASH payments with normal-mode trucks, you must enable at least one direction (Going or Returning).');
         return;
       }
       if (goingEnabled && !goingCheckpoint) {
@@ -3165,9 +3173,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }
 
       // CASH-specific validation — mirrors handleSubmit
-      if (formData.station === 'CASH') {
+      if (formData.station === 'CASH' && cashNeedsCheckpoints) {
         if (!goingEnabled && !returningEnabled) {
-          toast.warn('For CASH payments, you must enable at least one direction (Going or Returning).');
+          toast.warn('For CASH payments with normal-mode trucks, you must enable at least one direction (Going or Returning).');
           return;
         }
         if (goingEnabled && !goingCheckpoint) {
@@ -3698,8 +3706,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     <Ban className="w-4 h-4" />
                   </span>
                   <div>
-                    <div className="text-[13.5px] font-bold text-orange-800 dark:text-orange-200">Cash purchase checkpoint <span className="text-[11px] font-semibold text-orange-500">(required)</span></div>
-                    <div className="text-[11.5px] font-medium text-orange-600 dark:text-orange-400">Select where cash fuel was bought. Existing LPOs at these checkpoints are cancelled or amended.</div>
+                    <div className="text-[13.5px] font-bold text-orange-800 dark:text-orange-200">
+                      Cash purchase checkpoint{' '}
+                      <span className="text-[11px] font-semibold text-orange-500">
+                        {cashNeedsCheckpoints ? '(required)' : '(optional — all REF / NIL / DA)'}
+                      </span>
+                    </div>
+                    <div className="text-[11.5px] font-medium text-orange-600 dark:text-orange-400">
+                      {cashNeedsCheckpoints
+                        ? 'Select where cash fuel was bought. Existing LPOs at these checkpoints are cancelled or amended.'
+                        : 'Checkpoints optional when every truck is REF, NIL, or DA (no fuel-record column update).'}
+                    </div>
                   </div>
                 </div>
 
@@ -3724,7 +3741,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           goingEnabled
                             ? goingCheckpoint
                               ? 'border-orange-400 dark:border-orange-500 bg-orange-50 dark:bg-orange-900/30 text-gray-900 dark:text-gray-100'
-                              : 'border-red-400 dark:border-red-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                              : cashNeedsCheckpoints
+                                ? 'border-red-400 dark:border-red-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                                : 'border-orange-300 dark:border-orange-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                             : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-500 cursor-pointer'
                         }`}
                       >
@@ -3766,7 +3785,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                         </div>
                       )}
                     </div>
-                    {goingEnabled && !goingCheckpoint && (
+                    {cashNeedsCheckpoints && goingEnabled && !goingCheckpoint && (
                       <p className="mt-1 text-xs text-red-600 dark:text-red-400">⚠ Select checkpoint</p>
                     )}
                   </div>
@@ -3789,7 +3808,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           returningEnabled
                             ? returningCheckpoint
                               ? 'border-orange-400 dark:border-orange-500 bg-orange-50 dark:bg-orange-900/30 text-gray-900 dark:text-gray-100'
-                              : 'border-red-400 dark:border-red-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                              : cashNeedsCheckpoints
+                                ? 'border-red-400 dark:border-red-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                                : 'border-orange-300 dark:border-orange-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                             : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-500 cursor-pointer'
                         }`}
                       >
@@ -3831,7 +3852,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                         </div>
                       )}
                     </div>
-                    {returningEnabled && !returningCheckpoint && (
+                    {cashNeedsCheckpoints && returningEnabled && !returningCheckpoint && (
                       <p className="mt-1 text-xs text-red-600 dark:text-red-400">⚠ Select checkpoint</p>
                     )}
                   </div>

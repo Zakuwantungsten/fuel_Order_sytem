@@ -10,6 +10,7 @@
  *   npm run dr:restore-new -- --latest
  *   npm run dr:restore-new -- --r2-key backups/backup_xxx.json.gz
  *   npm run dr:restore-new -- --latest --name fuel-order_restored_test
+ *   npm run dr:restore-new -- --secondary --latest --name fuel-order_b2_restore
  */
 import mongoose from 'mongoose';
 import { config } from '../config';
@@ -34,6 +35,7 @@ async function main(): Promise<void> {
   const r2KeyArg = get('--r2-key');
   const latest = args.includes('--latest');
   const name = get('--name') || undefined;
+  const source = args.includes('--secondary') ? 'secondary' : 'auto';
 
   if (!config.mongodbUri) {
     console.error('❌ MONGODB_URI is not set in .env');
@@ -41,12 +43,19 @@ async function main(): Promise<void> {
   }
 
   console.log(`🔄 Safe restore — connecting to ${maskUri(config.mongodbUri)}`);
+  console.log(
+    source === 'secondary'
+      ? '   Backup source: SECONDARY ONLY (primary R2 will not be contacted)'
+      : '   Backup source: automatic primary → secondary failover'
+  );
   await mongoose.connect(config.mongodbUri);
 
   let r2Key = r2KeyArg;
   if (!r2Key && latest) {
-    const files = await backupService.listR2Backups();
-    if (!files.length) throw new Error('No backups found in R2');
+    const files = await backupService.listR2Backups(source);
+    if (!files.length) {
+      throw new Error(source === 'secondary' ? 'No backups found in secondary storage' : 'No backups found');
+    }
     r2Key = files[0].key;
     console.log(`   Using latest backup: ${r2Key}`);
   }
@@ -56,7 +65,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const result = await backupService.restoreToNewDb(r2Key, 'cli-safe-restore', name);
+  const result = await backupService.restoreToNewDb(r2Key, 'cli-safe-restore', name, source);
 
   console.log('\n✅ Safe restore complete (live data untouched):');
   console.log(`   New database : ${result.dbName}`);

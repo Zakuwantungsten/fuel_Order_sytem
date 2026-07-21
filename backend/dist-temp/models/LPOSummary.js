@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LPOSummary = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const CANCELLATION_POINTS = [
+    'TANGA_GOING',
     'DAR_GOING',
     'MORO_GOING',
     'MBEYA_GOING',

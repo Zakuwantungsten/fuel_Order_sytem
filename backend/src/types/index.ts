@@ -384,6 +384,7 @@ export interface ILPODetail {
 
 // Cancellation Point Types
 export type CancellationPoint = 
+  | 'TANGA_GOING'
   | 'DAR_GOING'
   | 'MORO_GOING'
   | 'MBEYA_GOING'

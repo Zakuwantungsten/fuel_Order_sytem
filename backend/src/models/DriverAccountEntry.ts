@@ -4,6 +4,7 @@ import { IDriverAccountEntry, CancellationPoint, PaymentMode } from '../types';
 export interface IDriverAccountEntryDocument extends IDriverAccountEntry, Document {}
 
 const CANCELLATION_POINTS: CancellationPoint[] = [
+  'TANGA_GOING',
   'DAR_GOING',
   'MORO_GOING',
   'MBEYA_GOING',

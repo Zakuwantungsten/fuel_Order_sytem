@@ -41,6 +41,7 @@
     "dr:drill": "ts-node --transpile-only src/scripts/drDrill.ts",
     "dr:sync": "ts-node --transpile-only src/scripts/syncBackupCatalog.ts",
     "dr:manifest": "ts-node --transpile-only src/scripts/writeManifest.ts",
+    "dr:restore-secondary": "ts-node --transpile-only src/scripts/restoreToNewDb.ts --secondary",
     "dr:delete": "ts-node --transpile-only src/scripts/deleteR2Backup.ts",
     "dr:restore-new": "ts-node --transpile-only src/scripts/restoreToNewDb.ts",
     "dr:drop-db": "ts-node --transpile-only src/scripts/dropDatabase.ts"

@@ -170,13 +170,25 @@ class R2Service {
     if (!this.isSecondaryEnabled()) {
       throw new Error('Secondary backup destination is not configured');
     }
-    const command = new ListObjectsV2Command({ Bucket: this.secondaryBucket, Prefix: prefix });
-    const response = await this.secondaryClient!.send(command);
-    return (response.Contents || []).map(item => ({
-      key: item.Key!,
-      size: item.Size!,
-      lastModified: item.LastModified!,
-    }));
+    const files: Array<{ key: string; size: number; lastModified: Date }> = [];
+    let continuationToken: string | undefined;
+
+    do {
+      const command = new ListObjectsV2Command({
+        Bucket: this.secondaryBucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      });
+      const response = await this.secondaryClient!.send(command);
+      files.push(...(response.Contents || []).map(item => ({
+        key: item.Key!,
+        size: item.Size!,
+        lastModified: item.LastModified!,
+      })));
+      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return files;
   }
 
   /**

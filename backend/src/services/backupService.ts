@@ -1010,13 +1010,17 @@ class BackupService {
    * catalog metadata when available. Works even when MongoDB is completely
    * empty — no Backup records needed.
    */
-  async listR2Backups(): Promise<Array<{
+  async listR2Backups(source: 'auto' | 'secondary' = 'auto'): Promise<Array<{
     key: string; size: number; lastModified: Date;
     fileName?: string; type?: string; createdBy?: string;
     totalDocuments?: number; encrypted?: boolean; collections?: number;
   }>> {
-    const files = await r2Service.listBackups('backups/');
-    const manifest = await this.readManifestFromR2(true);
+    const files = source === 'secondary'
+      ? await r2Service.listSecondary('backups/')
+      : await r2Service.listBackups('backups/');
+    // The manifest is optional enrichment. In forced-secondary mode, avoid
+    // contacting primary R2 entirely; object metadata is enough to restore.
+    const manifest = source === 'secondary' ? null : await this.readManifestFromR2(true);
     const metaByKey = new Map<string, any>();
     if (manifest?.backups) for (const b of manifest.backups) metaByKey.set(b.r2Key, b);
 
@@ -1146,11 +1150,14 @@ class BackupService {
     r2Key: string,
     userId: string,
     newDbName?: string,
+    source: 'auto' | 'secondary' = 'auto',
   ): Promise<{ dbName: string; collections: number; documents: number; businessDocuments: number }> {
-    logger.info(`[DR] Safe restore (into a new side database) from: ${r2Key}`);
+    logger.info(
+      `[DR] Safe restore (into a new side database) from ${source === 'secondary' ? 'secondary backup storage' : 'automatic primary/secondary failover'}: ${r2Key}`
+    );
 
     if (!mongoose.connection.db) throw new Error('No active database connection');
-    const { data: backupData } = await this.downloadDecryptParse(r2Key);
+    const { data: backupData } = await this.downloadDecryptParse(r2Key, source);
 
     const liveName = mongoose.connection.name;
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1194,8 +1201,13 @@ class BackupService {
   // ──────────────────────────────────────────────────────────────────────────
 
   /** Shared helper: download a backup from R2, decrypt (graceful), gunzip, parse. */
-  private async downloadDecryptParse(r2Key: string): Promise<{ data: any; sizeBytes: number }> {
-    const stream = await r2Service.downloadBackup(r2Key);
+  private async downloadDecryptParse(
+    r2Key: string,
+    source: 'auto' | 'secondary' = 'auto',
+  ): Promise<{ data: any; sizeBytes: number }> {
+    const stream = source === 'secondary'
+      ? await r2Service.downloadFromSecondary(r2Key)
+      : await r2Service.downloadBackup(r2Key);
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(chunk);
     let buffer: Buffer = Buffer.concat(chunks);
