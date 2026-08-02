@@ -1,6 +1,6 @@
 {
   "name": "fuel-order-backend",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "Backend API for Fuel Order Management System",
   "main": "dist/server.js",
   "scripts": {

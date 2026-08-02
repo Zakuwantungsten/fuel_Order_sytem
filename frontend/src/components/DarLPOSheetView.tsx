@@ -94,19 +94,60 @@ function AmendModal({
 }: {
   entry: DarLPOEntry; lpoId: string; onDone: (updatedLpo: DarLPO) => void; onClose: () => void;
 }) {
-  const [newLiters, setNewLiters] = useState('');
+  const [newLiters, setNewLiters] = useState(String(entry.liters));
+  // Leave empty = dispense matches new billed (full fuel cascade). Do not prefill
+  // old dispense — that blocks fuel updates when amending down and creates negative diffs.
+  const [dispenseAs, setDispenseAs] = useState('');
+  const [context, setContext] = useState(entry.context || '');
+  const [cascade, setCascade] = useState(true);
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const isLinked = !!entry.linkedFuelRecordId;
+  const oldDispense = entry.dispenseLiters ?? entry.liters;
+  const litersNum = parseFloat(newLiters);
+  const hasValidLiters = !isNaN(litersNum) && litersNum > 0 && litersNum !== entry.liters;
+  const rawDispense = dispenseAs.trim() === '' ? litersNum : (parseFloat(dispenseAs) || 0);
+  const dispenseNum = hasValidLiters ? Math.min(rawDispense, litersNum) : rawDispense;
+  const dispenseClamped = hasValidLiters && dispenseAs.trim() !== '' && rawDispense > litersNum + 0.001;
+  const diff = hasValidLiters ? +(litersNum - dispenseNum).toFixed(2) : 0;
+  const contextRequired = hasValidLiters && Math.abs(diff) > 0.001;
+  const predictedDelta = hasValidLiters ? +(dispenseNum - oldDispense).toFixed(2) : 0;
+
+  const handleNewLitersChange = (value: string) => {
+    setNewLiters(value);
+    const n = parseFloat(value);
+    if (!isNaN(n) && n > 0 && dispenseAs.trim() !== '') {
+      const d = parseFloat(dispenseAs);
+      if (!isNaN(d) && d > n) setDispenseAs(String(n));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const liters = parseFloat(newLiters);
-    if (isNaN(liters) || liters <= 0) { toast.error('Enter valid liters'); return; }
-    if (liters >= entry.liters) { toast.error(`New liters must be less than current (${entry.liters})`); return; }
+    if (!hasValidLiters) {
+      toast.error(litersNum === entry.liters ? 'New liters must differ from the current value' : 'Enter valid liters');
+      return;
+    }
+    if (contextRequired && !context.trim()) {
+      toast.error('Context is required when billed liters differ from dispense');
+      return;
+    }
     setSaving(true);
     try {
-      const updated = await darLPOAPI.amendEntry({ lpoId, entryId: entry._id!, newLiters: liters, amendReason: reason || undefined });
-      toast.success(`Entry amended: ${entry.liters}L → ${liters}L`);
+      const updated = await darLPOAPI.amendEntry({
+        lpoId,
+        entryId: entry._id!,
+        newLiters: litersNum,
+        newDispenseLiters: dispenseAs.trim() === '' ? null : dispenseNum,
+        context: context.trim() || undefined,
+        cascade: isLinked ? cascade : undefined,
+        amendReason: reason || undefined,
+      });
+      const fuelNote = isLinked && cascade && predictedDelta !== 0
+        ? ` · darYard ${predictedDelta > 0 ? '+' : ''}${predictedDelta}L`
+        : '';
+      toast.success(`Entry amended: ${entry.liters}L → ${litersNum}L (dispense ${dispenseNum}L)${fuelNote}`);
       onDone(updated);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to amend entry');
@@ -117,11 +158,11 @@ function AmendModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <div>
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">Amend Entry</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.truckNo} — current: {entry.liters}L</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.truckNo} — current: {entry.liters}L billed, {oldDispense}L dispensed</p>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
             <X className="w-4 h-4 text-gray-500" />
@@ -130,26 +171,79 @@ function AmendModal({
         <form onSubmit={handleSubmit} className="p-4 space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              New Liters <span className="text-red-500">*</span>
+              New Billed Liters <span className="text-red-500">*</span>
             </label>
             <input
-              type="number" value={newLiters} onChange={e => setNewLiters(e.target.value)}
-              step="0.01" min={0.01} max={entry.liters - 0.01} placeholder={`Less than ${entry.liters}`}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+              type="number" value={newLiters} onChange={e => handleNewLitersChange(e.target.value)}
+              step="0.01" min={0.01} placeholder={`Different from ${entry.liters}`}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
               autoFocus required
             />
-            {newLiters && parseFloat(newLiters) > 0 && parseFloat(newLiters) < entry.liters && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Delta: −{(entry.liters - parseFloat(newLiters)).toFixed(2)}L</p>
+            {newLiters && !hasValidLiters && litersNum === entry.liters && (
+              <p className="text-xs text-red-500 mt-1">Must differ from the current value ({entry.liters}L)</p>
+            )}
+            {hasValidLiters && (
+              <p className={`text-xs mt-1 ${litersNum > entry.liters ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                Billed change: {litersNum > entry.liters ? '+' : ''}{(litersNum - entry.liters).toFixed(2)}L
+              </p>
             )}
           </div>
           <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Dispense as (optional)
+            </label>
+            <input
+              type="number" value={dispenseAs} onChange={e => setDispenseAs(e.target.value)}
+              step="0.01" min={0} max={hasValidLiters ? litersNum : undefined}
+              placeholder={hasValidLiters ? `Same as billed (${litersNum}L)` : 'Same as billed (cascade full change)'}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+            />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Leave empty to dispense the full new billed amount{isLinked ? ' and cascade that to the fuel record' : ''}.
+            </p>
+            {dispenseClamped && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                Dispense capped at {litersNum}L (cannot exceed new billed liters).
+              </p>
+            )}
+          </div>
+          {hasValidLiters && (
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Diff (billed − dispense)</span>
+              <span className={`text-sm font-bold ${diff === 0 ? 'text-gray-500' : diff > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {diff > 0 ? '+' : ''}{diff}L
+              </span>
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Context {contextRequired && <span className="text-red-500">*</span>}
+            </label>
+            <input
+              type="text" value={context} onChange={e => setContext(e.target.value)}
+              placeholder={contextRequired ? 'Required — e.g. yard reserve top-up' : 'Optional note'}
+              className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm ${contextRequired && !context.trim() ? 'border-red-400' : 'border-gray-300 dark:border-gray-600'}`}
+            />
+          </div>
+          {isLinked && hasValidLiters && (
+            <label className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 cursor-pointer">
+              <input
+                type="checkbox" checked={cascade} onChange={e => setCascade(e.target.checked)}
+                className="mt-0.5 w-3.5 h-3.5"
+              />
+              <span className="text-xs text-amber-700 dark:text-amber-400">
+                Cascade to fuel record — <span className="font-mono">darYard</span> will {predictedDelta === 0 ? 'stay the same' : `${predictedDelta > 0 ? 'increase' : 'decrease'} by ${Math.abs(predictedDelta)}L`}
+              </span>
+            </label>
+          )}
+          <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason (optional)</label>
             <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="Brief reason for amendment"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm" />
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm" />
           </div>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+            <button type="submit" disabled={saving || !hasValidLiters} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Scissors className="w-3.5 h-3.5" />}
               Amend
             </button>
@@ -854,12 +948,24 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
 
   const handleEditEntry = async (updatedEntry: Omit<DarLPOEntry, '_id'>) => {
     if (!editingEntry) return;
+    // Liters / dispense / context / linkage only change via Amend.
+    const lockedLiters = editingEntry.entry.liters;
+    const safeEntry: Omit<DarLPOEntry, '_id'> = {
+      ...updatedEntry,
+      liters: lockedLiters,
+      amount: +(lockedLiters * (updatedEntry.rate || 0)).toFixed(2),
+      dispenseLiters: editingEntry.entry.dispenseLiters,
+      context: editingEntry.entry.context,
+      linkedFuelRecordId: editingEntry.entry.linkedFuelRecordId,
+      originalLiters: editingEntry.entry.originalLiters,
+      amendedAt: editingEntry.entry.amendedAt,
+    };
     setIsSaving(true);
     try {
       await darLPOAPI.acquireLock(lpoId);
       try {
         const updatedEntries = lpo.entries.map((e, i) =>
-          i === editingEntry.index ? { ...editingEntry.entry, ...updatedEntry } : e
+          i === editingEntry.index ? { ...editingEntry.entry, ...safeEntry } : e
         );
         const updated = await darLPOAPI.update(lpoId, { entries: updatedEntries });
         toast.success('Entry updated');
@@ -1259,6 +1365,8 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
               const isSelectable = canWrite && !isCancelled && !entry.linkedFuelRecordId && !!entry._id;
               const isSelected = isSelectable && selectedIds.has(entry._id!);
               const isHighlighted = highlightedTruckNo !== null && (entry.truckNo || '').toLowerCase() === highlightedTruckNo.toLowerCase();
+              const dispenseVal = entry.dispenseLiters ?? entry.liters;
+              const diffVal = +(entry.liters - dispenseVal).toFixed(2);
               return (
                 <div key={entry._id ?? idx}
                   ref={(el) => { if (el) entryRowRefs.current.set(realIdx, el); else entryRowRefs.current.delete(realIdx); }}
@@ -1309,6 +1417,23 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
                         <div className="text-[14px] font-extrabold text-[#2a3343] tabular-nums">{entry.rate}<span className="text-[10px] text-[#9aa4b6] ml-0.5">/L</span></div>
                       </div>
                     </div>
+
+                    {(diffVal !== 0 || entry.context) && (
+                      <div className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-[10px] bg-[#fffbeb] border border-[#fde9c0]">
+                        <span className="text-[10px] font-bold uppercase text-[#b07a17]">Disp {dispenseVal.toFixed(0)}L</span>
+                        <span
+                          className="text-[10px] font-extrabold"
+                          style={{ color: diffVal === 0 ? '#94a3b8' : diffVal > 0 ? '#16a34a' : '#dc2626' }}
+                        >
+                          Diff {diffVal > 0 ? '+' : ''}{diffVal}L
+                        </span>
+                        {entry.context && (
+                          <span className="text-[10px] text-[#8893a6] truncate flex-1" title={entry.context}>
+                            {entry.context}
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {canWrite && (
                       <div className="flex gap-2 mt-3">
@@ -1379,9 +1504,9 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
 
         {/* Desktop table */}
         <div className="hidden lg:block p-5">
-          <div className="max-w-5xl mx-auto border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div className="max-w-6xl mx-auto border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
             {/* Header row */}
-            <div className="grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-green-50 dark:bg-green-900/30 border-b border-gray-200 dark:border-gray-700">
+            <div className="grid grid-cols-[1.5rem_2rem_1fr_1fr_4.5rem_4.5rem_3.5rem_4.5rem_5.5rem_1fr_1fr_5.5rem] bg-green-50 dark:bg-green-900/30 border-b border-gray-200 dark:border-gray-700">
               {/* Checkbox select-all header */}
               <div className="px-1 py-2 flex items-center justify-center border-r border-gray-200 dark:border-gray-700">
                 {canWrite && unlinkableEntries.length > 0 && (
@@ -1391,9 +1516,9 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
                   </button>
                 )}
               </div>
-              {['#', 'DO No', 'Truck', 'Liters', 'Rate', 'Amount', 'Destination', 'Actions'].map((h, i) => (
+              {['#', 'DO No', 'Truck', 'Liters', 'Disp', 'Diff', 'Rate', 'Amount', 'Context', 'Destination', 'Actions'].map((h, i, arr) => (
                 <div key={h}
-                  className={`px-2 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide ${i > 2 && i < 6 ? 'text-right' : ''} ${i < 7 ? 'border-r border-gray-200 dark:border-gray-700' : 'text-center'}`}>
+                  className={`px-2 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide ${i >= 3 && i <= 7 ? 'text-right' : ''} ${i < arr.length - 1 ? 'border-r border-gray-200 dark:border-gray-700' : 'text-center'}`}>
                   {h}
                 </div>
               ))}
@@ -1412,8 +1537,10 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
                   : isSelected
                     ? 'bg-green-50/60 dark:bg-green-900/10 border-b border-green-100 dark:border-green-900/20'
                     : 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50';
+              const dispenseVal = entry.dispenseLiters ?? entry.liters;
+              const diffVal = +(entry.liters - dispenseVal).toFixed(2);
               return (
-                <div key={entry._id ?? idx} ref={(el) => { if (el) entryRowRefs.current.set(realIdx, el); else entryRowRefs.current.delete(realIdx); }} className={`grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] ${rowCls}`}>
+                <div key={entry._id ?? idx} ref={(el) => { if (el) entryRowRefs.current.set(realIdx, el); else entryRowRefs.current.delete(realIdx); }} className={`grid grid-cols-[1.5rem_2rem_1fr_1fr_4.5rem_4.5rem_3.5rem_4.5rem_5.5rem_1fr_1fr_5.5rem] ${rowCls}`}>
                   {/* Checkbox cell */}
                   <div className="px-1 py-2 flex items-center justify-center border-r border-gray-200 dark:border-gray-700">
                     {isSelectable && (
@@ -1444,10 +1571,32 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
                     </span>
                   </div>
                   <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700 text-right">
+                    <span className={`text-sm ${isCancelled ? 'line-through text-red-500' : 'text-gray-600 dark:text-gray-400'}`}>
+                      {dispenseVal.toFixed(0)}
+                    </span>
+                  </div>
+                  <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700 text-right">
+                    <span
+                      className="text-xs font-semibold"
+                      style={{ color: isCancelled ? '#ef4444' : diffVal === 0 ? '#94a3b8' : diffVal > 0 ? '#16a34a' : '#dc2626' }}
+                      title="Billed liters minus dispensed liters"
+                    >
+                      {diffVal === 0 ? '—' : `${diffVal > 0 ? '+' : ''}${diffVal}`}
+                    </span>
+                  </div>
+                  <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700 text-right">
                     <span className={`text-sm ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>{entry.rate}</span>
                   </div>
                   <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700 text-right">
                     <span className={`text-sm font-medium ${isCancelled ? 'line-through text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>{fmt(entry.amount)}</span>
+                  </div>
+                  <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700">
+                    <span
+                      className={`text-xs truncate block max-w-[9rem] ${isCancelled ? 'text-red-400' : 'text-gray-600 dark:text-gray-400'}`}
+                      title={entry.context || ''}
+                    >
+                      {entry.context || '—'}
+                    </span>
                   </div>
                   <div className="px-2 py-2 border-r border-gray-200 dark:border-gray-700">
                     <span className={`text-sm ${isCancelled ? 'text-red-400' : 'text-gray-600 dark:text-gray-400'}`}>{entry.dest}</span>
@@ -1468,7 +1617,7 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => setAmendingEntry(entry)} disabled={isSaving}
-                          className="p-1 text-amber-600 hover:text-amber-800 dark:text-amber-400 disabled:opacity-40" title="Amend (reduce liters)">
+                          className="p-1 text-amber-600 hover:text-amber-800 dark:text-amber-400 disabled:opacity-40" title="Amend (change billed liters)">
                           <Scissors className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => setCancellingEntry(entry)} disabled={isSaving}
@@ -1502,14 +1651,17 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
             </div>
 
             {/* Totals row */}
-            <div className="grid grid-cols-[1.5rem_2rem_1fr_1fr_5rem_5rem_6rem_1fr_6rem] bg-green-50 dark:bg-green-900/30 font-semibold">
+            <div className="grid grid-cols-[1.5rem_2rem_1fr_1fr_4.5rem_4.5rem_3.5rem_4.5rem_5.5rem_1fr_1fr_5.5rem] bg-green-50 dark:bg-green-900/30 font-semibold">
               <div className="px-1 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300 uppercase">{activeEntries.length} active</div>
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-right text-sm font-bold text-green-700 dark:text-green-300">{totalLiters.toLocaleString()}</div>
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
+              <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
+              <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-right text-sm font-bold text-green-900 dark:text-green-200">{fmt(lpo.total)}</div>
+              <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700" />
               <div className="px-2 py-2.5 border-r border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">{lpo.currency}</div>
               <div className="px-2 py-2.5" />
             </div>
@@ -1549,6 +1701,12 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
         <DarLPOEntryForm
           entry={editingEntry.entry}
           defaultRate={editingEntry.entry.rate}
+          lockLiters
+          onAmendLiters={() => {
+            const row = editingEntry.entry;
+            setEditingEntry(null);
+            setAmendingEntry(row);
+          }}
           onSave={handleEditEntry}
           onClose={() => setEditingEntry(null)}
         />

@@ -359,6 +359,33 @@ function resolveActor(actor?: DataChangeActor): { actorId: string | null; actorU
   };
 }
 
+/** Collapse controller + change-stream double emits for the same document. */
+const RECENT_EMIT_DEDUPE_MS = 2500;
+const recentEmits = new Map<string, number>();
+
+function shouldSkipDuplicateEmit(
+  collection: string,
+  action: string,
+  changedDocument?: Record<string, any>,
+): boolean {
+  const rawId = changedDocument?._id ?? changedDocument?.id;
+  if (rawId == null || rawId === '') return false;
+  const key = `${collection}:${action}:${String(rawId)}`;
+  const now = Date.now();
+  const prev = recentEmits.get(key);
+  if (prev != null && now - prev < RECENT_EMIT_DEDUPE_MS) {
+    return true;
+  }
+  recentEmits.set(key, now);
+  // Opportunistic cleanup so the map doesn't grow forever
+  if (recentEmits.size > 500) {
+    for (const [k, at] of recentEmits) {
+      if (now - at > RECENT_EMIT_DEDUPE_MS) recentEmits.delete(k);
+    }
+  }
+  return false;
+}
+
 export const emitDataChange = (
   collection: string,
   action: 'create' | 'update' | 'delete' = 'update',
@@ -368,6 +395,7 @@ export const emitDataChange = (
   actor?: DataChangeActor
 ): void => {
   if (!io) return;
+  if (shouldSkipDuplicateEmit(collection, action, changedDocument)) return;
   const { actorId, actorUsername } = resolveActor(actor);
   io.emit('data_changed', {
     collection,

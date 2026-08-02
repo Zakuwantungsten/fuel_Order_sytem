@@ -12,7 +12,7 @@ COPY . .
 # (/api/v1 avoids the backend's deprecated legacy /api mount)
 ARG VITE_API_BASE_URL=/api/v1
 ARG VITE_APP_NAME="Tahmeed Fuel Order"
-ARG VITE_APP_VERSION=1.0.0
+ARG VITE_APP_VERSION=3.0.0
 
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_APP_NAME=$VITE_APP_NAME

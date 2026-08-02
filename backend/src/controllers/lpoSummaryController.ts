@@ -29,6 +29,12 @@ import {
   createLPOAmendedNotification,
   createLPOPickedAtNotification,
 } from './notificationController';
+import {
+  isYardStation,
+  canonicalYardStation,
+  YARD_DEFAULT_ORDER_OF,
+} from '../utils/yardStations';
+import { normalizeYardEntriesForSummary } from '../services/yardUnifiedLpoService';
 
 // Dynamic station to fuel field mapping cache
 let STATION_TO_FUEL_FIELD_CACHE: Record<string, { going?: string; returning?: string }> = {};
@@ -1135,12 +1141,27 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
     const dateObj = new Date(data.date);
     const year = dateObj.getFullYear();
 
+    // Yard stations (Tanga Yard / Dar Yard): canonicalize name, default orderOf,
+    // normalize entry doNo/dest, and NEVER run checkpoint fuel deduct — fuel is
+    // applied later via explicit yard link (tangaYard / darYard + dispenseLiters).
+    const yardStation = canonicalYardStation(data.station);
+    const isYard = !!yardStation;
+    if (isYard) {
+      data.station = yardStation;
+      if (!data.orderOf) data.orderOf = YARD_DEFAULT_ORDER_OF;
+      data.entries = normalizeYardEntriesForSummary(data.entries || []);
+      data.total =
+        data.total != null
+          ? data.total
+          : data.entries.reduce((sum: number, e: any) => sum + (e.isCancelled ? 0 : e.amount || 0), 0);
+    }
+
     // Ensure workbook exists for this year
     await getOrCreateWorkbook(year);
 
     // Resolve station currency from FuelStationConfig (USD for Zambia, TZS for Tanzania)
     let resolvedCurrency: 'USD' | 'TZS' = 'TZS';
-    if (data.station && data.station !== 'CASH' && data.station !== 'CUSTOM') {
+    if (data.station && data.station !== 'CASH' && data.station !== 'CUSTOM' && !isYard) {
       const stationConfig = await FuelStationConfig.findOne({ stationName: data.station, isActive: true }).lean();
       if (stationConfig?.currency) {
         resolvedCurrency = stationConfig.currency as 'USD' | 'TZS';
@@ -1150,9 +1171,13 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
         if (upper.startsWith('LAKE') && !upper.includes('TUNDUMA')) resolvedCurrency = 'USD';
       }
     }
+    if (isYard && data.currency) {
+      resolvedCurrency = data.currency === 'USD' ? 'USD' : 'TZS';
+    }
 
     const fuelFlags = await getFuelAutomationFlags();
-    const needsAtomicDeduct = fuelFlags.lpoCreateDeduct;
+    // Yard LPOs never use checkpoint deduct — linking writes tangaYard/darYard separately.
+    const needsAtomicDeduct = fuelFlags.lpoCreateDeduct && !isYard;
     const lpoPayload = {
       ...data,
       currency: data.currency || resolvedCurrency,
@@ -1307,6 +1332,14 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       id: req.user?.userId,
       username: req.user?.username,
     });
+    // Yard stations also refresh Tanga/Dar tab listeners
+    if (isYardStation(lpoSummary.station)) {
+      if (String(lpoSummary.station).toLowerCase().includes('tanga')) {
+        emitDataChange('tanga_lpo_documents', 'create');
+      } else {
+        emitDataChange('dar_lpo_documents', 'create');
+      }
+    }
     // Atomic path already emitted per-record fuel updates above.
     if (!needsAtomicDeduct) emitDataChange('fuel_records', 'update');
 
@@ -1327,9 +1360,54 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
   // Pre-flight: auth + lock enforcement (outside transaction — no writes needed)
   const username = req.user?.username;
     if (!username) throw new ApiError(401, 'Authentication required');
-    const preflightLpo = await LPOSummary.findOne({ _id: id, isDeleted: false }).select('_id').lean();
+    const preflightLpo = await LPOSummary.findOne({ _id: id, isDeleted: false }).select('_id station').lean();
     if (!preflightLpo) throw new ApiError(404, 'LPO document not found');
     await enforceEditLock(LPOSummary, id, username, 'lpo_summaries');
+
+    // Yard LPOs (Tanga/Dar): never run checkpoint fuel deduct/revert on update.
+    // Entry appends and fuel linking go through the yard dual-read APIs
+    // (tanga/dar controllers → findYardLpoById → simple save + bulkLink).
+    if (isYardStation((preflightLpo as any).station)) {
+      if (newData.date) newData.year = new Date(newData.date).getFullYear();
+      if (Array.isArray(newData.entries)) {
+        newData.entries = normalizeYardEntriesForSummary(newData.entries);
+      }
+      // Keep station canonical
+      newData.station = canonicalYardStation((preflightLpo as any).station) || (preflightLpo as any).station;
+      if (!newData.orderOf) newData.orderOf = YARD_DEFAULT_ORDER_OF;
+
+      const updated = await LPOSummary.findOneAndUpdate(
+        { _id: id, isDeleted: false },
+        { $set: newData },
+        { new: true, runValidators: true }
+      );
+      if (!updated) throw new ApiError(404, 'LPO document not found');
+
+      await AuditService.log({
+        userId: req.user?.userId,
+        username,
+        action: 'UPDATE',
+        resourceType: 'LPOSummary',
+        resourceId: updated.lpoNo,
+        details: `Yard LPO ${updated.lpoNo} (${updated.station}) updated without checkpoint fuel mutations by ${username}`,
+        ipAddress: req.ip,
+        severity: 'medium',
+      });
+
+      const responseData = updated.toObject();
+      res.status(200).json({
+        success: true,
+        message: 'LPO document updated successfully',
+        data: { ...responseData, id: responseData._id },
+      });
+      emitDataChange('lpo_summaries', 'update', updated.toObject(), updated.station);
+      if (String(updated.station).toLowerCase().includes('tanga')) {
+        emitDataChange('tanga_lpo_documents', 'update');
+      } else {
+        emitDataChange('dar_lpo_documents', 'update');
+      }
+      return;
+    }
 
     // Define entry type for proper typing
     interface EntryType {

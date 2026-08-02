@@ -380,6 +380,13 @@ export interface ILPODetail {
   // In-place fill-station override (truck stays on this LPO)
   pickedAtStation?: string | null;
   pickedAtAt?: Date | null;
+  /**
+   * Yard LPO fields (Tanga Yard / Dar Yard stations on LPOSummary).
+   * Liters dispensed to FuelRecord.tangaYard / darYard; defaults to `liters`.
+   */
+  dispenseLiters?: number | null;
+  /** Linked FuelRecord _id when yard entry is linked for dispense. */
+  linkedFuelRecordId?: string;
 }
 
 // Cancellation Point Types
@@ -699,6 +706,11 @@ export interface ITangaLPOEntry {
    * top-up that should not count against the journey balance).
    */
   dispenseLiters?: number | null;
+  /**
+   * Explanation for the diff between billed liters and dispensed liters
+   * (e.g. yard reserve top-up). Required on amend when the diff is non-zero.
+   */
+  context?: string | null;
   sortOrder?: number;
   originalLiters?: number | null;
   amendedAt?: Date | null;

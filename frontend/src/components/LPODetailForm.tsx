@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight, MessageSquare, Clock } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
-import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI } from '../services/api';
+import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI, tangaLPOAPI, darLPOAPI } from '../services/api';
+import YardEntriesTable from './YardEntriesTable';
+import type { YardEntriesTableHandle } from './YardEntriesTable';
+import { isYardStation, isDarYardStation, YARD_STATION, YARD_DEFAULT_ORDER_OF } from '../utils/yardStations';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
@@ -88,7 +91,7 @@ interface InspectModalState {
 interface LPODetailFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Partial<LPOSummary>) => Promise<void> | void;
+  onSubmit: (data: Partial<LPOSummary>) => Promise<any> | void;
   initialData?: LPOSummary;
 }
 
@@ -311,6 +314,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   });
   const [isLoadingLpoNumber, setIsLoadingLpoNumber] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
+
+  // ── Yard station mode (Tanga Yard / Dar Yard) ─────────────────────────────
+  // Entries for yard stations are managed entirely by <YardEntriesTable/> (its
+  // own local state), bypassing formData.entries and the regular validation
+  // pipeline below so non-yard stations are never affected.
+  const isYardMode = isYardStation(formData.station);
+  const yardEntriesRef = useRef<YardEntriesTableHandle>(null);
+  const [yardSummary, setYardSummary] = useState<{ count: number; total: number; totalLiters: number }>({
+    count: 0, total: 0, totalLiters: 0,
+  });
 
   // Cash cancellation state - now supports both directions simultaneously
   const [goingEnabled, setGoingEnabled] = useState(() => {
@@ -2902,7 +2915,83 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     return mode === 'regular';
   });
 
+  // Yard stations (Tanga Yard / Dar Yard) submit through a completely separate
+  // path: entries come from <YardEntriesTable/> (never formData.entries), the
+  // LPO is created via the regular lpoDocumentsAPI.create (skips checkpoint
+  // deduct server-side for yard stations), then any linked entries are
+  // bulk-linked to their fuel records via the tanga/dar yard API — mirrors
+  // TangaYardLPOForm's applyFuelLinks.
+  const handleYardSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.lpoNo || !formData.lpoNo.trim()) {
+      toast.warn('LPO number is required');
+      return;
+    }
+    if (!formData.date) {
+      toast.warn('Date is required');
+      return;
+    }
+
+    if (yardEntriesRef.current?.hasPendingChoice()) {
+      toast.error('Pick a fuel record for every truck with multiple matches before submitting');
+      return;
+    }
+
+    const submission = yardEntriesRef.current?.getSubmission();
+    if (!submission || submission.entries.length === 0) {
+      toast.warn('Please add at least one entry with truck, liters, and rate');
+      return;
+    }
+
+    const total = submission.entries.reduce((sum, entry) => sum + entry.amount, 0);
+    const submitData: Partial<LPOSummary> = {
+      ...formData,
+      station: formData.station,
+      orderOf: (formData.orderOf && formData.orderOf.trim()) || YARD_DEFAULT_ORDER_OF,
+      entries: submission.entries as unknown as LPODetail[],
+      total,
+    };
+
+    setIsSubmitting(true);
+    try {
+      // Parent create closes the form; it returns the created LPO so we can
+      // bulk-link without a second fetch (and without racing unmount).
+      const createdLpo = await onSubmit(submitData);
+
+      if (submission.linkSelections.length > 0 && createdLpo) {
+        try {
+          const responseEntries = (createdLpo as any)?.entries || [];
+          const selections = submission.linkSelections
+            .map(sel => {
+              const respEntry = responseEntries[sel.index];
+              const entryId = respEntry?.id ?? respEntry?._id;
+              if (!entryId) return null;
+              return { entryId: String(entryId), fuelRecordId: sel.fuelRecordId, topUp: sel.topUp };
+            })
+            .filter((s): s is { entryId: string; fuelRecordId: string; topUp: boolean } => s != null);
+
+          if (selections.length > 0) {
+            const lpoId = String((createdLpo as any)?.id ?? (createdLpo as any)?._id ?? '');
+            const api = isDarYardStation(formData.station) ? darLPOAPI : tangaLPOAPI;
+            const linkResult = await api.bulkLink(lpoId, { selections });
+            const linked = (linkResult.results || []).filter((r: any) => r.status === 'linked' || r.status === 'topped_up').length;
+            const notFound = (linkResult.results || []).filter((r: any) => r.status === 'not_found').length;
+            if (linked > 0) toast.info(`${linked} ${linked === 1 ? 'entry' : 'entries'} linked to fuel record`);
+            if (notFound > 0) toast.warn(`${notFound} ${notFound === 1 ? 'entry' : 'entries'} could not be linked`);
+          }
+        } catch (linkErr) {
+          console.error('Yard bulk-link failed:', linkErr);
+          toast.warn('LPO created, but linking fuel records failed. Use manual link from the LPO sheet.');
+        }
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
+    if (isYardMode) return handleYardSubmit(e);
     e.preventDefault();
     
     // Validate entries
@@ -3665,6 +3754,29 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                         <PlusCircle className="w-4 h-4" />CUSTOM station
                         {formData.station === 'CUSTOM' && <Check className="w-4 h-4 ml-auto" />}
                       </button>
+                      <div className="h-px bg-[#eef1f6] dark:bg-[#1e293b] my-1.5 mx-1" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleHeaderChange({ target: { name: 'station', value: YARD_STATION.TANGA } } as any);
+                          setShowStationDropdown(false);
+                        }}
+                        className="menu-item w-full flex items-center gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-bold text-[#1d6fc9]"
+                      >
+                        <Fuel className="w-4 h-4" />Tanga Yard
+                        {formData.station === YARD_STATION.TANGA && <Check className="w-4 h-4 ml-auto" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleHeaderChange({ target: { name: 'station', value: YARD_STATION.DAR } } as any);
+                          setShowStationDropdown(false);
+                        }}
+                        className="menu-item w-full flex items-center gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-bold text-[#16a34a]"
+                      >
+                        <Fuel className="w-4 h-4" />Dar Yard
+                        {formData.station === YARD_STATION.DAR && <Check className="w-4 h-4 ml-auto" />}
+                      </button>
                     </div>
                   )}
                   {formData.station && (() => {
@@ -4222,7 +4334,26 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             </div>
           )}
 
-
+          {isYardMode ? (
+            <div className="mb-5">
+              <div className="flex items-center gap-2 mb-3.5 flex-wrap">
+                <span className="text-[11px] font-bold tracking-[.08em] uppercase text-[#4f46e5] dark:text-indigo-400">02</span>
+                <span className="text-[14px] font-bold text-[#0f1729] dark:text-gray-100">Fuel supply details — {formData.station}</span>
+                <span className="text-[12px] text-[#9aa6b6] font-medium">
+                  {yardSummary.count} {yardSummary.count === 1 ? 'truck' : 'trucks'}
+                </span>
+              </div>
+              <YardEntriesTable
+                key={formData.station}
+                ref={yardEntriesRef}
+                yard={isDarYardStation(formData.station) ? 'darYard' : 'tangaYard'}
+                date={formData.date || ''}
+                disabled={isSubmitting}
+                onSummaryChange={setYardSummary}
+              />
+            </div>
+          ) : (
+          <>
           {/* ===== 02 · FUEL SUPPLY DETAILS ===== */}
           <div className="mb-5">
             <div className="flex items-center gap-2 mb-3.5 flex-wrap">
@@ -5053,6 +5184,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
              </div>
             </div>
           </div>
+          </>
+          )}
 
           {/* ===== TOTAL + ACTIONS ===== */}
           <div className="flex items-center justify-between gap-4 p-4 sm:px-5 rounded-[14px] border border-[#eef1f6] dark:border-[#1e293b] bg-gradient-to-b from-[#fbfcfe] to-[#f7f9fc] dark:from-[#0f172a] dark:to-[#0b1220] flex-wrap">
@@ -5061,6 +5194,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 <div className="text-[10.5px] font-bold tracking-[.07em] uppercase text-[#94a3b8]">Total amount</div>
                 <div className="mono text-[26px] sm:text-[28px] font-extrabold text-[#0f1729] dark:text-gray-100 leading-[1.1] tracking-tight mt-0.5">
                   {(() => {
+                    if (isYardMode) return `TZS ${yardSummary.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                     const stationUpper = (formData.station || '').toUpperCase();
                     const stationConfig = availableStations.find(s => s.stationName.toUpperCase() === stationUpper);
                     const currency = formData.station === 'CASH' ? cashCurrency
@@ -5077,7 +5211,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               <div>
                 <div className="text-[10.5px] font-bold tracking-[.07em] uppercase text-[#94a3b8]">Total liters</div>
                 <div className="mono text-[20px] font-bold text-[#475569] dark:text-gray-300 mt-1">
-                  {(formData.entries || []).filter(e => e != null).reduce((sum, e) => sum + (e.liters || 0), 0).toLocaleString('en-US')} L
+                  {isYardMode
+                    ? yardSummary.totalLiters.toLocaleString('en-US')
+                    : (formData.entries || []).filter(e => e != null).reduce((sum, e) => sum + (e.liters || 0), 0).toLocaleString('en-US')} L
                 </div>
               </div>
             </div>
@@ -5091,8 +5227,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 Cancel
               </button>
 
-              {/* Forward LPO Button - Show for EXISTING saved LPOs */}
-              {initialData && initialData.id && formData.entries && formData.entries.filter(e => !e.isCancelled).length > 0 && (
+              {/* Forward LPO Button - Show for EXISTING saved LPOs (not applicable to yard stations) */}
+              {!isYardMode && initialData && initialData.id && formData.entries && formData.entries.filter(e => !e.isCancelled).length > 0 && (
                 <button
                   type="button"
                   onClick={handleOpenForwardModal}
@@ -5104,8 +5240,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 </button>
               )}
 
-              {/* Create & Forward Button - Show for NEW LPOs with entries */}
-              {!initialData && formData.entries && formData.entries.length > 0 && formData.station && formData.lpoNo && (
+              {/* Create & Forward Button - Show for NEW LPOs with entries (not applicable to yard stations) */}
+              {!isYardMode && !initialData && formData.entries && formData.entries.length > 0 && formData.station && formData.lpoNo && (
                 <button
                   type="button"
                   onClick={handleCreateAndForward}
@@ -5131,7 +5267,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 type="submit"
                 disabled={
                   isSubmitting ||
-                  !formData.entries || formData.entries.length === 0 ||
+                  (isYardMode ? yardSummary.count === 0 : (!formData.entries || formData.entries.length === 0)) ||
                   hasReturnDoMissingBlock
                 }
                 style={

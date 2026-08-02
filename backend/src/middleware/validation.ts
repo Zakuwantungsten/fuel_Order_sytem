@@ -251,9 +251,21 @@ export const lpoSummaryValidation = {
     body('lpoNo').trim().notEmpty().withMessage('LPO number is required'),
     body('date').notEmpty().withMessage('Date is required'),
     body('station').trim().notEmpty().withMessage('Station is required'),
-    body('orderOf').trim().notEmpty().withMessage('Order of is required'),
+    body('orderOf').custom((val, { req }) => {
+      const station = String(req.body?.station || '');
+      const isYard = /^tanga\s*yard$/i.test(station) || /^dar\s*yard$/i.test(station);
+      if (isYard) return true; // defaulted server-side
+      if (!val || !String(val).trim()) throw new Error('Order of is required');
+      return true;
+    }),
     body('entries').isArray({ min: 1 }).withMessage('At least one entry is required'),
-    body('entries.*.doNo').trim().notEmpty().withMessage('DO number is required'),
+    body('entries.*.doNo').custom((val, { req }) => {
+      const station = String(req.body?.station || '');
+      const isYard = /^tanga\s*yard$/i.test(station) || /^dar\s*yard$/i.test(station);
+      if (isYard) return true; // may be NIL / pending / filled later on link
+      if (!val || !String(val).trim()) throw new Error('DO number is required');
+      return true;
+    }),
     body('entries.*.truckNo').trim().notEmpty().withMessage('Truck number is required'),
     body('entries.*.liters')
       .isFloat({ min: 0 })
@@ -261,7 +273,16 @@ export const lpoSummaryValidation = {
     body('entries.*.rate')
       .isFloat({ min: 0 })
       .withMessage('Rate must be a non-negative number'),
-    body('entries.*.dest').trim().notEmpty().withMessage('Destination is required'),
+    body('entries.*.dest').custom((val, { req }) => {
+      const station = String(req.body?.station || '');
+      const isYard = /^tanga\s*yard$/i.test(station) || /^dar\s*yard$/i.test(station);
+      if (isYard) return true;
+      if (!val || !String(val).trim()) throw new Error('Destination is required');
+      return true;
+    }),
+    body('entries.*.dispenseLiters').optional({ nullable: true }).isFloat({ min: 0 }),
+    body('entries.*.linkedFuelRecordId').optional({ nullable: true }).isString(),
+    body('entries.*.context').optional({ nullable: true }).isString(),
   ],
 };
 

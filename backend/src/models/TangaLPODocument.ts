@@ -41,6 +41,14 @@ const tangaLPOEntrySchema = new Schema<ITangaLPOEntry>(
       default: null,
       min: [0, 'Dispense liters cannot be negative'],
     },
+    // Explanation for the diff between billed and dispensed liters (e.g. yard
+    // reserve top-up). Required on amend whenever the diff is non-zero.
+    context: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+      default: null,
+    },
     sortOrder: {
       type: Number,
       default: 0,

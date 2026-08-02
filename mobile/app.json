@@ -2,7 +2,7 @@
   "expo": {
     "name": "limka",
     "slug": "fuelorder",
-    "version": "1.0.0",
+    "version": "3.0.0",
     "orientation": "portrait",
     "runtimeVersion": {
       "policy": "appVersion"

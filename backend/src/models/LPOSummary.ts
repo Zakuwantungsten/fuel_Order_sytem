@@ -162,6 +162,17 @@ const lpoDetailSchema = new Schema<ILPODetail>(
       type: Date,
       default: null,
     },
+    // Yard LPO: liters written to FuelRecord.tangaYard / darYard (defaults to billed liters)
+    dispenseLiters: {
+      type: Number,
+      default: null,
+      min: [0, 'Dispense liters cannot be negative'],
+    },
+    // Yard LPO: explicit link to a FuelRecord for yard column dispense
+    linkedFuelRecordId: {
+      type: String,
+      trim: true,
+    },
   },
   { _id: true }
 );

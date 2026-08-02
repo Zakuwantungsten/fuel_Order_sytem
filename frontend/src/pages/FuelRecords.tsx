@@ -25,7 +25,7 @@ import EditLockBadge from '../components/EditLockBadge';
 import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
 import PendingDoFollowUpModal from '../components/PendingDoFollowUpModal';
 import { useAuth } from '../contexts/AuthContext';
-import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
+import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useFuelRecordJourneyStatuses, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 import { replaceUrlPreservingState } from '../utils/historyState';
 import { pendingDoStatusLabel } from '../utils/pendingDo';
 import { formatTruckNumber } from '../utils/dataCleanup';
@@ -149,6 +149,8 @@ const FuelRecords = () => {
   const [routeFilter, setRouteFilter] = usePersistedState('fr:routeFilter', '');
   const [routeTypeFilter, setRouteTypeFilter] = usePersistedState<'IMPORT' | 'EXPORT'>('fr:routeTypeFilter', 'IMPORT');
   const [statusFilter, setStatusFilter] = usePersistedState<'all' | 'active' | 'cancelled'>('fr:statusFilter', 'all');
+  /** Separate from cancel status: all | active | completed | queued | queued:N */
+  const [journeyFilter, setJourneyFilter] = usePersistedState<string>('fr:journeyFilter', 'all');
   const [exportYear, setExportYear] = useState<number>(() => new Date().getFullYear());
   const [viewMode, setViewMode] = usePersistedState<'records' | 'analytics'>('fr:viewMode', 'records');
   
@@ -218,6 +220,22 @@ const FuelRecords = () => {
   const routeFrom = routeFilter ? (routeTypeFilter === 'EXPORT' ? routeFilter.split('-')[0] : undefined) : undefined;
   const routeTo = routeFilter ? (routeTypeFilter === 'IMPORT' ? routeFilter.split('-')[1] : undefined) : undefined;
 
+  const journeyStatusParam =
+    journeyFilter === 'all'
+      ? undefined
+      : journeyFilter.startsWith('queued:')
+        ? ('queued' as const)
+        : (['active', 'completed', 'queued', 'cancelled'].includes(journeyFilter)
+            ? (journeyFilter as 'active' | 'completed' | 'queued' | 'cancelled')
+            : undefined);
+  const queueOrderParam =
+    journeyFilter.startsWith('queued:')
+      ? (() => {
+          const n = parseInt(journeyFilter.slice(7), 10);
+          return Number.isFinite(n) && n >= 1 ? n : undefined;
+        })()
+      : undefined;
+
   const { data: recordsData, isLoading: loading, isFetching, isError, refetch: refetchRecords } = useFuelRecordsList({
     page: currentPage,
     limit: itemsPerPage,
@@ -228,6 +246,8 @@ const FuelRecords = () => {
     sort: 'date',
     order: 'desc',
     status: statusFilter,
+    journeyStatus: journeyStatusParam,
+    queueOrder: queueOrderParam,
   }, monthInitialized);
 
   const records = recordsData?.records ?? [];
@@ -245,6 +265,14 @@ const FuelRecords = () => {
     monthInitialized && !!monthApiFilter,
   );
 
+  // Distinct journey statuses + queue positions for the separate journey filter
+  const { data: journeyOptions } = useFuelRecordJourneyStatuses(
+    monthApiFilter || '',
+    monthInitialized && !!monthApiFilter,
+  );
+  const availableJourneyStatuses = journeyOptions?.statuses ?? [];
+  const availableQueueOrders = journeyOptions?.queueOrders ?? [];
+
   // Available months & years for month picker
   const { data: periodsData } = useFuelRecordPeriods();
   const availableMonths = periodsData?.months ?? [];
@@ -256,6 +284,7 @@ const FuelRecords = () => {
   const [showRouteDropdown, setShowRouteDropdown] = useState(false);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showJourneyDropdown, setShowJourneyDropdown] = useState(false);
   
   // Dropdown refs
   const exportYearDropdownRef = useRef<HTMLDivElement>(null);
@@ -263,6 +292,7 @@ const FuelRecords = () => {
   const routeDropdownRef = useRef<HTMLDivElement>(null);
   const monthDropdownRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const journeyDropdownRef = useRef<HTMLDivElement>(null);
   
   // Ref and state to track highlight
   const highlightProcessedRef = useRef<string | null>(null);
@@ -488,6 +518,9 @@ const FuelRecords = () => {
       if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
         setShowStatusDropdown(false);
       }
+      if (journeyDropdownRef.current && !journeyDropdownRef.current.contains(event.target as Node)) {
+        setShowJourneyDropdown(false);
+      }
     };
 
     const handleScroll = (event: Event) => {
@@ -497,13 +530,15 @@ const FuelRecords = () => {
         routeTypeDropdownRef.current?.contains(target) ||
         routeDropdownRef.current?.contains(target) ||
         monthDropdownRef.current?.contains(target) ||
-        statusDropdownRef.current?.contains(target)
+        statusDropdownRef.current?.contains(target) ||
+        journeyDropdownRef.current?.contains(target)
       ) return;
       setShowExportYearDropdown(false);
       setShowRouteTypeDropdown(false);
       setShowRouteDropdown(false);
       setShowMonthDropdown(false);
       setShowStatusDropdown(false);
+      setShowJourneyDropdown(false);
     };
 
     const scrollEl = document.getElementById('main-scroll-container');
@@ -542,7 +577,20 @@ const FuelRecords = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, routeFilter, selectedMonth, routeTypeFilter, statusFilter]);
+  }, [searchTerm, routeFilter, selectedMonth, routeTypeFilter, statusFilter, journeyFilter]);
+
+  // If a specific Queued #N is selected but that position no longer exists in this month, fall back
+  useEffect(() => {
+    if (!journeyFilter.startsWith('queued:') || !journeyOptions) return;
+    const n = parseInt(journeyFilter.slice(7), 10);
+    if (!Number.isFinite(n)) {
+      setJourneyFilter('all');
+      return;
+    }
+    if (!availableQueueOrders.includes(n)) {
+      setJourneyFilter(availableJourneyStatuses.includes('queued') ? 'queued' : 'all');
+    }
+  }, [journeyOptions, availableQueueOrders, availableJourneyStatuses, journeyFilter]);
 
   // Subscribe to real-time yard fuel notifications to auto-refresh the table
   useEffect(() => {
@@ -559,7 +607,7 @@ const FuelRecords = () => {
 
   // New-records pill: created fuel records relevant to the current view are
   // surfaced as a click-to-load affordance instead of refreshing the table.
-  const pillResetKey = `${searchTerm}|${routeFilter}|${selectedMonth}|${routeTypeFilter}|${statusFilter}|${currentPage}|${itemsPerPage}`;
+  const pillResetKey = `${searchTerm}|${routeFilter}|${selectedMonth}|${routeTypeFilter}|${statusFilter}|${journeyFilter}|${currentPage}|${itemsPerPage}`;
   const { pendingCount, addPending, clearPending } = useNewRecordsPill(pillResetKey);
 
   const loadNewRecords = () => {
@@ -572,9 +620,10 @@ const FuelRecords = () => {
   // current filtered + paginated view, we bump the pill instead.
   useRealtimeSync('fuel_records', (event) => {
     queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lpoDropdown() });
+    queryClient.invalidateQueries({ queryKey: [...fuelRecordKeys.all, 'journeyStatuses'] });
     if (event?.action === 'create') {
       // Creator already refreshed on mutation success — don't offer "click to load".
-      if (isOwnDataChange(event, user?.id)) return;
+      if (isOwnDataChange(event, user?.id, user?.username)) return;
       const relevant = countRelevantNewRecords(
         event,
         { visibleRows: records, sortField: 'date', sortOrder: 'desc', page: currentPage, totalPages },
@@ -582,11 +631,16 @@ const FuelRecords = () => {
           dateField: 'date',
           matchesFilters: (rec) => {
             if (statusFilter === 'cancelled') return false; // new records are active
+            if (journeyStatusParam) {
+              if (rec?.journeyStatus !== journeyStatusParam) return false;
+              if (queueOrderParam != null && Number(rec?.queueOrder) !== queueOrderParam) return false;
+            }
             if (selectedMonth) return String(rec?.date ?? '').slice(0, 7) === selectedMonth;
             return true;
           },
           matchesBulk: (meta) => {
             if (statusFilter === 'cancelled') return false;
+            if (journeyStatusParam) return false; // can't verify journey from bulk meta — defer to refresh
             if (selectedMonth) {
               const lo = meta.dateMin?.slice(0, 7);
               const hi = meta.dateMax?.slice(0, 7);
@@ -1042,7 +1096,8 @@ const FuelRecords = () => {
       routeFilter !== '' ||
       routeTypeFilter !== 'IMPORT' ||
       selectedMonth !== defaultMonth ||
-      statusFilter !== 'all'
+      statusFilter !== 'all' ||
+      journeyFilter !== 'all'
     );
   };
 
@@ -1051,6 +1106,7 @@ const FuelRecords = () => {
     setRouteFilter('');
     setRouteTypeFilter('IMPORT');
     setStatusFilter('all');
+    setJourneyFilter('all');
     // Go to current month if it has data, otherwise most recent month with data
     const currentMonth = getCurrentMonthKey();
     if (availableMonths.includes(currentMonth)) {
@@ -1061,6 +1117,27 @@ const FuelRecords = () => {
       setSelectedMonth(currentMonth);
     }
   };
+
+  const journeyFilterLabel = (() => {
+    if (journeyFilter === 'all') return 'All Journeys';
+    if (journeyFilter.startsWith('queued:')) return `Queued #${journeyFilter.slice(7)}`;
+    if (journeyFilter === 'queued') return 'Queued';
+    if (journeyFilter === 'active') return 'Active';
+    if (journeyFilter === 'completed') return 'Completed';
+    if (journeyFilter === 'cancelled') return 'Cancelled';
+    return 'All Journeys';
+  })();
+
+  const journeyFilterOptions: Array<{ value: string; label: string }> = [
+    { value: 'all', label: 'All Journeys' },
+    ...(['active', 'completed', 'cancelled'] as const)
+      .filter((s) => availableJourneyStatuses.includes(s))
+      .map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) })),
+    ...(availableJourneyStatuses.includes('queued') || availableQueueOrders.length > 0
+      ? [{ value: 'queued', label: 'Queued (all)' }]
+      : []),
+    ...availableQueueOrders.map((q) => ({ value: `queued:${q}`, label: `Queued #${q}` })),
+  ];
 
   // Get available years from state
   const getAvailableYears = (): number[] => {
@@ -1198,7 +1275,7 @@ const FuelRecords = () => {
           {/* Filters */}
           <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-3 mb-6 transition-colors">
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 flex-1">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 flex-1">
           <div className="relative col-span-2 md:col-span-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
             <input
@@ -1357,7 +1434,7 @@ const FuelRecords = () => {
               <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
           </div>
-          {/* Status Filter */}
+          {/* Status Filter (cancelled vs not) */}
           <div className="relative" ref={statusDropdownRef}>
             <button
               type="button"
@@ -1378,6 +1455,33 @@ const FuelRecords = () => {
                   >
                     <span>{s === 'all' ? 'All Status' : s.charAt(0).toUpperCase() + s.slice(1)}</span>
                     {statusFilter === s && <Check className="w-4 h-4" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Journey status filter (active / completed / queued / Queued #N) */}
+          <div className="relative" ref={journeyDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowJourneyDropdown(!showJourneyDropdown)}
+              className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
+              title="Filter by journey status"
+            >
+              <span className="truncate">{journeyFilterLabel}</span>
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJourneyDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showJourneyDropdown && (
+              <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                {journeyFilterOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => { setJourneyFilter(opt.value); setCurrentPage(1); setShowJourneyDropdown(false); }}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${journeyFilter === opt.value ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-gray-900 dark:text-gray-100'}`}
+                  >
+                    <span>{opt.label}</span>
+                    {journeyFilter === opt.value && <Check className="w-4 h-4" />}
                   </button>
                 ))}
               </div>

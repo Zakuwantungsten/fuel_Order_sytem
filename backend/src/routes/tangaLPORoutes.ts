@@ -3,8 +3,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { commonValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
-import { createEditLockHandlers } from '../controllers/editLockController';
-import { TangaLPODocument } from '../models/TangaLPODocument';
+import { createYardLpoEditLockHandlers } from '../controllers/editLockController';
 import * as tangaLPOController from '../controllers/tangaLPOController';
 import { exportRateLimiter } from '../middleware/rateLimiters';
 
@@ -96,7 +95,7 @@ router.post('/:id/cancel-all',
 );
 
 // Edit lock routes
-const tangaLPOLock = createEditLockHandlers(TangaLPODocument, 'tanga_lpo_documents');
+const tangaLPOLock = createYardLpoEditLockHandlers('tanga');
 router.post('/:id/lock',
   commonValidation.mongoId,
   authorize(...WRITE_ROLES),

@@ -168,6 +168,66 @@ export const getAvailableRoutes = async (req: AuthRequest, res: Response): Promi
 };
 
 /**
+ * Distinct journey statuses + queue orders present for a month (for filter dropdown).
+ */
+export const getAvailableJourneyStatuses = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { month } = req.query;
+    const filter: any = { isDeleted: false };
+
+    if (req.user?.role === 'driver') {
+      filter.truckNo = req.user.username;
+    }
+
+    if (month) {
+      const monthStr = (month as string).trim();
+      const parts = monthStr.split(/\s+/);
+      const rawMonth = (parts[0] || '').toLowerCase();
+      const yearPart = parts[1] || '';
+      const monthAbbrs: Record<string, string> = {
+        'january': 'jan', 'february': 'feb', 'march': 'mar', 'april': 'apr',
+        'may': 'may', 'june': 'jun', 'july': 'jul', 'august': 'aug',
+        'september': 'sep', 'october': 'oct', 'november': 'nov', 'december': 'dec',
+      };
+      const monthNums: Record<string, string> = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+        'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12',
+      };
+      const abbr = monthAbbrs[rawMonth] || rawMonth.substring(0, 3);
+      const num = monthNums[abbr] || '';
+
+      if (/^\d{4}$/.test(yearPart) && num) {
+        filter.monthKey = `${yearPart}-${num}`;
+      } else {
+        const sanitized = sanitizeRegexInput(monthStr);
+        if (sanitized) {
+          filter.month = { $regex: sanitized, $options: 'i' };
+        }
+      }
+    }
+
+    const [statuses, queueOrders] = await Promise.all([
+      FuelRecord.distinct('journeyStatus', filter),
+      FuelRecord.distinct('queueOrder', { ...filter, journeyStatus: 'queued', queueOrder: { $type: 'number', $gte: 1 } }),
+    ]);
+
+    const validStatuses = ['queued', 'active', 'completed', 'cancelled'];
+    const orderedStatuses = validStatuses.filter((s) => statuses.includes(s));
+    const orderedQueueOrders = (queueOrders as number[])
+      .filter((n) => typeof n === 'number' && Number.isFinite(n) && n >= 1)
+      .sort((a, b) => a - b);
+
+    res.status(200).json({
+      success: true,
+      data: { statuses: orderedStatuses, queueOrders: orderedQueueOrders },
+    });
+  } catch (error: any) {
+    logger.error('Error getting available journey statuses:', error);
+    throw error;
+  }
+};
+
+/**
  * Get all fuel records with pagination and filters
  */
 export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -179,7 +239,7 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       limit = dashboardLimits.limit;
     }
 
-    const { dateFrom, dateTo, truckNo, from, to, month, year, search, excludeCancelled, status } = req.query;
+    const { dateFrom, dateTo, truckNo, from, to, month, year, search, excludeCancelled, status, journeyStatus, queueOrder } = req.query;
 
     // Build filter
     const filter: any = { isDeleted: false };
@@ -194,6 +254,18 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
       filter.isCancelled = { $ne: true };
     } else if (status === 'cancelled') {
       filter.isCancelled = true;
+    }
+
+    // Journey status filter (separate from cancelled/active record status)
+    const validJourneyStatuses = ['queued', 'active', 'completed', 'cancelled'];
+    if (typeof journeyStatus === 'string' && validJourneyStatuses.includes(journeyStatus)) {
+      filter.journeyStatus = journeyStatus;
+      if (journeyStatus === 'queued' && queueOrder !== undefined && queueOrder !== '') {
+        const q = parseInt(String(queueOrder), 10);
+        if (Number.isFinite(q) && q >= 1) {
+          filter.queueOrder = q;
+        }
+      }
     }
 
     if (dateFrom || dateTo || dashboardLimits) {

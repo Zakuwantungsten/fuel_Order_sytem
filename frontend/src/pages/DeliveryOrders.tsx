@@ -486,7 +486,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.workbooks('SDO') });
     if (activeTab !== 'list') return; // pill only applies to the list table
     // Creator already refreshed on mutation success — don't offer "click to load".
-    if (isOwnDataChange(event, authUser?.id)) return;
+    if (isOwnDataChange(event, authUser?.id, authUser?.username)) return;
     const relevant = countRelevantNewRecords(
       event,
       { visibleRows: orders, sortField: 'date', sortOrder: 'desc', page: currentPage, totalPages },

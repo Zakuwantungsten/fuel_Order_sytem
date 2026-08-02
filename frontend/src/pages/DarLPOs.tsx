@@ -81,6 +81,9 @@ export default function DarLPOs() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'cancelled'>('all');
   const [showForm, setShowForm] = useState(false);
   const [showAddEntries, setShowAddEntries] = useState(false);
+  const [showLpoPicker, setShowLpoPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [addEntriesTarget, setAddEntriesTarget] = useState<DarLPO | null>(null);
 
   // Row → workbook navigation target (set on row click, cleared on plain tab switch)
   const [workbookInitial, setWorkbookInitial] = useState<{ lpoId: string; year: number; month: number; initialTruckNo?: string } | null>(null);
@@ -450,7 +453,7 @@ export default function DarLPOs() {
             <div className="flex items-center gap-2">
               {lpos.length > 0 && (
                 <button
-                  onClick={() => setShowAddEntries(true)}
+                  onClick={() => { setPickerSearch(''); setShowLpoPicker(true); }}
                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/40 rounded-lg transition-colors"
                 >
                   <FilePlus className="w-4 h-4" /> Add Entries
@@ -793,12 +796,67 @@ export default function DarLPOs() {
         />
       )}
 
-      {/* Add Entries to most recent LPO */}
-      {showAddEntries && lpos[0] && (
+      {/* Choose which LPO to append entries to */}
+      {showLpoPicker && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
+          onClick={() => setShowLpoPicker(false)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Add Entries — choose LPO</h3>
+              <button onClick={() => setShowLpoPicker(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-3 border-b border-gray-100 dark:border-gray-700">
+              <input
+                type="text"
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+                placeholder="Search LPO # or truck..."
+                autoFocus
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+              {lpos
+                .filter(lpo => !pickerSearch.trim() || fuzzyMatch(lpo.lpoNo, pickerSearch) || lpo.entries.some(e => fuzzyMatch(e.truckNo, pickerSearch)))
+                .map(lpo => (
+                  <button
+                    key={(lpo._id ?? lpo.id) as string}
+                    type="button"
+                    onClick={() => { setAddEntriesTarget(lpo); setShowLpoPicker(false); setShowAddEntries(true); }}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{lpo.lpoNo}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {lpo.date} · {lpo.entries.filter(e => !e.isCancelled).length} {lpo.entries.filter(e => !e.isCancelled).length === 1 ? 'entry' : 'entries'}
+                      </p>
+                    </div>
+                    <span className="text-xs font-medium text-green-600 dark:text-green-400 whitespace-nowrap">
+                      {lpo.currency} {lpo.total.toLocaleString()}
+                    </span>
+                  </button>
+                ))}
+              {lpos.length === 0 && (
+                <p className="px-4 py-6 text-sm text-center text-gray-400 dark:text-gray-500">No LPOs found</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Entries to the chosen LPO */}
+      {showAddEntries && (addEntriesTarget || lpos[0]) && (
         <DarYardLPOForm
           mode="add-entries"
-          existingLpo={lpos[0]}
-          onClose={() => setShowAddEntries(false)}
+          existingLpo={addEntriesTarget || lpos[0]}
+          onClose={() => { setShowAddEntries(false); setAddEntriesTarget(null); }}
           onSuccess={() => queryClient.invalidateQueries({ queryKey: darLPOKeys.all })}
         />
       )}

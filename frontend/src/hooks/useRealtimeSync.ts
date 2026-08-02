@@ -39,11 +39,25 @@ export interface DataChangeEvent {
 
 /** True when this event was caused by the signed-in user (creator echo). */
 export function isOwnDataChange(
-  event: Pick<DataChangeEvent, 'actorId'> | null | undefined,
+  event: Pick<DataChangeEvent, 'actorId' | 'actorUsername'> & { record?: any } | null | undefined,
   userId: string | number | null | undefined,
+  username?: string | null,
 ): boolean {
-  if (!event?.actorId || userId == null || userId === '') return false;
-  return String(event.actorId) === String(userId);
+  if (!event) return false;
+  if (event.actorId != null && userId != null && userId !== '' && String(event.actorId) === String(userId)) {
+    return true;
+  }
+  const uname = username != null && username !== '' ? String(username).trim().toLowerCase() : '';
+  if (!uname) return false;
+  if (event.actorUsername && String(event.actorUsername).trim().toLowerCase() === uname) {
+    return true;
+  }
+  // Change-stream echoes often omit actorId; fall back to the document author.
+  const createdBy = event.record?.createdBy ?? event.record?.created_by;
+  if (createdBy && String(createdBy).trim().toLowerCase() === uname) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -193,12 +207,14 @@ export function useRealtimeSync(
   const { user } = useAuth();
   const refreshRef = useRef(onRefresh);
   const userIdRef = useRef(user?.id);
+  const usernameRef = useRef(user?.username);
   useEffect(() => {
     refreshRef.current = onRefresh;
   });
   useEffect(() => {
     userIdRef.current = user?.id;
-  }, [user?.id]);
+    usernameRef.current = user?.username;
+  }, [user?.id, user?.username]);
 
   const opts = typeof options === 'string' ? { id: options } : (options || {});
   const deferCreates = opts.deferCreates === true;
@@ -212,7 +228,7 @@ export function useRealtimeSync(
 
       const keyFactory = COLLECTION_QUERY_KEYS[event.collection];
       const typedEvent = event as DataChangeEvent;
-      const isOwn = isOwnDataChange(typedEvent, userIdRef.current);
+      const isOwn = isOwnDataChange(typedEvent, userIdRef.current, usernameRef.current);
 
       if (event.action === 'update' && event.record) {
         // A cross-entity cascade may touch several rows at once, so the payload

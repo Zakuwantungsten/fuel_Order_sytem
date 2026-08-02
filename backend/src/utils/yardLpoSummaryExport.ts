@@ -24,6 +24,9 @@ export interface YardFlatEntry {
   amount: number;
   destinations: string;
   isCancelled: boolean;
+  dispenseLiters: number;
+  diff: number;
+  context: string;
 }
 
 function flattenYardDocs(docs: any[], dieselAt: string): YardFlatEntry[] {
@@ -35,6 +38,7 @@ function flattenYardDocs(docs: any[], dieselAt: string): YardFlatEntry[] {
     for (const e of sorted) {
       const liters = e.liters ?? 0;
       const rate = e.rate ?? 0;
+      const dispenseLiters = e.dispenseLiters ?? liters;
       entries.push({
         date: doc.date,
         lpoNo: doc.lpoNo,
@@ -46,6 +50,9 @@ function flattenYardDocs(docs: any[], dieselAt: string): YardFlatEntry[] {
         amount: e.amount != null ? e.amount : liters * rate,
         destinations: e.dest || '',
         isCancelled: !!e.isCancelled,
+        dispenseLiters,
+        diff: +(liters - dispenseLiters).toFixed(2),
+        context: e.context || '',
       });
     }
   }
@@ -61,16 +68,29 @@ async function loadYardEntriesForRange(
   Model: Model<any>,
   dieselAt: string,
   dateFrom: string,
-  dateTo: string
+  dateTo: string,
+  summaryStationRegex?: RegExp
 ): Promise<YardFlatEntry[]> {
-  const docs = await Model.find({
+  const legacyDocs = await Model.find({
     isDeleted: false,
     date: { $gte: dateFrom, $lte: dateTo },
   })
     .sort({ date: 1, lpoNo: 1 })
     .lean();
 
-  return flattenYardDocs(docs, dieselAt);
+  let summaryDocs: any[] = [];
+  if (summaryStationRegex) {
+    const { LPOSummary } = await import('../models');
+    summaryDocs = await LPOSummary.find({
+      isDeleted: false,
+      date: { $gte: dateFrom, $lte: dateTo },
+      station: { $regex: summaryStationRegex },
+    })
+      .sort({ date: 1, lpoNo: 1 })
+      .lean();
+  }
+
+  return flattenYardDocs([...legacyDocs, ...summaryDocs], dieselAt);
 }
 
 export type YardSummaryExportConfig = {
@@ -79,6 +99,8 @@ export type YardSummaryExportConfig = {
   filePrefix: string;
   resourceType: string;
   label: string;
+  /** When set, also include LPOSummary docs for this yard station. */
+  summaryStationRegex?: RegExp;
 };
 
 export function createYardSummaryExportHandlers(cfg: YardSummaryExportConfig) {
@@ -97,7 +119,8 @@ export function createYardSummaryExportHandlers(cfg: YardSummaryExportConfig) {
         cfg.Model,
         cfg.dieselAt,
         monthRange.dateFrom,
-        monthRange.dateTo
+        monthRange.dateTo,
+        cfg.summaryStationRegex
       );
 
       if (entries.length === 0) {
@@ -157,7 +180,8 @@ export function createYardSummaryExportHandlers(cfg: YardSummaryExportConfig) {
         cfg.Model,
         cfg.dieselAt,
         `${year}-01-01`,
-        `${year}-12-31`
+        `${year}-12-31`,
+        cfg.summaryStationRegex
       );
 
       const filtered = monthFilter

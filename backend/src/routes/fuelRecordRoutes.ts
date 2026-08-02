@@ -16,6 +16,7 @@ router.use(authenticate);
 // Get routes
 router.get('/available-periods', asyncHandler(fuelRecordController.getAvailablePeriods));
 router.get('/available-routes', asyncHandler(fuelRecordController.getAvailableRoutes));
+router.get('/available-journey-statuses', asyncHandler(fuelRecordController.getAvailableJourneyStatuses));
 router.get('/pending-dos/stats', authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'yard_personnel', 'station_manager'), asyncHandler(fuelRecordController.getPendingDoStats));
 router.get('/pending-dos', authorize('super_admin', 'admin', 'manager', 'super_manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'yard_personnel', 'station_manager'), asyncHandler(fuelRecordController.getPendingDoList));
 router.get('/', commonValidation.pagination, validate, asyncHandler(fuelRecordController.getAllFuelRecords));

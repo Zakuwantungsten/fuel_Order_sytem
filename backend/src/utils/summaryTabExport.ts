@@ -270,13 +270,13 @@ export function addYardLpoSummaryMonthSheet(
 ): void {
   const headers = [
     'S/N', 'Date', 'LPO No.', 'Diesel At', 'DO/SDO',
-    'Truck No.', 'Liters', 'Price per Liter', 'Total Amount', 'Destinations',
+    'Truck No.', 'Liters', 'Dispense', 'Diff', 'Price per Liter', 'Total Amount', 'Context', 'Destinations',
   ];
 
   const sheet = workbook.addWorksheet(sheetName.slice(0, 31));
   sheet.columns = [
     { width: 6 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 12 },
-    { width: 14 }, { width: 10 }, { width: 14 }, { width: 14 }, { width: 18 },
+    { width: 14 }, { width: 10 }, { width: 10 }, { width: 8 }, { width: 14 }, { width: 14 }, { width: 20 }, { width: 18 },
   ];
 
   const headerRow = sheet.getRow(1);
@@ -287,6 +287,8 @@ export function addYardLpoSummaryMonthSheet(
     const liters = entry.liters ?? entry.ltrs ?? 0;
     const rate = entry.rate ?? entry.pricePerLtr ?? 0;
     const amount = entry.amount != null ? entry.amount : liters * rate;
+    const dispense = entry.dispenseLiters != null ? entry.dispenseLiters : liters;
+    const diff = entry.diff != null ? entry.diff : +(liters - dispense).toFixed(2);
     const row = sheet.getRow(index + 2);
     row.values = [
       index + 1,
@@ -296,8 +298,11 @@ export function addYardLpoSummaryMonthSheet(
       entry.doSdo || entry.doNo || 'NIL',
       entry.truckNo,
       liters,
+      dispense,
+      diff,
       rate,
       amount,
+      entry.context || '',
       entry.destinations || entry.dest || '',
     ];
     styleDataRow(row, headers.length, !!entry.isCancelled);
@@ -311,12 +316,12 @@ export function addYardLpoYearSummarySheet(
   byMonth: Map<string, any[]>
 ): void {
   const headers = [
-    'Month', 'Total Entries', 'Total Liters', 'Total Amount', 'Average Price/Liter',
+    'Month', 'Total Entries', 'Total Liters', 'Total Dispensed', 'Total Diff', 'Total Amount', 'Average Price/Liter',
   ];
 
   const sheet = workbook.addWorksheet(`${year}_Summary`.slice(0, 31));
   sheet.columns = [
-    { width: 10 }, { width: 14 }, { width: 12 }, { width: 14 }, { width: 16 },
+    { width: 10 }, { width: 14 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 14 }, { width: 16 },
   ];
 
   const headerRow = sheet.getRow(1);
@@ -329,11 +334,14 @@ export function addYardLpoYearSummarySheet(
     if (!monthEntries || monthEntries.length === 0) continue;
 
     let totalLiters = 0;
+    let totalDispensed = 0;
     let totalAmount = 0;
     for (const e of monthEntries) {
       const liters = e.liters ?? e.ltrs ?? 0;
       const rate = e.rate ?? e.pricePerLtr ?? 0;
+      const dispense = e.dispenseLiters != null ? e.dispenseLiters : liters;
       totalLiters += liters;
+      totalDispensed += dispense;
       totalAmount += e.amount != null ? e.amount : liters * rate;
     }
 
@@ -342,6 +350,8 @@ export function addYardLpoYearSummarySheet(
       month,
       monthEntries.length,
       totalLiters,
+      totalDispensed,
+      +(totalLiters - totalDispensed).toFixed(2),
       totalAmount,
       totalLiters > 0 ? Number((totalAmount / totalLiters).toFixed(2)) : 0,
     ];

@@ -34,6 +34,10 @@ export interface FuelRecordFilters {
   sort?: string;
   order?: 'asc' | 'desc';
   status?: 'all' | 'active' | 'cancelled';
+  /** Journey lifecycle filter — separate from cancelled/active record status */
+  journeyStatus?: 'queued' | 'active' | 'completed' | 'cancelled';
+  /** When journeyStatus is queued, optionally pin to a specific queue position */
+  queueOrder?: number;
 }
 
 export function useFuelRecordsList(filters: FuelRecordFilters, enabled = true) {
@@ -48,6 +52,10 @@ export function useFuelRecordsList(filters: FuelRecordFilters, enabled = true) {
   if (filters.routeFrom) queryParams.from = filters.routeFrom;
   if (filters.routeTo) queryParams.to = filters.routeTo;
   if (filters.status && filters.status !== 'all') queryParams.status = filters.status;
+  if (filters.journeyStatus) queryParams.journeyStatus = filters.journeyStatus;
+  if (filters.journeyStatus === 'queued' && filters.queueOrder != null) {
+    queryParams.queueOrder = filters.queueOrder;
+  }
 
   return useQuery({
     queryKey: fuelRecordKeys.list(queryParams),
@@ -61,6 +69,22 @@ export function useFuelRecordsList(filters: FuelRecordFilters, enabled = true) {
     enabled,
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev, // keep previous data while fetching next page
+  });
+}
+
+/** Distinct journey statuses + queue orders for the journey filter dropdown */
+export function useFuelRecordJourneyStatuses(month: string, enabled = true) {
+  return useQuery({
+    queryKey: [...fuelRecordKeys.all, 'journeyStatuses', month] as const,
+    queryFn: async () => {
+      const data = await fuelRecordsAPI.getAvailableJourneyStatuses({ month });
+      return {
+        statuses: data.statuses || [],
+        queueOrders: data.queueOrders || [],
+      };
+    },
+    enabled: enabled && !!month,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

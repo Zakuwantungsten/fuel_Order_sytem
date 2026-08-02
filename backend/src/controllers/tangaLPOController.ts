@@ -1,99 +1,68 @@
 import { Response } from 'express';
 import { TangaLPODocument } from '../models/TangaLPODocument';
-import { FuelRecord } from '../models';
+import { LPOSummary, FuelRecord } from '../models';
 import { SystemConfig } from '../models/SystemConfig';
 import { YardConfig } from '../models/YardConfig';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex, normalizeTruckNo } from '../utils';
+import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, sanitizeRegexInput, buildFuzzyRegex } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
 import { enforceEditLock } from './editLockController';
 import { createYardSummaryExportHandlers } from '../utils/yardLpoSummaryExport';
+import {
+  findLinkedFuelRecord,
+  findFuelRecordsByTruck,
+  dispenseAmount,
+  applyYardFieldDelta,
+  applyAmendYardDispense,
+} from '../services/yardLpoFuelService';
+import {
+  allocateSharedLpoNo,
+  createYardLpoOnSummary,
+  findYardLpoById,
+  findYardLpoByLpoNo,
+  listMergedYardLpos,
+  workbookMergedByYear,
+  distinctYardYears,
+  tagYardDoc,
+  normalizeYardEntriesForSummary,
+  preserveYardEntryFuelFieldsOnUpdate,
+  getYardMeta,
+} from '../services/yardUnifiedLpoService';
+import { YARD_STATION } from '../utils/yardStations';
 
-// ── Balance recalculation ──────────────────────────────────────────────────────
+const YARD: 'tanga' = 'tanga';
+const YARD_FUEL_FIELD = getYardMeta(YARD).fuelField;
 
-function recalcBalance(fr: any): number {
-  const total = (fr.totalLts ?? 0) + (fr.extra ?? 0);
-  const used =
-    (fr.mmsaYard     ?? 0) + (fr.tangaYard    ?? 0) + (fr.darYard      ?? 0) +
-    (fr.tangaGoing   ?? 0) + (fr.darGoing     ?? 0) + (fr.moroGoing    ?? 0) +
-    (fr.mbeyaGoing   ?? 0) + (fr.tdmGoing     ?? 0) + (fr.zambiaGoing  ?? 0) +
-    (fr.congoFuel    ?? 0) + (fr.zambiaReturn ?? 0) + (fr.tundumaReturn ?? 0) +
-    (fr.mbeyaReturn  ?? 0) + (fr.moroReturn   ?? 0) + (fr.darReturn    ?? 0) +
-    (fr.tangaReturn  ?? 0);
-  return total - used;
+async function applyTangaYardDelta(fuelRecord: any, deltaLiters: number): Promise<void> {
+  await applyYardFieldDelta(fuelRecord, YARD_FUEL_FIELD, deltaLiters);
 }
 
-// ── FuelRecord link helper ─────────────────────────────────────────────────────
-
-async function findLinkedFuelRecord(doNo: string, truckNo: string, afterDate?: Date): Promise<any | null> {
-  const safeTruck = sanitizeRegexInput(truckNo);
-  const safeDo    = sanitizeRegexInput(doNo);
-  const query: any = {
-    truckNo: { $regex: new RegExp(`^${safeTruck}$`, 'i') },
-    $or: [
-      { goingDo:  { $regex: new RegExp(`^${safeDo}$`, 'i') } },
-      { returnDo: { $regex: new RegExp(`^${safeDo}$`, 'i') } },
-    ],
-    isDeleted: false,
-    isCancelled: { $ne: true },
-  };
-  if (afterDate) query.date = { $gte: afterDate.toISOString().split('T')[0] };
-  const records = await FuelRecord.find(query).sort({ date: -1 });
-  return records.length ? records[0] : null;
-}
-
-// Auto-link matches by TRUCK only (not DO): given a truck, return every eligible
-// FuelRecord within the time window for the user to choose from in the preview.
-// Truck matching is whitespace/hyphen-tolerant (mirrors normalizeTruckNo) so
-// imported records like "T790EEU" / "T790-EEU" still match an LPO entry's
-// "T790 EEU". Most-recent first.
-async function findFuelRecordsByTruck(truckNo: string, afterDate?: Date): Promise<any[]> {
-  const normalized = normalizeTruckNo(truckNo); // e.g. "T790 EEU" -> "T790EEU"
-  if (!normalized) return [];
-  // Allow optional separators between the numeric block and the letters. The
-  // normalized form is purely [A-Z0-9], so it's safe to embed directly in a regex.
-  const m = normalized.match(/^(T?\d+)([A-Z]+)$/);
-  const pattern = m ? `^${m[1]}[\\s-]*${m[2]}$` : `^${normalized}$`;
-  const query: any = {
-    truckNo: { $regex: new RegExp(pattern, 'i') },
-    isDeleted: false,
-    isCancelled: { $ne: true },
-  };
-  if (afterDate) query.date = { $gte: afterDate.toISOString().split('T')[0] };
-  // Cap candidates so a truck with a long history (e.g. when no time window is
-  // configured) can't load thousands of records into the picker.
-  return FuelRecord.find(query).sort({ date: -1 }).limit(50);
-}
-
-async function applyTangaYardDelta(
+async function applyTangaAmendDispense(
   fuelRecord: any,
-  deltaLiters: number
-): Promise<void> {
-  fuelRecord.tangaYard = Math.max(0, (fuelRecord.tangaYard ?? 0) + deltaLiters);
-  fuelRecord.balance = recalcBalance(fuelRecord);
-  await fuelRecord.save();
-  emitDataChange('fuel_records', 'update', fuelRecord.toObject());
+  oldDispense: number,
+  newDispense: number,
+): Promise<number> {
+  return applyAmendYardDispense(fuelRecord, YARD_FUEL_FIELD, oldDispense, newDispense);
 }
 
-// The liters actually dispensed to the fuel record. Defaults to the full billed
-// `liters` when no per-truck override has been set.
-function dispenseAmount(entry: any): number {
-  return entry.dispenseLiters != null ? entry.dispenseLiters : entry.liters;
+function emitYardChange(resolved: { source: string; emitKey: string }, op: 'create' | 'update' = 'update') {
+  emitDataChange(resolved.emitKey as any, op);
+  // Summary-backed yard LPOs also refresh the yard tab listeners
+  if (resolved.source === 'summary') {
+    emitDataChange('tanga_lpo_documents', op);
+    emitDataChange('lpo_summaries', op);
+  }
 }
 
 // ── LPO number helper ──────────────────────────────────────────────────────────
 
+/**
+ * Legacy TY-YYYY-NNN allocator — kept for Excel import of historical yard sheets only.
+ * New creates use the shared regular LPO sequence via allocateSharedLpoNo / createYardLpoOnSummary.
+ */
 export async function resolveNextTangaLPONo(year: number): Promise<string> {
-  // Highest sequence already used for this year. Scoping the match to
-  // `^TY-${year}-` is what makes the counter reset to 001 each new year — a
-  // fresh year has no matching documents, so `maxSeq` is null and seq starts at 1.
-  //
-  // We take the numeric MAX via aggregation rather than a `.sort({ lpoNo: -1 })`
-  // string sort: lexically "TY-2026-1000" sorts BELOW "TY-2026-999", which would
-  // make the counter stall and collide once a year passes 999 entries. `$convert`
-  // with onError keeps any malformed imported number from breaking the pipeline.
   const result = await TangaLPODocument.aggregate([
     { $match: { lpoNo: { $regex: `^TY-${year}-` }, isDeleted: false } },
     {
@@ -193,10 +162,8 @@ function buildTangaLPOFilter(q: YardFilterInput): any {
 // ── Controllers ───────────────────────────────────────────────────────────────
 
 export const getNextTangaLPONumber = async (req: AuthRequest, res: Response): Promise<void> => {
-  // Preview only — the authoritative number is re-resolved at save time from the
-  // LPO's own date. Honour an optional ?date= / ?year= so the preview can match
-  // the year of the LPO being entered (e.g. backdated across a New Year boundary);
-  // default to the current calendar year.
+  // Preview only — shared regular LPO sequence (XXXX/YY). Authoritative number is
+  // re-resolved at save time from the LPO's own date.
   const { date, year: yearParam } = req.query;
   let year = new Date().getFullYear();
   if (yearParam && !isNaN(parseInt(yearParam as string, 10))) {
@@ -204,7 +171,7 @@ export const getNextTangaLPONumber = async (req: AuthRequest, res: Response): Pr
   } else if (date && !isNaN(new Date(date as string).getTime())) {
     year = new Date(date as string).getFullYear();
   }
-  const nextLpoNo = await resolveNextTangaLPONo(year);
+  const nextLpoNo = await allocateSharedLpoNo(year);
 
   res.status(200).json({
     success: true,
@@ -214,8 +181,7 @@ export const getNextTangaLPONumber = async (req: AuthRequest, res: Response): Pr
 };
 
 export const getTangaAvailableYears = async (req: AuthRequest, res: Response): Promise<void> => {
-  const years = await TangaLPODocument.distinct('year', { isDeleted: false }) as number[];
-  years.sort((a, b) => b - a);
+  const years = await distinctYardYears(YARD);
 
   res.status(200).json({
     success: true,
@@ -231,8 +197,14 @@ export const getTangaAvailableYears = async (req: AuthRequest, res: Response): P
 export const getTangaFilterOptions = async (req: AuthRequest, res: Response): Promise<void> => {
   const { year, dateFrom, dateTo, search, month } = req.query;
   const filter = buildTangaLPOFilter({ year, dateFrom, dateTo, search });
+  const meta = getYardMeta(YARD);
+  const summaryFilter = { ...filter, station: { $regex: meta.stationRegex } };
 
-  const docs = await TangaLPODocument.find(filter).select('date entries.truckNo').lean();
+  const [legacyDocs, summaryDocs] = await Promise.all([
+    TangaLPODocument.find(filter).select('date entries.truckNo').lean(),
+    LPOSummary.find(summaryFilter).select('date entries.truckNo').lean(),
+  ]);
+  const docs = [...legacyDocs, ...summaryDocs];
 
   const monthsSet = new Set<number>();
   const entitiesSet = new Set<string>();
@@ -268,14 +240,12 @@ export const getAllTangaLPOs = async (req: AuthRequest, res: Response): Promise<
   const sortOrder = order === 'asc' ? 1 : -1;
   const sortField = (sort as string) || 'date';
 
-  const [docs, total] = await Promise.all([
-    TangaLPODocument.find(filter)
-      .sort({ [sortField]: sortOrder })
-      .skip(skip)
-      .limit(limit)
-      .lean(),
-    TangaLPODocument.countDocuments(filter),
-  ]);
+  const { docs, total } = await listMergedYardLpos(YARD, filter, {
+    skip,
+    limit,
+    sortField,
+    sortOrder: sortOrder as 1 | -1,
+  });
 
   res.status(200).json({
     success: true,
@@ -286,25 +256,25 @@ export const getAllTangaLPOs = async (req: AuthRequest, res: Response): Promise<
 
 export const getTangaLPOById = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
-  const doc = await TangaLPODocument.findOne({ _id: id, isDeleted: false }).lean();
-  if (!doc) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, id);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
 
   res.status(200).json({
     success: true,
     message: 'Tanga LPO retrieved successfully',
-    data: { ...doc, id: doc._id },
+    data: tagYardDoc(resolved.doc, resolved.source, resolved.station),
   });
 };
 
 export const getTangaLPOByLPONo = async (req: AuthRequest, res: Response): Promise<void> => {
   const { lpoNo } = req.params;
-  const doc = await TangaLPODocument.findOne({ lpoNo, isDeleted: false }).lean();
-  if (!doc) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoByLpoNo(YARD, lpoNo);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
 
   res.status(200).json({
     success: true,
     message: 'Tanga LPO retrieved successfully',
-    data: { ...doc, id: doc._id },
+    data: tagYardDoc(resolved.doc, resolved.source, resolved.station),
   });
 };
 
@@ -312,124 +282,110 @@ export const getTangaWorkbookByYear = async (req: AuthRequest, res: Response): P
   const year = parseInt(req.params.year, 10);
   if (isNaN(year)) throw new ApiError(400, 'Invalid year');
 
-  const docs = await TangaLPODocument.find({ year, isDeleted: false })
-    .sort({ date: 1, lpoNo: 1 })
-    .lean();
-
-  // Group by month (1-12)
-  const grouped: Record<number, any[]> = {};
-  for (const doc of docs) {
-    const month = new Date(doc.date).getMonth() + 1;
-    if (!grouped[month]) grouped[month] = [];
-    grouped[month].push({ ...doc, id: doc._id });
-  }
+  const data = await workbookMergedByYear(YARD, year);
 
   res.status(200).json({
     success: true,
     message: 'Tanga workbook retrieved successfully',
-    data: { year, months: grouped },
+    data,
   });
 };
 
 export const createTangaLPO = async (req: AuthRequest, res: Response): Promise<void> => {
   const data = req.body;
-  const dateObj = new Date(data.date);
-  const year = dateObj.getFullYear();
 
-  // Resolve-then-insert with a bounded retry on the unique `lpoNo` index. Two
-  // concurrent creates (or a collision with an imported number) re-pick the next
-  // free number instead of failing with a 500 — this is what makes the
-  // read-modify-write counter safe without a separate atomic sequence.
-  let lpo: InstanceType<typeof TangaLPODocument> | undefined;
-  let lpoNo = '';
-  for (let attempt = 0; attempt < 5; attempt++) {
-    lpoNo = await resolveNextTangaLPONo(year);
-    try {
-      lpo = await TangaLPODocument.create({
-        ...data,
-        lpoNo,
-        year,
-        createdBy: req.user?.username || 'Unknown',
-      });
-      break;
-    } catch (err: any) {
-      if (err?.code === 11000 && attempt < 4) continue; // duplicate lpoNo — retry
-      throw err;
-    }
-  }
-  if (!lpo) throw new ApiError(500, 'Could not allocate a Tanga LPO number, please retry');
+  const { lpo, lpoNo } = await createYardLpoOnSummary(YARD, {
+    date: data.date,
+    entries: data.entries,
+    currency: data.currency,
+    notes: data.notes,
+    total: data.total,
+    createdBy: req.user?.username || 'Unknown',
+    approvedBy: data.approvedBy,
+  });
 
   await AuditService.log({
     userId: req.user?.userId,
     username: req.user?.username || 'system',
     action: 'CREATE',
-    resourceType: 'TangaLPODocument',
+    resourceType: 'LPOSummary',
     resourceId: lpoNo,
-    details: `Tanga LPO ${lpoNo} created (${lpo.entries.length} entries) by ${req.user?.username}`,
+    details: `Tanga Yard LPO ${lpoNo} created on LPOSummary (${lpo.entries.length} entries) by ${req.user?.username}`,
     ipAddress: req.ip,
     severity: 'medium',
   });
 
-  const responseData = lpo.toObject();
+  const responseData = tagYardDoc(lpo, 'summary', YARD_STATION.TANGA);
   res.status(201).json({
     success: true,
     message: 'Tanga LPO created successfully',
-    data: { ...responseData, id: responseData._id },
+    data: responseData,
   });
 
   emitDataChange('tanga_lpo_documents', 'create');
+  emitDataChange('lpo_summaries', 'create', lpo.toObject(), YARD_STATION.TANGA);
 };
 
 export const updateTangaLPO = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const newData = req.body;
 
-  const existing = await TangaLPODocument.findOne({ _id: id, isDeleted: false });
-  if (!existing) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, id);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
 
   const username = req.user?.username;
   if (!username) throw new ApiError(401, 'Authentication required');
-  await enforceEditLock(TangaLPODocument, id, username, 'tanga_lpo_documents');
+  const LockModel = resolved.source === 'legacy' ? TangaLPODocument : LPOSummary;
+  const lockChannel = resolved.source === 'legacy' ? 'tanga_lpo_documents' : 'lpo_summaries';
+  await enforceEditLock(LockModel as any, id, username, lockChannel);
 
   if (newData.date) {
     newData.year = new Date(newData.date).getFullYear();
   }
+  if (resolved.source === 'summary' && Array.isArray(newData.entries)) {
+    newData.entries = normalizeYardEntriesForSummary(newData.entries);
+    // Keep station/orderOf stable for summary-backed yard LPOs
+    newData.station = resolved.station;
+    if (!newData.orderOf) newData.orderOf = resolved.doc.orderOf;
+  }
+  if (Array.isArray(newData.entries)) {
+    newData.entries = preserveYardEntryFuelFieldsOnUpdate(resolved.doc.entries || [], newData.entries);
+    if (resolved.source === 'summary') {
+      newData.entries = normalizeYardEntriesForSummary(newData.entries);
+    }
+  }
 
-  const updated = await TangaLPODocument.findOneAndUpdate(
-    { _id: id, isDeleted: false },
-    newData,
-    { new: true, runValidators: true }
-  );
-
-  if (!updated) throw new ApiError(404, 'Tanga LPO not found');
+  Object.assign(resolved.doc, newData);
+  if (newData.entries) resolved.doc.markModified('entries');
+  await resolved.doc.save();
 
   await AuditService.log({
     userId: req.user?.userId,
     username: req.user?.username || 'system',
     action: 'UPDATE',
-    resourceType: 'TangaLPODocument',
-    resourceId: updated.lpoNo,
-    details: `Tanga LPO ${updated.lpoNo} updated by ${username}`,
+    resourceType: resolved.source === 'legacy' ? 'TangaLPODocument' : 'LPOSummary',
+    resourceId: resolved.doc.lpoNo,
+    details: `Tanga LPO ${resolved.doc.lpoNo} updated by ${username}`,
     ipAddress: req.ip,
     severity: 'medium',
   });
 
-  const responseData = updated.toObject();
   res.status(200).json({
     success: true,
     message: 'Tanga LPO updated successfully',
-    data: { ...responseData, id: responseData._id },
+    data: tagYardDoc(resolved.doc, resolved.source, resolved.station),
   });
 
-  emitDataChange('tanga_lpo_documents', 'update');
+  emitYardChange(resolved, 'update');
 };
 
 export const cancelEntryInTangaLPO = async (req: AuthRequest, res: Response): Promise<void> => {
   const { lpoId, entryId, cancellationReason } = req.body;
   if (!lpoId || !entryId) throw new ApiError(400, 'lpoId and entryId are required');
 
-  const lpo = await TangaLPODocument.findOne({ _id: lpoId, isDeleted: false });
-  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, lpoId);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc;
 
   const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
   if (!entry) throw new ApiError(404, 'Entry not found');
@@ -444,15 +400,16 @@ export const cancelEntryInTangaLPO = async (req: AuthRequest, res: Response): Pr
     if (fr) await applyTangaYardDelta(fr, -dispenseAmount(entry));
   }
 
+  lpo.markModified('entries');
   await lpo.save();
 
   res.status(200).json({
     success: true,
     message: 'Entry cancelled successfully',
-    data: { ...lpo.toObject(), id: lpo._id },
+    data: tagYardDoc(lpo, resolved.source, resolved.station),
   });
 
-  emitDataChange('tanga_lpo_documents', 'update');
+  emitYardChange(resolved, 'update');
   emitDataChange('fuel_records', 'update');
 };
 
@@ -460,8 +417,9 @@ export const cancelAllEntriesInTangaLPO = async (req: AuthRequest, res: Response
   const { id } = req.params;
   const { cancellationReason } = req.body;
 
-  const lpo = await TangaLPODocument.findOne({ _id: id, isDeleted: false });
-  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, id);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc;
 
   const now = new Date();
 
@@ -478,13 +436,14 @@ export const cancelAllEntriesInTangaLPO = async (req: AuthRequest, res: Response
     entry.cancelledAt = now;
   }
 
+  lpo.markModified('entries');
   await lpo.save();
 
   await AuditService.log({
     userId: req.user?.userId,
     username: req.user?.username || 'system',
     action: 'UPDATE',
-    resourceType: 'TangaLPODocument',
+    resourceType: resolved.source === 'legacy' ? 'TangaLPODocument' : 'LPOSummary',
     resourceId: lpo.lpoNo,
     details: `All entries in Tanga LPO ${lpo.lpoNo} cancelled by ${req.user?.username}`,
     ipAddress: req.ip,
@@ -494,55 +453,86 @@ export const cancelAllEntriesInTangaLPO = async (req: AuthRequest, res: Response
   res.status(200).json({
     success: true,
     message: 'All entries cancelled successfully',
-    data: { ...lpo.toObject(), id: lpo._id },
+    data: tagYardDoc(lpo, resolved.source, resolved.station),
   });
 
-  emitDataChange('tanga_lpo_documents', 'update');
+  emitYardChange(resolved, 'update');
   emitDataChange('fuel_records', 'update');
 };
 
 export const amendEntryInTangaLPO = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { lpoId, entryId, newLiters, amendReason } = req.body;
+  const { lpoId, entryId, newLiters, newDispenseLiters, context, cascade, amendReason } = req.body;
   if (!lpoId || !entryId || newLiters == null) {
     throw new ApiError(400, 'lpoId, entryId and newLiters are required');
   }
 
-  const lpo = await TangaLPODocument.findOne({ _id: lpoId, isDeleted: false });
-  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, lpoId);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc;
 
   const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
   if (!entry) throw new ApiError(404, 'Entry not found');
   if (entry.isCancelled) throw new ApiError(400, 'Cannot amend a cancelled entry');
-  if (newLiters >= entry.liters) {
-    throw new ApiError(400, 'Amendment must reduce liters (new value must be less than current)');
-  }
 
-  // Reconcile the dispensed amount. When dispense was left at its default (== the
-  // billed liters), it follows the new liters; a custom per-truck override is kept.
+  const oldLiters = entry.liters;
   const oldDispense = dispenseAmount(entry);
-  const wasCustomized = entry.dispenseLiters != null && entry.dispenseLiters !== entry.liters;
-  entry.originalLiters = entry.originalLiters ?? entry.liters;
-  entry.amendedAt = new Date();
-  entry.liters = newLiters;
-  entry.amount = newLiters * entry.rate;
-  const newDispense = wasCustomized ? oldDispense : newLiters;
-  entry.dispenseLiters = newDispense;
-  const delta = newDispense - oldDispense; // <= 0 — removes fuel
+  const parsedLiters = Number(newLiters);
+  if (!(parsedLiters > 0)) throw new ApiError(400, 'newLiters must be a positive number');
+  if (parsedLiters === oldLiters) throw new ApiError(400, 'New liters must differ from the current value');
 
-  if (entry.linkedFuelRecordId && delta !== 0) {
-    const fr = await FuelRecord.findById(entry.linkedFuelRecordId);
-    if (fr) await applyTangaYardDelta(fr, delta);
+  const hasDispenseInput = newDispenseLiters != null && newDispenseLiters !== '';
+  let newDispense = hasDispenseInput ? Number(newDispenseLiters) : parsedLiters;
+  if (!(newDispense >= 0)) throw new ApiError(400, 'newDispenseLiters must be a non-negative number');
+  // Never dispense more than the new billed amount (avoids negative billed−dispense when amending down).
+  if (newDispense > parsedLiters) newDispense = parsedLiters;
+
+  const diff = parsedLiters - newDispense;
+  if (Math.abs(diff) > 0.001 && !(context && String(context).trim())) {
+    throw new ApiError(400, 'Context is required when billed liters differ from dispense liters');
   }
 
+  entry.originalLiters = entry.originalLiters ?? oldLiters;
+  entry.liters = parsedLiters;
+  entry.amount = parsedLiters * entry.rate;
+  entry.dispenseLiters = newDispense;
+  entry.context = context && String(context).trim() ? String(context).trim() : (entry.context ?? null);
+  entry.amendedAt = new Date();
+
+  // Reconcile fuel yard column to the new dispense. Plain (new−old) delta fails when
+  // the column is still empty (initial link never wrote) — Math.max keeps it at 0.
+  if (cascade !== false) {
+    let fr = entry.linkedFuelRecordId
+      ? await FuelRecord.findById(entry.linkedFuelRecordId)
+      : null;
+    if (!fr && entry.doNo && entry.truckNo) {
+      const doNo = String(entry.doNo).trim();
+      if (doNo && doNo.toUpperCase() !== 'NIL' && doNo.toUpperCase() !== 'N/A') {
+        fr = await findLinkedFuelRecord(doNo, String(entry.truckNo));
+        if (fr) entry.linkedFuelRecordId = fr._id.toString();
+      }
+    }
+    if (fr) {
+      await applyTangaAmendDispense(fr, oldDispense, newDispense);
+    } else if (entry.linkedFuelRecordId) {
+      throw new ApiError(400, 'Linked fuel record not found — cannot cascade. Re-link the entry or uncheck cascade.');
+    } else {
+      throw new ApiError(
+        400,
+        'No fuel record found to update. Link this entry first (or check DO/truck), then amend.',
+      );
+    }
+  }
+
+  lpo.markModified('entries');
   await lpo.save();
 
   await AuditService.log({
     userId: req.user?.userId,
     username: req.user?.username || 'system',
     action: 'UPDATE',
-    resourceType: 'TangaLPODocument',
+    resourceType: resolved.source === 'legacy' ? 'TangaLPODocument' : 'LPOSummary',
     resourceId: lpo.lpoNo,
-    details: `Entry ${entryId} in Tanga LPO ${lpo.lpoNo} amended from ${entry.originalLiters}L to ${newLiters}L by ${req.user?.username}${amendReason ? ': ' + amendReason : ''}`,
+    details: `Entry ${entryId} in Tanga LPO ${lpo.lpoNo} amended from ${oldLiters}L to ${parsedLiters}L (dispense ${oldDispense}L → ${newDispense}L) by ${req.user?.username}${amendReason ? ': ' + amendReason : ''}`,
     ipAddress: req.ip,
     severity: 'medium',
   });
@@ -550,10 +540,10 @@ export const amendEntryInTangaLPO = async (req: AuthRequest, res: Response): Pro
   res.status(200).json({
     success: true,
     message: 'Entry amended successfully',
-    data: { ...lpo.toObject(), id: lpo._id },
+    data: tagYardDoc(lpo, resolved.source, resolved.station),
   });
 
-  emitDataChange('tanga_lpo_documents', 'update');
+  emitYardChange(resolved, 'update');
   emitDataChange('fuel_records', 'update');
 };
 
@@ -561,8 +551,9 @@ export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Pro
   const { lpoId, entryId, doNo, dispenseLiters } = req.body;
   if (!lpoId || !entryId || !doNo) throw new ApiError(400, 'lpoId, entryId and doNo are required');
 
-  const lpo = await TangaLPODocument.findOne({ _id: lpoId, isDeleted: false });
-  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, lpoId);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc;
 
   const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
   if (!entry) throw new ApiError(404, 'Entry not found');
@@ -579,27 +570,27 @@ export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Pro
   if (fr.to) entry.dest = fr.to;
   entry.linkedFuelRecordId = fr._id.toString();
   await applyTangaYardDelta(fr, dispenseAmount(entry));
+  lpo.markModified('entries');
   await lpo.save();
 
   await AuditService.log({
     userId: req.user?.userId,
     username: req.user?.username || 'system',
     action: 'UPDATE',
-    resourceType: 'TangaLPODocument',
+    resourceType: resolved.source === 'legacy' ? 'TangaLPODocument' : 'LPOSummary',
     resourceId: lpo.lpoNo,
     details: `Entry ${entryId} in Tanga LPO ${lpo.lpoNo} manually linked to FuelRecord ${fr._id} (DO: ${doNo}) by ${req.user?.username}`,
     ipAddress: req.ip,
     severity: 'medium',
   });
 
-  const responseData = lpo.toObject();
   res.status(200).json({
     success: true,
     message: 'Entry manually linked to FuelRecord successfully',
-    data: { ...responseData, id: responseData._id },
+    data: tagYardDoc(lpo, resolved.source, resolved.station),
   });
 
-  emitDataChange('tanga_lpo_documents', 'update');
+  emitYardChange(resolved, 'update');
   emitDataChange('fuel_records', 'update');
 };
 
@@ -635,14 +626,10 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
     dispenseOverrides?: Record<string, number>;
   };
 
-  const lpo = await TangaLPODocument.findOne({ _id: id, isDeleted: false });
-  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, id);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc;
 
-  // Two accepted input shapes, normalized to a single `selections` list:
-  //  • selections — the auto-link preview already resolved a specific fuel record
-  //    per entry (truck-based discovery, the user's explicit choice).
-  //  • entryIds — legacy/creation path: resolve each entry by its OWN truck + DO
-  //    (manual-link semantics) within the configured yard time window.
   let selections: BulkLinkSelection[];
   if (Array.isArray(body.selections) && body.selections.length > 0) {
     selections = body.selections;
@@ -681,7 +668,6 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
     const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
     if (!entry || entry.isCancelled) continue;
 
-    // Apply any per-truck dispense override before resolving the amount.
     if (sel.dispenseLiters != null && Number(sel.dispenseLiters) >= 0) {
       entry.dispenseLiters = Number(sel.dispenseLiters);
     }
@@ -692,7 +678,6 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
       continue;
     }
 
-    // Link to the exact fuel record the user chose in the preview.
     const fr = sel.fuelRecordId
       ? await FuelRecord.findOne({ _id: sel.fuelRecordId, isDeleted: false, isCancelled: { $ne: true } })
       : null;
@@ -709,7 +694,6 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
     }
 
     entry.linkedFuelRecordId = fr._id.toString();
-    // Backfill the entry's DO and destination from the matched fuel record (manual link does the same).
     if (fr.goingDo) entry.doNo = fr.goingDo;
     if (fr.to) entry.dest = fr.to;
     await applyTangaYardDelta(fr, disp);
@@ -726,7 +710,10 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
     });
   }
 
-  if (didApply) await lpo.save();
+  if (didApply) {
+    lpo.markModified('entries');
+    await lpo.save();
+  }
 
   const linked = results.filter(r => r.status === 'linked' || r.status === 'topped_up').length;
   const conflicts = results.filter(r => r.status === 'conflict');
@@ -736,24 +723,23 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
     userId: req.user?.userId,
     username: req.user?.username || 'system',
     action: 'UPDATE',
-    resourceType: 'TangaLPODocument',
+    resourceType: resolved.source === 'legacy' ? 'TangaLPODocument' : 'LPOSummary',
     resourceId: lpo.lpoNo,
     details: `Bulk auto-link on Tanga LPO ${lpo.lpoNo}: ${linked} linked, ${conflicts.length} conflicts, ${notFound} not found — by ${req.user?.username}`,
     ipAddress: req.ip,
     severity: 'medium',
   });
 
-  const responseData = lpo.toObject();
   res.status(200).json({
     success: true,
     message: 'Bulk auto-link completed',
-    data: { ...responseData, id: responseData._id },
+    data: tagYardDoc(lpo, resolved.source, resolved.station),
     results,
     summary: { linked, conflicts: conflicts.length, notFound },
   });
 
   if (didApply) {
-    emitDataChange('tanga_lpo_documents', 'update');
+    emitYardChange(resolved, 'update');
     emitDataChange('fuel_records', 'update');
   }
 };
@@ -764,8 +750,9 @@ export const previewManualLinkTangaEntry = async (req: AuthRequest, res: Respons
   const { lpoId, entryId, doNo } = req.body;
   if (!lpoId || !entryId || !doNo) throw new ApiError(400, 'lpoId, entryId and doNo are required');
 
-  const lpo = await TangaLPODocument.findOne({ _id: lpoId, isDeleted: false });
-  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, lpoId);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc;
 
   const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
   if (!entry) throw new ApiError(404, 'Entry not found');
@@ -792,8 +779,9 @@ export const previewBulkAutoLinkTangaEntries = async (req: AuthRequest, res: Res
     throw new ApiError(400, 'entryIds must be a non-empty array');
   }
 
-  const lpo = await TangaLPODocument.findOne({ _id: id, isDeleted: false });
-  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, id);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc;
 
   const timeLimitCfg = await SystemConfig.findOne({ configType: 'yard_fuel_time_limit', isDeleted: false }).lean();
   let afterDate: Date | undefined;
@@ -811,8 +799,6 @@ export const previewBulkAutoLinkTangaEntries = async (req: AuthRequest, res: Res
     if (!entry || entry.isCancelled || entry.linkedFuelRecordId) continue;
 
     const disp = dispenseAmount(entry);
-    // Auto-link by truck: surface every eligible fuel record in the window so the
-    // user can choose which one this entry links to (no DO requirement).
     const candidates = await findFuelRecordsByTruck(entry.truckNo, afterDate);
     if (candidates.length === 0) {
       results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp, candidates: [] });
@@ -843,8 +829,9 @@ export const previewBulkAutoLinkTangaEntries = async (req: AuthRequest, res: Res
 export const downloadTangaLPOPDF = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
 
-  const lpo = await TangaLPODocument.findById(id).lean();
-  if (!lpo) throw new ApiError(404, 'Tanga LPO not found');
+  const resolved = await findYardLpoById(YARD, id);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc.toObject ? resolved.doc.toObject() : resolved.doc;
 
   const { generateLPOPDF, getCompanyBranding } = await import('../utils/pdfGenerator');
   const branding = await getCompanyBranding();
@@ -896,11 +883,28 @@ export const downloadTangaMonthPDF = async (req: AuthRequest, res: Response): Pr
   }
 
   const mm = String(month).padStart(2, '0');
-  const lpos = await TangaLPODocument.find({
-    year,
-    date: { $regex: `^${year}-${mm}-` },
-    isDeleted: false,
-  }).sort({ date: 1, lpoNo: 1 }).lean();
+  const meta = getYardMeta(YARD);
+  const [legacyLpos, summaryLpos] = await Promise.all([
+    TangaLPODocument.find({
+      year,
+      date: { $regex: `^${year}-${mm}-` },
+      isDeleted: false,
+    }).sort({ date: 1, lpoNo: 1 }).lean(),
+    LPOSummary.find({
+      year,
+      date: { $regex: `^${year}-${mm}-` },
+      isDeleted: false,
+      station: { $regex: meta.stationRegex },
+    }).sort({ date: 1, lpoNo: 1 }).lean(),
+  ]);
+  const lpos = [
+    ...legacyLpos.map((d) => tagYardDoc(d, 'legacy', meta.station)),
+    ...summaryLpos.map((d) => tagYardDoc(d, 'summary', meta.station)),
+  ].sort((a, b) => {
+    const dc = String(a.date).localeCompare(String(b.date));
+    if (dc !== 0) return dc;
+    return String(a.lpoNo).localeCompare(String(b.lpoNo));
+  });
 
   if (lpos.length === 0) throw new ApiError(404, 'No LPOs found for this month');
 
@@ -956,6 +960,7 @@ const tangaSummaryExport = createYardSummaryExportHandlers({
   filePrefix: 'Tanga_LPO',
   resourceType: 'TangaLPOSummary',
   label: 'Tanga LPO',
+  summaryStationRegex: /^tanga\s*yard$/i,
 });
 
 export const exportTangaSummaryMonth = tangaSummaryExport.exportSummaryMonth;

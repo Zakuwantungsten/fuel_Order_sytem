@@ -3,8 +3,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { commonValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
-import { createEditLockHandlers } from '../controllers/editLockController';
-import { DarLPODocument } from '../models/DarLPODocument';
+import { createYardLpoEditLockHandlers } from '../controllers/editLockController';
 import * as darLPOController from '../controllers/darLPOController';
 import { exportRateLimiter } from '../middleware/rateLimiters';
 
@@ -96,7 +95,7 @@ router.post('/:id/cancel-all',
 );
 
 // Edit lock routes
-const darLPOLock = createEditLockHandlers(DarLPODocument, 'dar_lpo_documents');
+const darLPOLock = createYardLpoEditLockHandlers('dar');
 router.post('/:id/lock',
   commonValidation.mongoId,
   authorize(...WRITE_ROLES),

@@ -10,6 +10,7 @@ import {
   getDisplayName,
 } from '../services/lockService';
 import logger from '../utils/logger';
+import { findYardLpoById, getYardMeta, type YardKind } from '../services/yardUnifiedLpoService';
 
 /**
  * Verify the current user holds a valid (non-expired) edit lock on the given
@@ -84,6 +85,66 @@ export function createEditLockHandlers(
     if (released) {
       logger.info(`Edit lock released on ${collection}/${id} by ${username}`);
       emitLockChange(collection, id, null);
+    }
+
+    res.json({ success: true, message: 'Lock released' });
+  };
+
+  return { acquireEditLock, releaseEditLock };
+}
+
+/**
+ * Edit locks for yard LPO tabs that read from both legacy yard documents and
+ * LPOSummary (dual-read). Resolves the backing collection via findYardLpoById.
+ */
+export function createYardLpoEditLockHandlers(yard: YardKind) {
+  const meta = getYardMeta(yard);
+
+  const acquireEditLock = async (req: AuthRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const resolved = await findYardLpoById(yard, id);
+    if (!resolved) throw new ApiError(404, 'Record not found');
+
+    const collection = resolved.emitKey;
+    const lockedByName = await getDisplayName(username);
+    const lock = await acquireLockRecord(collection, id, username, lockedByName);
+
+    logger.info(
+      `Edit lock acquired on ${collection}/${id} by ${username} until ${lock.lockedUntil.toISOString()}`
+    );
+    emitLockChange(collection, id, {
+      lockedBy: lock.lockedBy,
+      lockedByName: lock.lockedByName,
+      lockedUntil: lock.lockedUntil,
+    });
+
+    res.json({
+      success: true,
+      message: 'Lock acquired',
+      data: { lockedUntil: lock.lockedUntil },
+    });
+  };
+
+  const releaseEditLock = async (req: AuthRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const resolved = await findYardLpoById(yard, id);
+    const collections: string[] = resolved
+      ? [resolved.emitKey]
+      : [meta.legacyEmit, 'lpo_summaries'];
+
+    let released = false;
+    for (const collection of collections) {
+      if (await releaseLockRecord(collection, id, username)) {
+        released = true;
+        logger.info(`Edit lock released on ${collection}/${id} by ${username}`);
+        emitLockChange(collection, id, null);
+      }
     }
 
     res.json({ success: true, message: 'Lock released' });

@@ -60,6 +60,11 @@ export function startChangeStreams(): void {
         const action = actionMap[change.operationType];
         if (!action) return;
 
+        // Controllers always emit create with actorId after API writes. Change-stream
+        // inserts are actor-less echoes that made creators see "click to load" for
+        // their own rows. Keep update/delete here for external / multi-node writes.
+        if (action === 'create') return;
+
         const doc = change.fullDocument ?? null;
         emitDataChange(wsCollection, action, doc);
       });

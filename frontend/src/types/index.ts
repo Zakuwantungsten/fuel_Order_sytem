@@ -103,6 +103,10 @@ export interface LPOEntry {
     lockedAt?: string;
     lockedUntil?: string;
   };
+  // ── Yard entries (Tanga Yard / Dar Yard) ──────────────────────────────────
+  dispenseLiters?: number | null;
+  linkedFuelRecordId?: string | number | null;
+  context?: string | null;
 }
 
 // LPO Detail format (from LPOS 2025.csv)
@@ -273,6 +277,11 @@ export interface LPODetail {
   dispensedCheckpoint?: string | null;
   // Optional operator note for this truck order
   context?: string | null;
+  // ── Yard entries (Tanga Yard / Dar Yard) ──────────────────────────────────
+  /** Liters actually dispensed against the linked fuel record (defaults to `liters`). */
+  dispenseLiters?: number | null;
+  /** FuelRecord _id this entry is linked to (yard fuel deduction target). */
+  linkedFuelRecordId?: string | number | null;
   // In-place fill-station override (truck stays on this LPO)
   pickedAtStation?: string | null;
   pickedAtAt?: string | null;
@@ -1220,6 +1229,8 @@ export interface TangaLPOEntry {
   dest?: string;
   /** Liters dispensed to the linked fuel record. Defaults to the billed `liters`. */
   dispenseLiters?: number | null;
+  /** Explanation for the diff between billed and dispensed liters. Required on amend when diff ≠ 0. */
+  context?: string | null;
   sortOrder?: number;
   originalLiters?: number | null;
   amendedAt?: string | null;
@@ -1264,6 +1275,8 @@ export interface DarLPOEntry {
   dest?: string;
   /** Liters dispensed to the linked fuel record. Defaults to the billed `liters`. */
   dispenseLiters?: number | null;
+  /** Explanation for the diff between billed and dispensed liters. Required on amend when diff ≠ 0. */
+  context?: string | null;
   sortOrder?: number;
   originalLiters?: number | null;
   amendedAt?: string | null;

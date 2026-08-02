@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Save } from 'lucide-react';
+import { X, Save, Scissors } from 'lucide-react';
 import type { DarLPOEntry } from '../types';
 
 interface Props {
@@ -7,6 +7,9 @@ interface Props {
   onSave: (entry: Omit<DarLPOEntry, '_id'>) => void;
   onClose: () => void;
   defaultRate?: number;
+  /** When editing an existing sheet row, liters must go through Amend. */
+  lockLiters?: boolean;
+  onAmendLiters?: () => void;
 }
 
 const EMPTY: Omit<DarLPOEntry, '_id'> = {
@@ -19,7 +22,7 @@ const EMPTY: Omit<DarLPOEntry, '_id'> = {
   isCancelled: false,
 };
 
-export default function DarLPOEntryForm({ entry, onSave, onClose, defaultRate }: Props) {
+export default function DarLPOEntryForm({ entry, onSave, onClose, defaultRate, lockLiters, onAmendLiters }: Props) {
   const [form, setForm] = useState<Omit<DarLPOEntry, '_id'>>({
     ...EMPTY,
     rate: defaultRate ?? 0,
@@ -44,7 +47,8 @@ export default function DarLPOEntryForm({ entry, onSave, onClose, defaultRate }:
     e.preventDefault();
     if (!form.truckNo.trim()) return;
     if (form.liters <= 0 || form.rate <= 0) return;
-    onSave({ ...form, amount: +(form.liters * form.rate).toFixed(2) });
+    const liters = lockLiters && entry?.liters != null ? Number(entry.liters) : form.liters;
+    onSave({ ...form, liters, amount: +(liters * form.rate).toFixed(2) });
   };
 
   return (
@@ -102,7 +106,12 @@ export default function DarLPOEntryForm({ entry, onSave, onClose, defaultRate }:
                 onChange={e => set('liters', parseFloat(e.target.value) || 0)}
                 min={0.01}
                 step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                readOnly={lockLiters}
+                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent ${
+                  lockLiters
+                    ? 'bg-gray-50 dark:bg-gray-750 cursor-not-allowed text-gray-700 dark:text-gray-300'
+                    : 'bg-white dark:bg-gray-700'
+                }`}
                 required
               />
             </div>
@@ -132,6 +141,24 @@ export default function DarLPOEntryForm({ entry, onSave, onClose, defaultRate }:
               />
             </div>
           </div>
+
+          {lockLiters && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <p className="flex-1 text-xs text-amber-800 dark:text-amber-300">
+                Billed liters, dispense, diff, context, and fuel cascade are handled by Amend.
+              </p>
+              {onAmendLiters && (
+                <button
+                  type="button"
+                  onClick={onAmendLiters}
+                  className="shrink-0 inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-md"
+                >
+                  <Scissors className="w-3 h-3" />
+                  Amend
+                </button>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

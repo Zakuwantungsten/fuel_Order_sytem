@@ -1267,6 +1267,11 @@ export const fuelRecordsAPI = {
     return response.data.data || { routes: [] };
   },
 
+  getAvailableJourneyStatuses: async (params: { month?: string }): Promise<{ statuses: string[]; queueOrders: number[] }> => {
+    const response = await apiClient.get('/fuel-records/available-journey-statuses', { params });
+    return response.data.data || { statuses: [], queueOrders: [] };
+  },
+
   createPendingGoingDo: async (data: { truckNo: string; date?: string }) => {
     const response = await apiClient.post('/fuel-records/pending-dos/going', data);
     return response.data;
@@ -2888,7 +2893,15 @@ export const tangaLPOAPI = {
     const response = await apiClient.post('/tanga-lpo/cancel-entry', data);
     return response.data.data;
   },
-  amendEntry: async (data: { lpoId: string; entryId: string; newLiters: number; amendReason?: string }) => {
+  amendEntry: async (data: {
+    lpoId: string;
+    entryId: string;
+    newLiters: number;
+    newDispenseLiters?: number | null;
+    context?: string;
+    cascade?: boolean;
+    amendReason?: string;
+  }) => {
     const response = await apiClient.post('/tanga-lpo/amend-entry', data);
     return response.data.data;
   },
@@ -3033,7 +3046,15 @@ export const darLPOAPI = {
     const response = await apiClient.post('/dar-lpo/cancel-entry', data);
     return response.data.data;
   },
-  amendEntry: async (data: { lpoId: string; entryId: string; newLiters: number; amendReason?: string }) => {
+  amendEntry: async (data: {
+    lpoId: string;
+    entryId: string;
+    newLiters: number;
+    newDispenseLiters?: number | null;
+    context?: string;
+    cascade?: boolean;
+    amendReason?: string;
+  }) => {
     const response = await apiClient.post('/dar-lpo/amend-entry', data);
     return response.data.data;
   },

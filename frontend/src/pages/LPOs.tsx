@@ -8,10 +8,13 @@ import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
 import { NewRecordsPill } from '../components/NewRecordsPill';
 import { countRelevantNewRecords } from '../utils/realtimeRelevance';
 import type { LPOEntry, LPOSummary as LPOSummaryType } from '../types';
-import { lpoDocumentsAPI, lpoWorkbookAPI, lposAPI } from '../services/api';
+import { lpoDocumentsAPI, lpoWorkbookAPI, lposAPI, tangaLPOAPI, darLPOAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
+import { isYardStation, isDarYardStation, YARD_STATION } from '../utils/yardStations';
 import LPODetailForm from '../components/LPODetailForm';
 import LPOWorkbook from '../components/LPOWorkbook';
+import TangaLPOWorkbook from '../components/TangaLPOWorkbook';
+import DarLPOWorkbook from '../components/DarLPOWorkbook';
 import LPOSummaryComponent from '../components/LPOSummary';
 import DriverAccountWorkbook from '../components/DriverAccountWorkbook';
 import ReferWorkbook from '../components/ReferWorkbook';
@@ -103,10 +106,15 @@ const LPOs = () => {
 
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [_searchParams] = useSearchParams();
-  const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account', 'refer'] as const;
+  const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account', 'refer', 'yard'] as const;
   type ViewMode = typeof VIEW_MODES[number];
   const [viewMode, setViewMode] = usePersistedState<ViewMode>('lpo:viewMode', 'list');
   const [selectedWorkbookId, setSelectedWorkbookId] = usePersistedState<string | number | null>('lpo:selectedWorkbookId', null);
+  // Yard (Tanga/Dar) row-click navigation target — opens the same
+  // Tanga/DarLPOWorkbook + sheet view used on the dedicated yard pages.
+  const [yardViewInfo, setYardViewInfo] = usePersistedState<{
+    yard: 'tanga' | 'dar'; lpoId: string; year: number; month: number; initialTruckNo?: string;
+  } | null>('lpo:yardViewInfo', null);
   const [summaryFilters, setSummaryFilters] = usePersistedState('lpo:summaryFilters', {
     stations: [] as string[],
     dateFrom: '',
@@ -179,10 +187,13 @@ const LPOs = () => {
     );
   }, [filtersData]);
 
-  const availableStations: string[] = useMemo(
-    () => filtersData?.stations ?? [],
-    [filtersData]
-  );
+  // Yard stations are virtual (LPOSummary.station), so always offer them as
+  // filter chips even before the server has returned any distinct values.
+  const availableStations: string[] = useMemo(() => {
+    const base = filtersData?.stations ?? [];
+    const withYards = new Set([...base, YARD_STATION.TANGA, YARD_STATION.DAR]);
+    return Array.from(withYards);
+  }, [filtersData]);
 
   const availableYears = useMemo(() => {
     const yearsFromPeriods = availablePeriods.map((p: {year: number}) => p.year);
@@ -475,7 +486,7 @@ const LPOs = () => {
     queryClient.invalidateQueries({ queryKey: lpoKeys.workbooks() });
     if (event?.action !== 'create') return;
     // Creator already refreshed on mutation success — don't offer "click to load".
-    if (isOwnDataChange(event, user?.id)) return;
+    if (isOwnDataChange(event, user?.id, user?.username)) return;
     const selectedPeriodKeys = new Set(
       selectedPeriods.map(({ year, month }) => `${year}-${String(month).padStart(2, '0')}`)
     );
@@ -498,7 +509,7 @@ const LPOs = () => {
       },
     );
     addPendingLPOs(relevant);
-  });
+  }, { id: 'rt-lpo-summaries', deferCreates: true });
 
   const handleExportWorkbook = async (year: number) => {
     try {
@@ -811,6 +822,7 @@ const LPOs = () => {
       } else {
         toast.success(`LPO ${createdLpo.lpoNo} created`);
       }
+      return createdLpo;
     } catch (error: any) {
       console.error('Error saving LPO document:', error);
       console.error('Error response:', error.response?.data);
@@ -832,6 +844,7 @@ const LPOs = () => {
       }
       
       toast.error(`Error creating LPO document: ${errorMessage}`);
+      throw error;
     }
   };
 
@@ -843,6 +856,25 @@ const LPOs = () => {
 
   // Handle row click to open LPO sheet
   const handleRowClick = async (lpo: LPOEntry) => {
+    // Tanga/Dar Yard LPOs are stored on LPOSummary but presented via the
+    // dedicated Tanga/Dar workbook + sheet view (same one used from the
+    // Tanga/Dar Yard LPO pages) — never the generic LPOSheetView.
+    if (isYardStation(lpo.dieselAt)) {
+      try {
+        const isDar = isDarYardStation(lpo.dieselAt);
+        const api = isDar ? darLPOAPI : tangaLPOAPI;
+        const doc = await api.getByLPONo(lpo.lpoNo);
+        const lpoId = String(doc?._id ?? doc?.id ?? '');
+        const year = doc?.year || new Date().getFullYear();
+        const month = doc?.date ? (new Date(doc.date).getMonth() + 1) : (new Date().getMonth() + 1);
+        setYardViewInfo({ yard: isDar ? 'dar' : 'tanga', lpoId, year, month, initialTruckNo: lpo.truckNo || undefined });
+        setViewMode('yard');
+      } catch (error) {
+        console.error('Error fetching yard LPO details:', error);
+        toast.error('Failed to open yard LPO');
+      }
+      return;
+    }
     try {
       // Fetch the LPO document to get its year (works for both regular and driver account LPOs
       // since driver account creation also creates an LPOSummary document)
@@ -974,6 +1006,22 @@ const LPOs = () => {
   const totalAmountUSD = orders
     .filter(lpo => { const u = (lpo.dieselAt || '').toUpperCase(); return u.startsWith('LAKE') && !u.includes('TUNDUMA'); })
     .reduce((sum, lpo) => sum + (lpo.ltrs * lpo.pricePerLtr), 0);
+
+  // Show the Tanga/Dar Yard workbook + sheet view for yard LPOs
+  if (viewMode === 'yard' && yardViewInfo) {
+    const YardWorkbook = yardViewInfo.yard === 'dar' ? DarLPOWorkbook : TangaLPOWorkbook;
+    return (
+      <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900 lg:static lg:z-auto lg:bg-transparent lg:h-[calc(100vh-8rem)]">
+        <YardWorkbook
+          onBack={() => { setYardViewInfo(null); setViewMode('list'); }}
+          initialLpoId={yardViewInfo.lpoId}
+          initialYear={yardViewInfo.year}
+          initialMonth={yardViewInfo.month}
+          initialTruckNo={yardViewInfo.initialTruckNo}
+        />
+      </div>
+    );
+  }
 
   // Show workbook view if selected
   if (viewMode === 'workbook' && selectedWorkbookId) {
