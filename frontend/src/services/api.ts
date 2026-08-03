@@ -1171,6 +1171,43 @@ export const resourceLockAPI = {
 };
 
 // Fuel Record Details Interface
+/** Yard billed≠dispense split (or legacy freeform yard log) shown on the details tab. */
+export interface AdditionalYardDispensation {
+  id?: string;
+  kind: 'lpo_diff' | 'legacy_dispense';
+  date: string;
+  lpoNo?: string | null;
+  yard: string;
+  doNo?: string;
+  truckNo?: string;
+  billedLiters?: number | null;
+  dispenseLiters?: number | null;
+  diff?: number | null;
+  context?: string | null;
+  enteredBy?: string;
+  status?: string;
+  source?: string;
+}
+
+/** Same-truck sibling journey shown on the Queued Journeys tab. */
+export interface TruckQueueJourney {
+  id: string;
+  truckNo: string;
+  goingDo: string;
+  returnDo?: string;
+  from: string;
+  to: string;
+  start: string;
+  date: string;
+  journeyStatus: 'active' | 'queued' | string;
+  queueOrder: number | null;
+  balance?: number;
+  isPendingGoing?: boolean;
+  isPendingReturn?: boolean;
+  /** True when this row is the fuel record currently being inspected. */
+  isCurrent?: boolean;
+}
+
 export interface FuelRecordDetails {
   fuelRecord: FuelRecord;
   journeyInfo: {
@@ -1223,11 +1260,28 @@ export interface FuelRecordDetails {
     checkpoint?: string;
     source?: 'main' | 'tanga' | 'dar';
     context?: string | null;
+    /** Billed liters on the LPO entry. */
+    billedLiters?: number | null;
+    /** Liters written to the fuel-record yard column (dispense as). */
+    dispenseLiters?: number | null;
+    /** billed − dispense when hasDispenseAs. */
+    dispenseDiff?: number;
+    /** True when billed liters differ from what was dispensed to the fuel record. */
+    hasDispenseAs?: boolean;
   })[];
   yardDispenses: YardFuelDispense[];
+  /** Yard billed≠dispense splits (+ legacy freeform yard logs) for this journey. */
+  additionalYardDispensations?: AdditionalYardDispensation[];
+  /** Same-truck active + queued journeys (Q1, Q2, …). */
+  truckQueue?: {
+    active: TruckQueueJourney | null;
+    queued: TruckQueueJourney[];
+  };
   summary: {
     totalLPOs: number;
     totalYardDispenses: number;
+    totalAdditionalYardDispensations?: number;
+    totalQueuedJourneys?: number;
     totalFuelOrdered: number;
     totalYardFuel: number;
     goingLPOs?: number;

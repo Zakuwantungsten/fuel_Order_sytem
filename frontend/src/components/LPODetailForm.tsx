@@ -2967,9 +2967,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               const respEntry = responseEntries[sel.index];
               const entryId = respEntry?.id ?? respEntry?._id;
               if (!entryId) return null;
-              return { entryId: String(entryId), fuelRecordId: sel.fuelRecordId, topUp: sel.topUp };
+              return {
+                entryId: String(entryId),
+                fuelRecordId: sel.fuelRecordId,
+                topUp: sel.topUp,
+                ...(sel.dispenseLiters != null ? { dispenseLiters: sel.dispenseLiters } : {}),
+              };
             })
-            .filter((s): s is { entryId: string; fuelRecordId: string; topUp: boolean } => s != null);
+            .filter((s): s is { entryId: string; fuelRecordId: string; topUp: boolean; dispenseLiters?: number } => s != null);
 
           if (selections.length > 0) {
             const lpoId = String((createdLpo as any)?.id ?? (createdLpo as any)?._id ?? '');

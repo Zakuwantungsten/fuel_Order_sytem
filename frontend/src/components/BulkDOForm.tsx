@@ -1,11 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, FileDown, Plus, ChevronDown, Check } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import type { ChangeEvent } from 'react';
+import { X, FileDown, ChevronDown, Check, Download, Upload } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { toast } from 'react-toastify';
+import BulkDOEntryGrid, {
+  BulkGridRow,
+  createEmptyGridRows,
+  countFilledGridRows,
+  isGridRowEmpty,
+  parseTabTextToGridRows,
+  parseSpreadsheetFileToGridRows,
+} from './BulkDOEntryGrid';
 
 interface BulkDOFormProps {
   isOpen: boolean;
@@ -42,10 +51,53 @@ const BULK_DO_FORM_STORAGE_KEY = 'bulk_do_form_draft';
 
 interface StoredBulkDOData {
   commonData: BulkCommonData;
-  bulkInput: string;
+  /** @deprecated kept for restoring older drafts */
+  bulkInput?: string;
+  gridRows?: BulkGridRow[];
   parsedRows: BulkDORow[];
   savedAt: string;
 }
+
+const getTemplateHeaders = (rateType: 'per_ton' | 'fixed_total') =>
+  rateType === 'per_ton'
+    ? ['Truck No', 'Trailer No', 'Driver Name', 'Tonnage', 'Rate Per Ton']
+    : ['Truck No', 'Trailer No', 'Driver Name', 'Tonnage', 'Total Amount'];
+
+const getTemplateExampleRow = (rateType: 'per_ton' | 'fixed_total') =>
+  rateType === 'per_ton'
+    ? ['T844 EKS', 'T629 ELE', 'John Doe', '30', '1850']
+    : ['T844 EKS', 'T629 ELE', 'John Doe', '30', '55500'];
+
+const gridRowToBulkRow = (
+  row: BulkGridRow,
+  rateType: 'per_ton' | 'fixed_total'
+): BulkDORow | null => {
+  if (isGridRowEmpty(row)) return null;
+  if (!row.truckNo.trim()) return null;
+
+  const tonnage = parseFloat(row.tonnages.replace(/,/g, '')) || 0;
+  const amountOrRate = parseFloat(row.amountOrRate.replace(/,/g, '')) || 0;
+
+  if (rateType === 'per_ton') {
+    return {
+      truckNo: formatTruckNumber(row.truckNo),
+      trailerNo: row.trailerNo.toUpperCase(),
+      driverName: row.driverName.toUpperCase(),
+      tonnages: tonnage,
+      ratePerTon: amountOrRate,
+      totalAmount: tonnage * amountOrRate,
+    };
+  }
+
+  return {
+    truckNo: formatTruckNumber(row.truckNo),
+    trailerNo: row.trailerNo.toUpperCase(),
+    driverName: row.driverName.toUpperCase(),
+    tonnages: tonnage,
+    ratePerTon: amountOrRate,
+    totalAmount: amountOrRate,
+  };
+};
 
 const saveBulkDraft = (data: StoredBulkDOData) => {
   try {
@@ -135,7 +187,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
     }
   }, [commonData.doType]);
 
-  const [bulkInput, setBulkInput] = useState('');
+  const [gridRows, setGridRows] = useState<BulkGridRow[]>(() => createEmptyGridRows());
   const [parsedRows, setParsedRows] = useState<BulkDORow[]>([]);
   const [createdOrders, setCreatedOrders] = useState<Partial<DeliveryOrder>[]>([]);
   // Progress tracking state
@@ -143,6 +195,10 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   const [progress, setProgress] = useState({ current: 0, total: 0, status: '' });
   // Whether a saved draft was restored on open (drives the "draft restored" banner)
   const [hasDraft, setHasDraft] = useState(false);
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: journeyConfig } = useJourneyConfig();
   const autoDownloadPdf = journeyConfig?.autoDownloadDOPdf ?? true;
@@ -156,11 +212,12 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   useEffect(() => {
     if (!isOpen) {
       // Reset all form data when the modal closes
-      setBulkInput('');
+      setGridRows(createEmptyGridRows());
       setParsedRows([]);
       setCreatedOrders([]);
       setProgress({ current: 0, total: 0, status: '' });
       setIsCreating(false);
+      setUploadedFileName(null);
       
       // Reset commonData to defaults
       const now = new Date();
@@ -191,8 +248,18 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   useEffect(() => {
     if (!isOpen) return;
     const draft = loadBulkDraft();
-    if (draft && (draft.bulkInput?.trim() || (draft.parsedRows?.length ?? 0) > 0)) {
-      setBulkInput(draft.bulkInput || '');
+    const hasGrid = (draft?.gridRows?.some((r) => !isGridRowEmpty(r))) ?? false;
+    const hasLegacyInput = Boolean(draft?.bulkInput?.trim());
+    const hasParsed = (draft?.parsedRows?.length ?? 0) > 0;
+
+    if (draft && (hasGrid || hasLegacyInput || hasParsed)) {
+      if (hasGrid && draft.gridRows) {
+        setGridRows(draft.gridRows);
+      } else if (hasLegacyInput && draft.bulkInput) {
+        setGridRows(parseTabTextToGridRows(draft.bulkInput));
+      } else {
+        setGridRows(createEmptyGridRows());
+      }
       setParsedRows(draft.parsedRows || []);
       setCommonData(prev => ({
         ...prev,
@@ -205,32 +272,71 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
     }
   }, [isOpen]);
 
+  // Live-sync parsed rows from the grid so preview + create stay current
+  useEffect(() => {
+    if (!isOpen || isCreating || createdOrders.length > 0) return;
+    const rows: BulkDORow[] = [];
+    for (const gridRow of gridRows) {
+      const parsed = gridRowToBulkRow(gridRow, commonData.rateType);
+      if (parsed) rows.push(parsed);
+    }
+    setParsedRows(rows);
+  }, [gridRows, commonData.rateType, isOpen, isCreating, createdOrders.length]);
+
   // Auto-save the draft (debounced) whenever meaningful data changes. Skip while
   // creating or once orders have been created (that draft is spent).
   useEffect(() => {
     if (!isOpen || isCreating || createdOrders.length > 0) return;
-    const hasData = bulkInput.trim().length > 0 || parsedRows.length > 0;
+    const hasData = countFilledGridRows(gridRows) > 0 || parsedRows.length > 0;
     if (!hasData) return;
     const timeoutId = setTimeout(() => {
       saveBulkDraft({
         commonData,
-        bulkInput,
+        gridRows,
         parsedRows,
         savedAt: new Date().toISOString(),
       });
       setHasDraft(true);
     }, 1000);
     return () => clearTimeout(timeoutId);
-  }, [isOpen, isCreating, createdOrders.length, bulkInput, parsedRows, commonData]);
+  }, [isOpen, isCreating, createdOrders.length, gridRows, parsedRows, commonData]);
 
   // Discard the current draft and start fresh
   const handleDiscardDraft = () => {
     clearBulkDraft();
-    setBulkInput('');
+    setGridRows(createEmptyGridRows());
     setParsedRows([]);
     setHasDraft(false);
+    setUploadedFileName(null);
     setCommonData(prev => ({ ...prev, clientName: '', loadingPoint: '', destination: '', haulier: '' }));
   };
+
+  const previewOrders = useMemo(() => {
+    if (parsedRows.length === 0) return [];
+    const parsed = parseDONumber(commonData.startingNumber);
+    if (!parsed) return [];
+    const { sequentialNumber: startNum, year } = parsed;
+
+    return parsedRows.map((row, index) => ({
+      sn: index + 1,
+      doNumber: formatDONumber(startNum + index, year),
+      doType: commonData.doType,
+      date: commonData.date,
+      importOrExport: commonData.importOrExport,
+      clientName: commonData.clientName || '—',
+      truckNo: row.truckNo,
+      trailerNo: row.trailerNo,
+      driverName: row.driverName,
+      tonnages: row.tonnages,
+      ratePerTon: row.ratePerTon,
+      totalAmount: row.totalAmount ?? 0,
+      loadingPoint: commonData.loadingPoint || '—',
+      destination: commonData.destination || '—',
+      haulier: commonData.haulier || '—',
+      cargoType: commonData.cargoType,
+      rateType: commonData.rateType,
+    }));
+  }, [parsedRows, commonData]);
 
   // Dropdown refs
   const cargoTypeDropdownRef = useRef<HTMLDivElement>(null);
@@ -298,73 +404,124 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
     }));
   };
 
-  const parseBulkData = () => {
+  const downloadTemplate = async () => {
     try {
-      console.log('=== Parsing Bulk Data ===');
-      console.log('Input length:', bulkInput.length);
-      console.log('Rate Type:', commonData.rateType);
-      
-      if (!bulkInput.trim()) {
-        toast.warn('Please enter truck data to parse');
-        return;
-      }
-      
-      const lines = bulkInput.trim().split('\n');
-      console.log('Number of lines:', lines.length);
-      
-      const rows: BulkDORow[] = [];
+      setIsDownloadingTemplate(true);
+      const XLSX = (await import('xlsx-js-style')).default;
+      const headers = getTemplateHeaders(commonData.rateType);
+      const example = getTemplateExampleRow(commonData.rateType);
+      // Header + one example row + several blank data rows (bank-style template)
+      const blankRows = Array.from({ length: 20 }, () => headers.map(() => ''));
+      const ws = XLSX.utils.aoa_to_sheet([headers, example, ...blankRows]);
 
-      for (const line of lines) {
-        const parts = line.split('\t').map(p => p.trim());
-        console.log('Line parts:', parts.length, parts);
-        
-        if (commonData.rateType === 'per_ton') {
-          // Format: Truck | Trailer | Driver | Tonnage | Rate Per Ton
-          if (parts.length >= 5) {
-            const tonnage = parseFloat(parts[3]) || 0;
-            const rate = parseFloat(parts[4]) || 0;
-            rows.push({
-              truckNo: formatTruckNumber(parts[0]),
-              trailerNo: parts[1].toUpperCase(),
-              driverName: parts[2].toUpperCase(),
-              tonnages: tonnage,
-              ratePerTon: rate,
-              totalAmount: tonnage * rate,
-            });
-          }
-        } else {
-          // fixed_total: Format: Truck | Trailer | Driver | Tonnage | Total Amount
-          if (parts.length >= 5) {
-            const tonnage = parseFloat(parts[3]) || 0;
-            const totalAmount = parseFloat(parts[4]) || 0;
-            rows.push({
-              truckNo: formatTruckNumber(parts[0]),
-              trailerNo: parts[1].toUpperCase(),
-              driverName: parts[2].toUpperCase(),
-              tonnages: tonnage,
-              ratePerTon: totalAmount,
-              totalAmount: totalAmount,
-            });
-          }
+      ws['!cols'] = [
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 18 },
+        { wch: 12 },
+        { wch: 16 },
+      ];
+
+      const borderStyle = {
+        top: { style: 'thin', color: { rgb: '000000' } },
+        bottom: { style: 'thin', color: { rgb: '000000' } },
+        left: { style: 'thin', color: { rgb: '000000' } },
+        right: { style: 'thin', color: { rgb: '000000' } },
+      };
+      const headerStyle = {
+        border: borderStyle,
+        alignment: { horizontal: 'center', vertical: 'center' },
+        font: { bold: true, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '1F4E79' } },
+      };
+      const exampleStyle = {
+        border: borderStyle,
+        alignment: { horizontal: 'center', vertical: 'center' },
+        font: { italic: true, color: { rgb: '666666' } },
+        fill: { fgColor: { rgb: 'FFF2CC' } },
+      };
+      const cellStyle = {
+        border: borderStyle,
+        alignment: { horizontal: 'center', vertical: 'center' },
+      };
+
+      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+      for (let row = range.s.r; row <= range.e.r; row++) {
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+          if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
+          ws[cellRef].s = row === 0 ? headerStyle : row === 1 ? exampleStyle : cellStyle;
         }
       }
 
-      console.log('Parsed rows:', rows.length, rows);
-      
-      if (rows.length === 0) {
-        const expectedFormat = commonData.rateType === 'per_ton'
-          ? 'Truck No | Trailer No | Driver Name | Tonnage | Rate Per Ton'
-          : 'Truck No | Trailer No | Driver Name | Tonnage | Total Amount';
-        toast.warn(`No valid data found. Expected tab-separated format: ${expectedFormat}`);
+      // Instructions sheet
+      const instructions = [
+        ['Bulk Delivery Order Template'],
+        [''],
+        ['How to use'],
+        ['1. Keep the header row exactly as provided — do not rename columns.'],
+        ['2. Row 2 is an EXAMPLE (yellow). Replace it with your real data or delete it.'],
+        ['3. Enter one truck per row.'],
+        ['4. Copy the data rows and paste into the Bulk Create grid, or type directly in the form.'],
+        [''],
+        ['Required columns'],
+        ...headers.map((h, i) => [`Column ${i + 1}`, h]),
+        [''],
+        ['Rate structure for this template', commonData.rateType === 'per_ton' ? 'Per Ton (Total = Tonnage × Rate Per Ton)' : 'Fixed Total Amount'],
+        [''],
+        ['Notes'],
+        ['- Truck and trailer numbers will be normalized by the system.'],
+        ['- Driver names are stored in uppercase.'],
+        ['- Shared DO fields (client, date, loading point, destination, etc.) are set in the form, not in this file.'],
+      ];
+      const wsInfo = XLSX.utils.aoa_to_sheet(instructions);
+      wsInfo['!cols'] = [{ wch: 55 }, { wch: 40 }];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Truck Data');
+      XLSX.utils.book_append_sheet(wb, wsInfo, 'Instructions');
+
+      const rateLabel = commonData.rateType === 'per_ton' ? 'PerTon' : 'FixedTotal';
+      const filename = `Bulk_DO_Template_${rateLabel}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, filename);
+      toast.success('Template downloaded');
+    } catch (error) {
+      console.error('Template download error:', error);
+      toast.error('Failed to download template');
+    } finally {
+      setIsDownloadingTemplate(false);
+    }
+  };
+
+  const handleUploadSpreadsheet = async (file: File) => {
+    if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+      toast.error('Only Excel (.xlsx, .xls) or CSV (.csv) files are accepted');
+      return;
+    }
+
+    try {
+      setIsUploadingFile(true);
+      const rows = await parseSpreadsheetFileToGridRows(file);
+      const filled = countFilledGridRows(rows);
+      if (filled === 0) {
+        toast.warn('No truck rows found in the file. Check headers match the template.');
         return;
       }
-      
-      setParsedRows(rows);
-      toast.success(`Successfully parsed ${rows.length} truck entries`);
+      setGridRows(rows);
+      setUploadedFileName(file.name);
+      toast.success(`Loaded ${filled} truck row${filled === 1 ? '' : 's'} from ${file.name}`);
     } catch (error) {
-      console.error('Error parsing bulk data:', error);
-      toast.error('Error parsing data. Please check the format and try again.');
+      console.error('Spreadsheet upload error:', error);
+      toast.error('Failed to read the uploaded file. Please use the Download Template format.');
+    } finally {
+      setIsUploadingFile(false);
     }
+  };
+
+  const onUploadInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) void handleUploadSpreadsheet(file);
+    e.target.value = '';
   };
 
   const generateDOs = async () => {
@@ -375,7 +532,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       console.log('Parsed Rows:', parsedRows);
       
       if (parsedRows.length === 0) {
-        toast.warn('Please parse the truck data first by clicking "Parse Data"');
+        toast.warn('Please enter at least one truck row in the grid');
         return;
       }
       
@@ -731,7 +888,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                             rateType: 'per_ton'
                           }));
                           setParsedRows([]);
-                          setBulkInput('');
+                          setGridRows(createEmptyGridRows());
+                          setUploadedFileName(null);
                           setShowRateTypeDropdown(false);
                         }}
                         className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
@@ -749,7 +907,8 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                             rateType: 'fixed_total'
                           }));
                           setParsedRows([]);
-                          setBulkInput('');
+                          setGridRows(createEmptyGridRows());
+                          setUploadedFileName(null);
                           setShowRateTypeDropdown(false);
                         }}
                         className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
@@ -918,44 +1077,130 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
               </div>
             </div>
 
-            {/* Bulk Data Input */}
+            {/* Truck entry grid */}
             <div className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 uppercase">
-                Truck Details (Paste from Excel/Spreadsheet)
-              </h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                <strong>Format:</strong> Paste tab-separated data from Excel/Spreadsheet
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                {commonData.rateType === 'per_ton' 
-                  ? 'Required columns: Truck No | Trailer No | Driver Name | Tonnage | Rate Per Ton'
-                  : 'Required columns: Truck No | Trailer No | Driver Name | Tonnage | Total Amount'}
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 uppercase">
+                  Truck Details
+                </h4>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={onUploadInputChange}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isCreating || isUploadingFile || createdOrders.length > 0}
+                    className={`inline-flex items-center px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 ${
+                      isCreating || isUploadingFile || createdOrders.length > 0 ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <Upload className="w-4 h-4 mr-1.5" />
+                    {isUploadingFile ? 'Reading…' : 'Upload File'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadTemplate}
+                    disabled={isCreating || isDownloadingTemplate}
+                    className={`inline-flex items-center px-3 py-1.5 text-sm rounded-md border border-primary-300 dark:border-primary-600 text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 ${
+                      isCreating || isDownloadingTemplate ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <Download className="w-4 h-4 mr-1.5" />
+                    {isDownloadingTemplate ? 'Preparing…' : 'Download Template'}
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                Type into the cells, paste from Excel, or upload the template file. Preview updates automatically.
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                <strong>Example:</strong> {commonData.rateType === 'per_ton' 
-                  ? 'T538 EKT [TAB] T637 ELE [TAB] John Doe [TAB] 32 [TAB] 185'
-                  : 'T538 EKT [TAB] T637 ELE [TAB] John Doe [TAB] 32 [TAB] 5920'}
+                {commonData.rateType === 'per_ton'
+                  ? 'Columns: Truck No · Trailer No · Driver Name · Tonnage · Rate Per Ton'
+                  : 'Columns: Truck No · Trailer No · Driver Name · Tonnage · Total Amount'}
+                {uploadedFileName ? ` · Loaded from: ${uploadedFileName}` : ''}
               </p>
-              <textarea
-                value={bulkInput}
-                onChange={(e) => setBulkInput(e.target.value)}
-                disabled={isCreating}
-                rows={8}
-                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm ${isCreating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                placeholder={commonData.rateType === 'per_ton'
-                  ? "T844 EKS\tT629 ELE\tJohn Doe\t30\t1850\nT845 ABC\tT630 DEF\tJane Smith\t28\t1850"
-                  : "T844 EKS\tT629 ELE\tJohn Doe\t30\t55500\nT845 ABC\tT630 DEF\tJane Smith\t28\t51800"}
+
+              <BulkDOEntryGrid
+                rateType={commonData.rateType}
+                rows={gridRows}
+                onChange={setGridRows}
+                disabled={isCreating || createdOrders.length > 0}
               />
-              <button
-                type="button"
-                onClick={parseBulkData}
-                disabled={isCreating}
-                className={`mt-2 px-4 py-2 text-white rounded-md ${isCreating ? 'opacity-50 cursor-not-allowed bg-gray-400 dark:bg-gray-600' : 'bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600'}`}
-              >
-                <Plus className="w-4 h-4 inline mr-2" />
-                Parse Data ({bulkInput.split('\n').filter(l => l.trim()).length} rows)
-              </button>
             </div>
+
+            {/* Pre-create processed preview */}
+            {previewOrders.length > 0 && createdOrders.length === 0 && (
+              <div className="mb-6 border border-indigo-200 dark:border-indigo-800 rounded-lg overflow-hidden">
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 px-4 py-3 border-b border-indigo-200 dark:border-indigo-800 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">
+                      Preview — how data will be created ({previewOrders.length} {commonData.doType}
+                      {previewOrders.length === 1 ? '' : 's'})
+                    </h4>
+                    <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-0.5">
+                      Shared fields (client, route, cargo) are applied to every row. Numbers and truck fields are normalized as shown.
+                    </p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                  <table className="w-full text-xs min-w-[900px]">
+                    <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+                      <tr className="text-left text-gray-600 dark:text-gray-300">
+                        <th className="px-3 py-2 font-semibold">#</th>
+                        <th className="px-3 py-2 font-semibold">{commonData.doType} No</th>
+                        <th className="px-3 py-2 font-semibold">Truck</th>
+                        <th className="px-3 py-2 font-semibold">Trailer</th>
+                        <th className="px-3 py-2 font-semibold">Driver</th>
+                        <th className="px-3 py-2 font-semibold">Tonnage</th>
+                        <th className="px-3 py-2 font-semibold">
+                          {commonData.rateType === 'per_ton' ? 'Rate/Ton' : 'Rate'}
+                        </th>
+                        <th className="px-3 py-2 font-semibold">Total</th>
+                        <th className="px-3 py-2 font-semibold">Client</th>
+                        <th className="px-3 py-2 font-semibold">Route</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewOrders.map((order) => (
+                        <tr
+                          key={`${order.doNumber}-${order.sn}`}
+                          className="border-t border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200"
+                        >
+                          <td className="px-3 py-1.5 text-gray-400">{order.sn}</td>
+                          <td className="px-3 py-1.5 font-medium whitespace-nowrap">
+                            {order.doType}-{order.doNumber}
+                          </td>
+                          <td className="px-3 py-1.5 whitespace-nowrap">{order.truckNo}</td>
+                          <td className="px-3 py-1.5 whitespace-nowrap">{order.trailerNo || '—'}</td>
+                          <td className="px-3 py-1.5">{order.driverName || '—'}</td>
+                          <td className="px-3 py-1.5 tabular-nums">{order.tonnages}</td>
+                          <td className="px-3 py-1.5 tabular-nums">
+                            {order.ratePerTon.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-3 py-1.5 tabular-nums font-medium">
+                            {order.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-3 py-1.5">{order.clientName}</td>
+                          <td className="px-3 py-1.5 whitespace-nowrap">
+                            {order.loadingPoint} → {order.destination}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {commonData.doType === 'DO' && (
+                  <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800/60 border-t border-indigo-100 dark:border-indigo-900 text-xs text-gray-600 dark:text-gray-400">
+                    After create: each row becomes a Delivery Order; fuel records / LPO linking follow import-export automation rules.
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Preview of created orders */}
             {createdOrders.length > 0 && (

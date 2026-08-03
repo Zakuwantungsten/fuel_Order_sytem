@@ -37,6 +37,8 @@ export interface YardLinkSelection {
   index: number;
   fuelRecordId: string;
   topUp: boolean;
+  /** Override liters written to the fuel-record yard column on bulk-link. */
+  dispenseLiters?: number;
 }
 
 export interface YardSubmission {
@@ -56,6 +58,10 @@ interface DraftEntry {
   rate: number;
   amount: number;
   dest: string;
+  /** Liters applied to the fuel record; null = dispense full billed liters. */
+  dispenseLiters: number | null;
+  /** Required when billed liters differ from dispense. */
+  context: string | null;
 }
 
 interface RowState {
@@ -75,6 +81,7 @@ interface RowState {
 
 const makeEmptyEntry = (rate = 0): DraftEntry => ({
   doNo: '', truckNo: '', liters: 0, rate, amount: 0, dest: '',
+  dispenseLiters: null, context: null,
 });
 
 const makeEmptyRow = (): RowState => ({
@@ -91,6 +98,16 @@ const makeEmptyRow = (): RowState => ({
 
 function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
+}
+
+/** Effective dispense = override or full billed liters. */
+function effectiveDispense(e: DraftEntry): number {
+  return e.dispenseLiters != null ? e.dispenseLiters : e.liters;
+}
+
+/** Billed − dispensed (positive = billed more than written to fuel record). */
+function entryDiff(e: DraftEntry): number {
+  return +(Number(e.liters) - effectiveDispense(e)).toFixed(2);
 }
 
 interface Props {
@@ -340,6 +357,9 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
   const handleLinkToggle = (idx: number, checked: boolean) => {
     const row = rows[idx];
     if (!checked) {
+      setEntries(prev => prev.map((e, i) => (
+        i !== idx ? e : { ...e, dispenseLiters: null }
+      )));
       updateRow(idx, { linked: false });
       return;
     }
@@ -387,6 +407,35 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
     });
   }, [fetchTruck]);
 
+  /** Multi-line DO paste → one row per DO, then stagger DO→truck fetch (like LPODetailForm). */
+  const handleDoPaste = useCallback((idx: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text');
+    const lines = text.split(/[\r\n\t]+/).map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 1) return;
+    e.preventDefault();
+    setEntries(prev => {
+      const lastRate = prev[prev.length - 1]?.rate || 0;
+      const next = [...prev];
+      lines.forEach((line, i) => {
+        const rowIdx = idx + i;
+        if (rowIdx < next.length) next[rowIdx] = { ...next[rowIdx], doNo: line.toUpperCase() };
+        else next.push({ ...makeEmptyEntry(lastRate), doNo: line.toUpperCase() });
+      });
+      return next;
+    });
+    setRows(prev => {
+      const next = [...prev];
+      for (let i = 1; i < lines.length; i++) if (idx + i >= next.length) next.push(makeEmptyRow());
+      return next;
+    });
+    lines.forEach((line, i) => {
+      setTimeout(() => {
+        if (doFetchTimers.current[idx + i]) clearTimeout(doFetchTimers.current[idx + i]);
+        fetchByDo(idx + i, line);
+      }, i * 80);
+    });
+  }, [fetchByDo]);
+
   useImperativeHandle(ref, () => ({
     getSubmission: () => {
       const validIdx = entries
@@ -394,25 +443,57 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
         .filter(({ e }) => e.truckNo.trim() && e.liters > 0 && e.rate > 0);
       if (validIdx.length === 0) return null;
 
-      const payloadEntries: YardEntryPayload[] = validIdx.map(({ e }) => ({
-        doNo: e.doNo.trim() || 'NIL',
-        truckNo: e.truckNo.trim().toUpperCase(),
-        liters: Number(e.liters) || 0,
-        rate: Number(e.rate) || 0,
-        amount: +(Number(e.liters) * Number(e.rate)).toFixed(2),
-        dest: e.dest.trim() || '-',
-        dispenseLiters: null,
-        context: null,
-      }));
+      // Context required when billed liters differ from dispense (same rule as yard amend).
+      const missingContext = validIdx.find(({ e }) => {
+        const diff = entryDiff(e);
+        return Math.abs(diff) > 0.001 && !(e.context && e.context.trim());
+      });
+      if (missingContext) {
+        toast.error(
+          `Context is required when billed liters differ from dispense (row ${missingContext.i + 1})`
+        );
+        return null;
+      }
+
+      const payloadEntries: YardEntryPayload[] = validIdx.map(({ e }) => {
+        const liters = Number(e.liters) || 0;
+        // Clamp dispense so it never exceeds billed liters; null = full billed.
+        let dispenseLiters: number | null = e.dispenseLiters;
+        if (dispenseLiters != null) {
+          dispenseLiters = Math.min(Math.max(0, Number(dispenseLiters) || 0), liters);
+          if (Math.abs(dispenseLiters - liters) < 0.001) dispenseLiters = null;
+        }
+        const context =
+          e.context != null && String(e.context).trim() !== ''
+            ? String(e.context).trim()
+            : null;
+
+        return {
+          doNo: e.doNo.trim() || 'NIL',
+          truckNo: e.truckNo.trim().toUpperCase(),
+          liters,
+          rate: Number(e.rate) || 0,
+          amount: +(liters * (Number(e.rate) || 0)).toFixed(2),
+          dest: e.dest.trim() || '-',
+          dispenseLiters,
+          context,
+        };
+      });
 
       const linkSelections: YardLinkSelection[] = [];
-      validIdx.forEach(({ i }, order) => {
+      validIdx.forEach(({ e, i }, order) => {
         const row = rows[i];
         if (row?.linked && row.fuelRecordId) {
+          const liters = Number(e.liters) || 0;
+          const disp =
+            e.dispenseLiters != null
+              ? Math.min(Math.max(0, Number(e.dispenseLiters) || 0), liters)
+              : liters;
           linkSelections.push({
             index: order,
             fuelRecordId: row.fuelRecordId,
             topUp: (row.alreadyDispensed ?? 0) > 0,
+            dispenseLiters: disp,
           });
         }
       });
@@ -624,6 +705,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
                     type="text"
                     value={entry.doNo}
                     onChange={e => handleDoChange(idx, e.target.value)}
+                    onPaste={e => handleDoPaste(idx, e)}
                     onKeyDown={e => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -633,6 +715,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
                     }}
                     placeholder="DO#"
                     disabled={disabled}
+                    title="Type or paste DO(s) to fetch truck details"
                     className="w-full min-w-0 px-1.5 py-1 border border-gray-300 dark:border-gray-600 rounded text-[11px] bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
@@ -698,11 +781,84 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
                 </div>
               </div>
 
-              <div className="flex items-center justify-end pt-2 mt-2 border-t border-gray-200 dark:border-gray-600">
-                <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">
-                  Amt {entry.amount > 0 ? fmt(entry.amount) : '—'}
-                </span>
-              </div>
+              {/* Dispense / Diff / Context — shown when linked (mirrors yard LPO forms) */}
+              {ok && row.linked && (() => {
+                const diff = entryDiff(entry);
+                const contextRequired = Math.abs(diff) > 0.001;
+                return (
+                  <div className="mt-2 space-y-1.5 pt-2 border-t border-gray-200 dark:border-gray-600">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Disp</label>
+                        <input
+                          type="number"
+                          value={(entry.dispenseLiters ?? entry.liters) || ''}
+                          onChange={e => updateEntry(
+                            idx,
+                            'dispenseLiters',
+                            e.target.value === '' ? null : (parseFloat(e.target.value) || 0)
+                          )}
+                          placeholder={String(entry.liters || 0)}
+                          min={0}
+                          step="0.01"
+                          disabled={disabled}
+                          title="Liters dispensed to the fuel record (defaults to full liters)"
+                          className="w-full min-w-0 px-1 py-1 border border-amber-300 dark:border-amber-700 rounded text-[11px] bg-amber-50 dark:bg-amber-900/20 text-gray-900 dark:text-gray-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-gray-400 dark:text-gray-500 mb-0.5">Diff</label>
+                        <div
+                          className={`px-1 py-1 text-[11px] font-semibold tabular-nums ${
+                            diff === 0
+                              ? 'text-gray-400'
+                              : diff > 0
+                              ? 'text-amber-700 dark:text-amber-400'
+                              : 'text-red-600 dark:text-red-400'
+                          }`}
+                          title="Billed liters minus dispensed liters"
+                        >
+                          {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${diff}`}
+                        </div>
+                      </div>
+                      <div className="flex items-end justify-end">
+                        <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200 pb-1">
+                          Amt {entry.amount > 0 ? fmt(entry.amount) : '—'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={`block text-[9px] mb-0.5 ${
+                        contextRequired
+                          ? 'font-semibold text-amber-700 dark:text-amber-400'
+                          : 'text-gray-400 dark:text-gray-500'
+                      }`}>
+                        Context{contextRequired ? ' *' : ''}
+                      </label>
+                      <input
+                        type="text"
+                        value={entry.context || ''}
+                        onChange={e => updateEntry(idx, 'context', e.target.value || null)}
+                        placeholder={contextRequired ? 'Why billed ≠ dispense…' : 'Optional note'}
+                        disabled={disabled}
+                        className={`w-full min-w-0 px-1.5 py-1 border rounded text-[11px] bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                          contextRequired
+                            ? 'border-amber-400 dark:border-amber-600'
+                            : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {!(ok && row.linked) && (
+                <div className="flex items-center justify-end pt-2 mt-2 border-t border-gray-200 dark:border-gray-600">
+                  <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">
+                    Amt {entry.amount > 0 ? fmt(entry.amount) : '—'}
+                  </span>
+                </div>
+              )}
             </div>
           );
         })}
@@ -714,14 +870,17 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
           <thead>
             <tr>
               <th className="lpo-th w-8">#</th>
-              <th className="lpo-th" style={{ width: '14%' }}>Truck</th>
-              <th className="lpo-th" style={{ width: '10%' }}>DO</th>
-              <th className="lpo-th" style={{ width: '18%' }}>Status</th>
-              <th className="lpo-th" style={{ width: '12%' }}>Fuel / Link</th>
-              <th className="lpo-th text-right" style={{ width: '9%' }}>Liters</th>
-              <th className="lpo-th text-right" style={{ width: '8%' }}>Rate</th>
-              <th className="lpo-th text-right" style={{ width: '9%' }}>Amt</th>
-              <th className="lpo-th" style={{ width: '10%' }}>Dest</th>
+              <th className="lpo-th" style={{ width: '11%' }}>Truck</th>
+              <th className="lpo-th" style={{ width: '8%' }}>DO</th>
+              <th className="lpo-th" style={{ width: '14%' }}>Status</th>
+              <th className="lpo-th" style={{ width: '10%' }}>Fuel / Link</th>
+              <th className="lpo-th text-right" style={{ width: '7%' }}>Liters</th>
+              <th className="lpo-th text-right" style={{ width: '7%' }} title="Liters written to fuel record">Disp</th>
+              <th className="lpo-th text-right" style={{ width: '5%' }} title="Billed liters minus dispensed liters">Diff</th>
+              <th className="lpo-th text-right" style={{ width: '6%' }}>Rate</th>
+              <th className="lpo-th text-right" style={{ width: '7%' }}>Amt</th>
+              <th className="lpo-th" style={{ width: '12%' }}>Context</th>
+              <th className="lpo-th" style={{ width: '8%' }}>Dest</th>
               <th className="lpo-th text-center w-14"> </th>
             </tr>
           </thead>
@@ -769,6 +928,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
                       type="text"
                       value={entry.doNo}
                       onChange={e => handleDoChange(idx, e.target.value)}
+                      onPaste={e => handleDoPaste(idx, e)}
                       onKeyDown={e => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
@@ -779,7 +939,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
                       placeholder="DO #"
                       disabled={disabled}
                       className="cell-input mono min-w-0"
-                      title={entry.doNo || 'Enter DO to look up by number'}
+                      title={entry.doNo || 'Type or paste DO(s) to fetch truck details'}
                     />
                   </td>
 
@@ -802,6 +962,48 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
                     />
                   </td>
 
+                  {/* Disp — editable when linked */}
+                  <td className="min-w-0">
+                    {showFuel && row.linked ? (
+                      <input
+                        type="number"
+                        value={(entry.dispenseLiters ?? entry.liters) || ''}
+                        onChange={e => updateEntry(
+                          idx,
+                          'dispenseLiters',
+                          e.target.value === '' ? null : (parseFloat(e.target.value) || 0)
+                        )}
+                        placeholder={String(entry.liters || 0)}
+                        min={0}
+                        step="0.01"
+                        disabled={disabled}
+                        title="Liters dispensed to the fuel record (defaults to full liters)"
+                        className="cell-input text-right min-w-0"
+                        style={{ borderColor: '#ecc98f', background: '#fdf6e8' }}
+                      />
+                    ) : (
+                      <span className="text-[#cbd5e1] text-[12px]">—</span>
+                    )}
+                  </td>
+
+                  {/* Diff — billed − dispense */}
+                  <td className="text-right min-w-0 tabular-nums text-[12px] font-semibold">
+                    {showFuel && row.linked ? (() => {
+                      const diff = entryDiff(entry);
+                      if (diff === 0) return <span className="text-[#cbd5e1] font-normal">—</span>;
+                      return (
+                        <span
+                          title="Billed liters minus dispensed liters"
+                          style={{ color: diff > 0 ? '#b4690e' : '#dc2626' }}
+                        >
+                          {diff > 0 ? '+' : ''}{diff}
+                        </span>
+                      );
+                    })() : (
+                      <span className="text-[#cbd5e1] font-normal">—</span>
+                    )}
+                  </td>
+
                   <td className="min-w-0">
                     <input
                       type="number"
@@ -815,6 +1017,27 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
 
                   <td className="amount-cell text-right min-w-0">
                     {entry.amount > 0 ? fmt(entry.amount) : <span className="text-[#cbd5e1] font-normal">—</span>}
+                  </td>
+
+                  {/* Context — required when Diff ≠ 0 */}
+                  <td className="min-w-0">
+                    {showFuel && row.linked ? (() => {
+                      const contextRequired = Math.abs(entryDiff(entry)) > 0.001;
+                      return (
+                        <input
+                          type="text"
+                          value={entry.context || ''}
+                          onChange={e => updateEntry(idx, 'context', e.target.value || null)}
+                          placeholder={contextRequired ? 'Required…' : 'Optional'}
+                          disabled={disabled}
+                          title={contextRequired ? 'Context is required when billed ≠ dispense' : 'Optional note for this entry'}
+                          className="cell-input min-w-0"
+                          style={contextRequired ? { borderColor: '#ecc98f', background: '#fdf6e8' } : undefined}
+                        />
+                      );
+                    })() : (
+                      <span className="text-[#cbd5e1] text-[12px]">—</span>
+                    )}
                   </td>
 
                   <td className="min-w-0">

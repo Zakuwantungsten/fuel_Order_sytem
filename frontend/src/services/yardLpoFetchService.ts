@@ -35,6 +35,37 @@ export function fuelRecordIdOf(record: FuelRecord): string {
 }
 
 /**
+ * Resolve a fuel record by DO number for yard LPO forms (DO-first entry).
+ * Mirrors LPODetailForm's getByDoNumber path; ambiguous matches are returned
+ * for the caller to open a choice modal rather than silent-picking.
+ */
+export async function fetchYardRecordByDo(doNumber: string): Promise<{
+  fuelRecord: FuelRecord | null;
+  matches: FuelRecord[];
+  ambiguous: boolean;
+}> {
+  const doUp = (doNumber || '').trim().toUpperCase();
+  if (!doUp || doUp === 'NIL' || doUp === 'N/A' || doUp.length < 3) {
+    return { fuelRecord: null, matches: [], ambiguous: false };
+  }
+
+  const result = await fuelRecordsAPI.getByDoNumber(doUp);
+  if (!result?.fuelRecord) {
+    return { fuelRecord: null, matches: [], ambiguous: false };
+  }
+
+  const matches = (result.matches || [])
+    .map(m => m.fuelRecord)
+    .filter(Boolean) as FuelRecord[];
+
+  return {
+    fuelRecord: result.fuelRecord,
+    matches: matches.length > 0 ? matches : [result.fuelRecord],
+    ambiguous: !!result.ambiguous && matches.length > 1,
+  };
+}
+
+/**
  * Truck-only fuel-record candidates within the Journey Config yard time window
  * (same policy as sheet auto-link). Newest first, capped at 3.
  */

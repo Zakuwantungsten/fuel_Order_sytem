@@ -1250,6 +1250,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           doSdo: { $ifNull: ['$entries.doNo', 'PENDING'] },
           truckNo: '$entries.truckNo',
           ltrs: '$entries.liters',
+          billedLiters: '$entries.liters',
+          dispenseLiters: '$entries.dispenseLiters',
           pricePerLtr: '$entries.rate',
           destinations: { $ifNull: ['$entries.dest', 'PENDING'] },
           isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
@@ -1327,6 +1329,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           doSdo: { $ifNull: ['$entries.doNo', 'NIL'] },
           truckNo: '$entries.truckNo',
           ltrs: '$entries.liters',
+          billedLiters: '$entries.liters',
+          dispenseLiters: '$entries.dispenseLiters',
           pricePerLtr: '$entries.rate',
           destinations: { $ifNull: ['$entries.dest', 'NIL'] },
           isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
@@ -1365,6 +1369,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
             doSdo: entry.doNo,  // This will be 'NIL'
             truckNo: entry.truckNo,
             ltrs: entry.liters,
+            billedLiters: entry.liters,
+            dispenseLiters: (entry as any).dispenseLiters ?? null,
             pricePerLtr: entry.rate,
             destinations: entry.dest,  // This will be 'NIL'
             isDriverAccount: true,
@@ -1393,6 +1399,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           doSdo: { $ifNull: ['$entries.doNo', 'PENDING'] },
           truckNo: '$entries.truckNo',
           ltrs: { $ifNull: ['$entries.dispenseLiters', '$entries.liters'] },
+          billedLiters: '$entries.liters',
+          dispenseLiters: '$entries.dispenseLiters',
           pricePerLtr: '$entries.rate',
           destinations: { $ifNull: ['$entries.dest', 'PENDING'] },
           isDriverAccount: { $literal: false },
@@ -1400,6 +1408,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           originalLtrs: '$entries.liters',
           goingCheckpoint: { $literal: null },
           returningCheckpoint: { $literal: null },
+          context: '$entries.context',
+          linkedFuelRecordId: '$entries.linkedFuelRecordId',
           source: { $literal: 'tanga' },
         },
       },
@@ -1420,6 +1430,8 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           doSdo: { $ifNull: ['$entries.doNo', 'PENDING'] },
           truckNo: '$entries.truckNo',
           ltrs: { $ifNull: ['$entries.dispenseLiters', '$entries.liters'] },
+          billedLiters: '$entries.liters',
+          dispenseLiters: '$entries.dispenseLiters',
           pricePerLtr: '$entries.rate',
           destinations: { $ifNull: ['$entries.dest', 'PENDING'] },
           isDriverAccount: { $literal: false },
@@ -1427,10 +1439,112 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           originalLtrs: '$entries.liters',
           goingCheckpoint: { $literal: null },
           returningCheckpoint: { $literal: null },
+          context: '$entries.context',
+          linkedFuelRecordId: '$entries.linkedFuelRecordId',
           source: { $literal: 'dar' },
         },
       },
       { $sort: { date: 1 } },
+    ]);
+
+    // LPOSummary yard-station entries linked to this journey (by fuel-record id or DO).
+    // These are created from LPODetailForm yard mode / unified yard create.
+    const fuelRecordIdStr = String(id);
+    const yardSummaryDiffEntries = await LPOSummary.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+          $or: [
+            { station: { $in: ['Tanga Yard', 'Dar Yard', 'TANGA YARD', 'DAR YARD'] } },
+            { 'entries.linkedFuelRecordId': fuelRecordIdStr },
+          ],
+        },
+      },
+      { $unwind: '$entries' },
+      {
+        $match: {
+          'entries.isCancelled': { $ne: true },
+          $or: [
+            { 'entries.linkedFuelRecordId': fuelRecordIdStr },
+            {
+              $and: [
+                { 'entries.truckNo': fuelRecord.truckNo },
+                {
+                  $or: [
+                    { 'entries.doNo': fuelRecord.goingDo },
+                    ...(fuelRecord.returnDo && fuelRecord.returnDo.trim() !== ''
+                      ? [{ 'entries.doNo': fuelRecord.returnDo }]
+                      : []),
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        $project: {
+          _id: '$entries._id',
+          lpoNo: 1,
+          date: 1,
+          station: 1,
+          doNo: '$entries.doNo',
+          truckNo: '$entries.truckNo',
+          billedLiters: '$entries.liters',
+          dispenseLiters: '$entries.dispenseLiters',
+          context: '$entries.context',
+          linkedFuelRecordId: '$entries.linkedFuelRecordId',
+        },
+      },
+      { $sort: { date: 1 } },
+    ]);
+
+    // Also pick up Dar/Tanga legacy docs linked by fuel-record id (may not match DO conditions above)
+    const linkedDocMatch = {
+      isDeleted: false,
+      'entries.linkedFuelRecordId': fuelRecordIdStr,
+    };
+    const [tangaLinkedExtra, darLinkedExtra] = await Promise.all([
+      TangaLPODocument.aggregate([
+        { $match: linkedDocMatch },
+        { $unwind: '$entries' },
+        { $match: { 'entries.linkedFuelRecordId': fuelRecordIdStr, 'entries.isCancelled': { $ne: true } } },
+        {
+          $project: {
+            _id: '$entries._id',
+            lpoNo: 1,
+            date: 1,
+            doNo: '$entries.doNo',
+            truckNo: '$entries.truckNo',
+            billedLiters: '$entries.liters',
+            dispenseLiters: '$entries.dispenseLiters',
+            context: '$entries.context',
+            linkedFuelRecordId: '$entries.linkedFuelRecordId',
+            yard: { $literal: 'Tanga Yard' },
+            source: { $literal: 'tanga' },
+          },
+        },
+      ]),
+      DarLPODocument.aggregate([
+        { $match: linkedDocMatch },
+        { $unwind: '$entries' },
+        { $match: { 'entries.linkedFuelRecordId': fuelRecordIdStr, 'entries.isCancelled': { $ne: true } } },
+        {
+          $project: {
+            _id: '$entries._id',
+            lpoNo: 1,
+            date: 1,
+            doNo: '$entries.doNo',
+            truckNo: '$entries.truckNo',
+            billedLiters: '$entries.liters',
+            dispenseLiters: '$entries.dispenseLiters',
+            context: '$entries.context',
+            linkedFuelRecordId: '$entries.linkedFuelRecordId',
+            yard: { $literal: 'Dar Yard' },
+            source: { $literal: 'dar' },
+          },
+        },
+      ]),
     ]);
 
     // Combine regular LPO entries with CASH/NIL entries
@@ -1482,6 +1596,133 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
       $or: yardQueryConditions,
       isDeleted: false,
     }).sort({ date: 1 }).lean();
+
+    // ── Additional Dispensation (Yard) ──────────────────────────────────────
+    // Rows where billed liters ≠ dispense liters (or context explains a yard
+    // split), plus legacy freeform YardFuelDispense logs for this journey.
+    const additionalSeen = new Set<string>();
+    const additionalYardDispensations: any[] = [];
+
+    const pushAdditional = (row: any) => {
+      const key = row.id || `${row.kind}|${row.lpoNo}|${row.date}|${row.diff}|${row.context || ''}`;
+      if (additionalSeen.has(key)) return;
+      additionalSeen.add(key);
+      additionalYardDispensations.push(row);
+    };
+
+    const yardLabelFromStation = (station: string | null | undefined, source?: string): string => {
+      const s = (station || '').toLowerCase();
+      if (source === 'dar' || s.includes('dar')) return 'Dar Yard';
+      if (source === 'tanga' || s.includes('tanga')) return 'Tanga Yard';
+      return station || 'Yard';
+    };
+
+    const considerLpoDiff = (raw: any, yardHint?: string, sourceHint?: string) => {
+      if (raw.isCancelled) return;
+      const billed = Number(
+        raw.billedLiters ?? raw.liters ?? raw.originalLtrs ?? 0
+      );
+      const hasDispenseOverride =
+        raw.dispenseLiters != null && raw.dispenseLiters !== undefined && raw.dispenseLiters !== '';
+      const dispense = hasDispenseOverride ? Number(raw.dispenseLiters) : billed;
+      const diff = +(billed - dispense).toFixed(2);
+      const context =
+        raw.context != null && String(raw.context).trim() !== ''
+          ? String(raw.context).trim()
+          : null;
+      // Surface when there is a billed≠dispense split, or an explanatory context.
+      if (Math.abs(diff) <= 0.001 && !context) return;
+
+      pushAdditional({
+        id: raw._id?.toString?.() || raw.id || undefined,
+        kind: 'lpo_diff',
+        date: raw.date,
+        lpoNo: raw.lpoNo,
+        yard: yardHint || yardLabelFromStation(raw.station || raw.dieselAt || raw.yard, sourceHint || raw.source),
+        doNo: raw.doNo || raw.doSdo || '',
+        truckNo: raw.truckNo || fuelRecord.truckNo,
+        billedLiters: billed,
+        dispenseLiters: dispense,
+        diff,
+        context,
+        source: sourceHint || raw.source || 'summary',
+      });
+    };
+
+    for (const e of yardSummaryDiffEntries) {
+      considerLpoDiff(e, yardLabelFromStation(e.station), 'summary');
+    }
+    for (const e of [...tangaLpoEntries, ...tangaLinkedExtra]) {
+      considerLpoDiff(e, 'Tanga Yard', 'tanga');
+    }
+    for (const e of [...darLpoEntries, ...darLinkedExtra]) {
+      considerLpoDiff(e, 'Dar Yard', 'dar');
+    }
+
+    // Legacy freeform yard dispense logs
+    for (const d of yardDispenses) {
+      pushAdditional({
+        id: d._id?.toString?.() || undefined,
+        kind: 'legacy_dispense',
+        date: d.date,
+        lpoNo: null,
+        yard: d.yard || 'Yard',
+        doNo: d.linkedDONumber || '',
+        truckNo: d.truckNo || fuelRecord.truckNo,
+        billedLiters: null,
+        dispenseLiters: d.liters ?? 0,
+        diff: null,
+        context: d.notes || null,
+        enteredBy: d.enteredBy,
+        status: d.status,
+        source: 'legacy',
+      });
+    }
+
+    additionalYardDispensations.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    // Sibling journeys for this truck: active + queued (Q1, Q2, …)
+    // so inspectors can see what else is lined up for the same truck.
+    const currentIdStr = String(fuelRecord._id);
+    const siblingRecords = await FuelRecord.find({
+      truckNo: fuelRecord.truckNo,
+      isDeleted: false,
+      isCancelled: { $ne: true },
+      journeyStatus: { $in: ['active', 'queued'] },
+    })
+      .select(
+        'truckNo goingDo returnDo from to start date journeyStatus queueOrder balance originalGoingFrom originalGoingTo isPendingGoing isPendingReturn'
+      )
+      .lean();
+
+    const mapSibling = (r: any) => ({
+      id: r._id?.toString?.() || String(r._id),
+      truckNo: r.truckNo,
+      goingDo: r.goingDo || '',
+      returnDo: r.returnDo || '',
+      from: r.originalGoingFrom || r.from || '',
+      to: r.originalGoingTo || r.to || '',
+      start: r.start || '',
+      date: r.date || '',
+      journeyStatus: r.journeyStatus || 'active',
+      queueOrder: r.queueOrder ?? null,
+      balance: r.balance ?? 0,
+      isPendingGoing: !!r.isPendingGoing,
+      isPendingReturn: !!r.isPendingReturn,
+      isCurrent: String(r._id) === currentIdStr,
+    });
+
+    const activeSibling =
+      siblingRecords
+        .filter((r: any) => r.journeyStatus === 'active')
+        .map(mapSibling)[0] || null;
+
+    const queuedJourneys = siblingRecords
+      .filter((r: any) => r.journeyStatus === 'queued')
+      .map(mapSibling)
+      .sort((a, b) => (a.queueOrder ?? 999) - (b.queueOrder ?? 999));
 
     // Calculate fuel allocation summary
     const goingFuelAllocations = {
@@ -1590,6 +1831,16 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           ? (CHECKPOINT_LABELS[rawCheckpoint] || rawCheckpoint)
           : stationCheckpointFallback(lpo.dieselAt, isReturn);
 
+        // Dispense-as: billed liters written differently to the fuel-record yard column.
+        const billedLiters = Number(
+          lpo.billedLiters != null ? lpo.billedLiters : (lpo.originalLtrs != null && lpo.source ? lpo.originalLtrs : lpo.ltrs) ?? 0
+        );
+        const hasDispenseOverride =
+          lpo.dispenseLiters != null && lpo.dispenseLiters !== undefined && lpo.dispenseLiters !== '';
+        const dispenseLiters = hasDispenseOverride ? Number(lpo.dispenseLiters) : billedLiters;
+        const dispenseDiff = +(billedLiters - dispenseLiters).toFixed(2);
+        const hasDispenseAs = Math.abs(dispenseDiff) > 0.001;
+
         return {
           ...lpo,
           id: lpo._id,
@@ -1597,15 +1848,28 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           checkpoint,
           isDriverAccount: lpo.isDriverAccount || false,
           originalDoNo: lpo.originalDoNo,  // Reference DO for driver account entries
+          billedLiters,
+          dispenseLiters: hasDispenseOverride ? dispenseLiters : (lpo.dispenseLiters ?? null),
+          dispenseDiff: hasDispenseAs ? dispenseDiff : 0,
+          hasDispenseAs,
         };
       }),
       yardDispenses: yardDispenses.map((dispense: any) => ({
         ...dispense,
         id: dispense._id,
       })),
+      /** Billed≠dispense yard LPO splits (+ legacy freeform yard logs). */
+      additionalYardDispensations,
+      /** Same-truck active journey (for queue context) + queued Q1/Q2… journeys. */
+      truckQueue: {
+        active: activeSibling,
+        queued: queuedJourneys,
+      },
       summary: {
         totalLPOs: filteredLPOs.length,
         totalYardDispenses: yardDispenses.length,
+        totalAdditionalYardDispensations: additionalYardDispensations.length,
+        totalQueuedJourneys: queuedJourneys.length,
         totalFuelOrdered: filteredLPOs.reduce((sum: number, lpo: any) => sum + (lpo.ltrs || 0), 0),
         totalYardFuel: yardDispenses.reduce((sum: number, d: any) => sum + (d.liters || 0), 0),
         goingLPOs: filteredLPOs.filter((lpo: any) => lpo.doSdo === fuelRecord.goingDo).length,

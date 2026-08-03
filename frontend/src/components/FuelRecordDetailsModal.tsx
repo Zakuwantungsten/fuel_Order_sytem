@@ -11,8 +11,10 @@ import {
   Ban,
   ArrowRight,
   MessageSquare,
+  ListOrdered,
 } from 'lucide-react';
 import { FuelRecordDetails, fuelRecordsAPI } from '../services/api';
+import type { AdditionalYardDispensation, TruckQueueJourney } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import RecordTimeline from './RecordTimeline';
 
@@ -22,7 +24,7 @@ interface FuelRecordDetailsModalProps {
   recordId: string | number | null;
 }
 
-type ActiveTab = 'lpos' | 'yard' | 'history';
+type ActiveTab = 'lpos' | 'yard' | 'queue' | 'history';
 
 type LpoContextNote = {
   lpoNo: string;
@@ -127,9 +129,34 @@ export default function FuelRecordDetailsModal({
   const journeyInfo = details?.journeyInfo;
   const allocations = details?.fuelAllocations;
 
+  const additionalRows: AdditionalYardDispensation[] =
+    details?.additionalYardDispensations ??
+    // Back-compat: older API only returned legacy yardDispenses
+    (details?.yardDispenses || []).map((d) => ({
+      id: d.id != null ? String(d.id) : undefined,
+      kind: 'legacy_dispense' as const,
+      date: d.date,
+      lpoNo: null,
+      yard: d.yard,
+      doNo: d.linkedDONumber || '',
+      truckNo: d.truckNo,
+      billedLiters: null,
+      dispenseLiters: d.liters ?? 0,
+      diff: null,
+      context: d.notes || null,
+      enteredBy: d.enteredBy,
+      status: d.status,
+      source: 'legacy',
+    }));
+
+  const queueActive = details?.truckQueue?.active ?? null;
+  const queueQueued: TruckQueueJourney[] = details?.truckQueue?.queued ?? [];
+  const queueCount = queueQueued.length + (queueActive ? 1 : 0);
+
   const tabs = [
     { id: 'lpos' as const, label: 'LPO Entries', count: details?.lpoEntries.length, icon: FileText },
-    { id: 'yard' as const, label: 'Yard Dispenses', count: details?.yardDispenses.length, icon: MapPin },
+    { id: 'yard' as const, label: 'Additional Dispensation (Yard)', count: additionalRows.length, icon: MapPin },
+    { id: 'queue' as const, label: 'Queued Journeys', count: queueCount || undefined, icon: ListOrdered },
     { id: 'history' as const, label: 'Audit History', icon: Clock },
   ];
 
@@ -371,7 +398,14 @@ export default function FuelRecordDetailsModal({
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                        title={
+                          tab.id === 'yard'
+                            ? 'Additional Dispensation (Yard) — billed vs dispense diffs & context'
+                            : tab.id === 'queue'
+                            ? 'Same-truck active & queued journeys (Q1, Q2, …)'
+                            : tab.label
+                        }
+                        className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
                           activeTab === tab.id
                             ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
                             : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
@@ -468,6 +502,19 @@ export default function FuelRecordDetailsModal({
                                       ) : null}
                                       {lpo.source === 'tanga' && <span className="px-1 py-0.5 text-[10px] font-bold bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 rounded">TNG</span>}
                                       {lpo.source === 'dar' && <span className="px-1 py-0.5 text-[10px] font-bold bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded">DAR</span>}
+                                      {lpo.hasDispenseAs && (
+                                        <button
+                                          type="button"
+                                          title={`Dispense as ${lpo.dispenseLiters?.toLocaleString() ?? '—'}L (billed ${lpo.billedLiters?.toLocaleString() ?? '—'}L, diff ${lpo.dispenseDiff != null && lpo.dispenseDiff > 0 ? '+' : ''}${lpo.dispenseDiff ?? 0}). Open Additional Dispensation (Yard) for context.`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveTab('yard');
+                                          }}
+                                          className="px-1 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 rounded hover:bg-amber-200 dark:hover:bg-amber-900/70 transition-colors"
+                                        >
+                                          Dispense as
+                                        </button>
+                                      )}
                                       {lpo.isCancelled && <span className="px-1 py-0.5 text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded">CANCELLED</span>}
                                       {!lpo.isCancelled && lpo.originalLtrs != null && lpo.originalLtrs !== lpo.ltrs && <span className="px-1 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded">AMENDED</span>}
                                     </div>
@@ -519,44 +566,177 @@ export default function FuelRecordDetailsModal({
                     )}
 
                     {activeTab === 'yard' && (
-                      details.yardDispenses.length === 0 ? (
-                        <div className="flex items-center justify-center py-8 text-sm text-slate-400">No yard dispenses found</div>
+                      additionalRows.length === 0 ? (
+                        <div className="flex items-center justify-center py-8 text-sm text-slate-400">
+                          No additional yard dispensation found
+                        </div>
                       ) : (
                         <div className="overflow-x-auto">
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="border-b border-slate-200 dark:border-slate-700">
-                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Date</th>
-                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Yard</th>
-                                <th className="pb-2 text-right font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Liters</th>
-                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Entered By</th>
-                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">Status</th>
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">LPO Date</th>
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">LPO / Yard</th>
+                                <th className="pb-2 text-right font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap" title="Billed liters">Billed</th>
+                                <th className="pb-2 text-right font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap" title="Liters written to fuel record">Disp</th>
+                                <th className="pb-2 text-right font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap" title="Billed − dispensed">Diff</th>
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">Context</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                              {details.yardDispenses.map((d, idx) => (
-                                <tr key={d.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                  <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{d.date}</td>
-                                  <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{d.yard}</td>
-                                  <td className="py-2 pr-3 text-right font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                                    {d.liters?.toLocaleString() ?? 0}
+                              {additionalRows.map((row, idx) => {
+                                const diff = row.diff ?? null;
+                                const isLegacy = row.kind === 'legacy_dispense';
+                                return (
+                                  <tr key={row.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 align-top">
+                                    <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                      {row.date}
+                                    </td>
+                                    <td className="py-2 pr-3 whitespace-nowrap">
+                                      <div className="font-medium text-slate-900 dark:text-slate-100">
+                                        {row.lpoNo || (isLegacy ? 'Freeform' : '—')}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                        {row.yard}
+                                        {row.doNo ? ` · ${row.doNo}` : ''}
+                                        {isLegacy && row.status ? ` · ${row.status}` : ''}
+                                      </div>
+                                    </td>
+                                    <td className="py-2 pr-3 text-right tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                      {row.billedLiters != null ? row.billedLiters.toLocaleString() : '—'}
+                                    </td>
+                                    <td className="py-2 pr-3 text-right tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                                      {row.dispenseLiters != null ? row.dispenseLiters.toLocaleString() : '—'}
+                                    </td>
+                                    <td className="py-2 pr-3 text-right tabular-nums font-semibold whitespace-nowrap">
+                                      {diff == null || Math.abs(diff) < 0.001 ? (
+                                        <span className="text-slate-300 dark:text-slate-600 font-normal">—</span>
+                                      ) : (
+                                        <span className={diff > 0
+                                          ? 'text-amber-700 dark:text-amber-400'
+                                          : 'text-red-600 dark:text-red-400'
+                                        }>
+                                          {diff > 0 ? '+' : ''}{diff.toLocaleString()}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 text-slate-600 dark:text-slate-300 max-w-[220px]">
+                                      {row.context ? (
+                                        <span className="inline-flex items-start gap-1">
+                                          <MessageSquare className="w-3 h-3 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                          <span className="leading-snug">{row.context}</span>
+                                        </span>
+                                      ) : isLegacy && row.enteredBy ? (
+                                        <span className="text-slate-400">by {row.enteredBy}</span>
+                                      ) : (
+                                        <span className="text-slate-300 dark:text-slate-600">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )
+                    )}
+
+                    {activeTab === 'queue' && (
+                      !queueActive && queueQueued.length === 0 ? (
+                        <div className="flex items-center justify-center py-8 text-sm text-slate-400">
+                          No active or queued journeys for this truck
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200 dark:border-slate-700">
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Status</th>
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Truck</th>
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">DO</th>
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">From</th>
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">To</th>
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 pr-3 whitespace-nowrap">Start</th>
+                                <th className="pb-2 text-left font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">Date</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                              {queueActive && (
+                                <tr
+                                  key={queueActive.id}
+                                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
+                                    queueActive.isCurrent ? 'bg-blue-50/60 dark:bg-blue-900/20' : ''
+                                  }`}
+                                >
+                                  <td className="py-2 pr-3 whitespace-nowrap">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                        Active
+                                      </span>
+                                      {queueActive.isCurrent && (
+                                        <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                          This record
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
-                                  <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{d.enteredBy}</td>
-                                  <td className="py-2 whitespace-nowrap">
-                                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                                      d.status === 'linked'
-                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                        : d.status === 'pending'
-                                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                        : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-                                    }`}>
-                                      {d.status}
-                                    </span>
+                                  <td className="py-2 pr-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">{queueActive.truckNo}</td>
+                                  <td className="py-2 pr-3 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                    {queueActive.goingDo || '—'}
+                                    {queueActive.returnDo ? (
+                                      <span className="text-slate-400"> / {queueActive.returnDo}</span>
+                                    ) : null}
                                   </td>
+                                  <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{queueActive.from || '—'}</td>
+                                  <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{queueActive.to || '—'}</td>
+                                  <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{queueActive.start || '—'}</td>
+                                  <td className="py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{queueActive.date || '—'}</td>
+                                </tr>
+                              )}
+                              {queueQueued.map((q) => (
+                                <tr
+                                  key={q.id}
+                                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
+                                    q.isCurrent ? 'bg-blue-50/60 dark:bg-blue-900/20' : ''
+                                  }`}
+                                >
+                                  <td className="py-2 pr-3 whitespace-nowrap">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                        Queued{q.queueOrder != null ? ` Q${q.queueOrder}` : ''}
+                                      </span>
+                                      {q.isCurrent && (
+                                        <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                          This record
+                                        </span>
+                                      )}
+                                      {q.isPendingGoing && (
+                                        <span className="px-1 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                          Pending DO
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 pr-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">{q.truckNo}</td>
+                                  <td className="py-2 pr-3 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                    {q.goingDo || '—'}
+                                    {q.returnDo ? (
+                                      <span className="text-slate-400"> / {q.returnDo}</span>
+                                    ) : null}
+                                  </td>
+                                  <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{q.from || '—'}</td>
+                                  <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{q.to || '—'}</td>
+                                  <td className="py-2 pr-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{q.start || '—'}</td>
+                                  <td className="py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{q.date || '—'}</td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
+                          {queueQueued.length === 0 && queueActive && (
+                            <div className="pt-3 text-[11px] text-slate-400">
+                              No journeys queued behind the active trip for this truck.
+                            </div>
+                          )}
                         </div>
                       )
                     )}

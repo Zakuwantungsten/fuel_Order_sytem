@@ -12,6 +12,7 @@ import FuelRecordInspectModal from './FuelRecordInspectModal';
 import YardFuelChoiceModal from './YardFuelChoiceModal';
 import {
   fetchYardTruckCandidates,
+  fetchYardRecordByDo,
   fuelRecordIdOf,
   recordDoDest,
   yardAlreadyDispensed,
@@ -123,7 +124,13 @@ export default function DarYardLPOForm({
 
   const applyCandidate = useCallback((idx: number, record: FuelRecord, candidates: FuelRecord[]) => {
     const { doNo, dest } = recordDoDest(record);
-    setEntries(prev => prev.map((e, i) => (i !== idx ? e : { ...e, doNo, dest })));
+    const truckNo = (record.truckNo || '').toString().trim().toUpperCase();
+    setEntries(prev => prev.map((e, i) => (i !== idx ? e : {
+      ...e,
+      doNo,
+      dest,
+      ...(truckNo ? { truckNo } : {}),
+    })));
     updateRow(idx, {
       autoFetching: false,
       fetched: true,
@@ -304,9 +311,75 @@ export default function DarYardLPOForm({
     });
   }, []);
 
+  const doFetchTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  /** DO-first lookup: resolve truck/journey from a DO number (same API as LPODetailForm). */
+  const fetchByDo = useCallback(async (idx: number, rawDo: string, opts?: { openModalIfMany?: boolean }) => {
+    const doUp = rawDo.trim().toUpperCase();
+    if (!doUp || doUp === 'NIL' || doUp === 'N/A' || doUp.length < 3) return;
+    const openModalIfMany = opts?.openModalIfMany ?? true;
+
+    updateRow(idx, {
+      autoFetching: true, fetched: false, fuelRecord: null, fuelRecordId: undefined,
+      warningType: null, linked: false, candidates: [], alreadyDispensed: 0,
+    });
+
+    try {
+      const { fuelRecord, matches, ambiguous } = await fetchYardRecordByDo(doUp);
+
+      if (!fuelRecord) {
+        setEntries(prev => prev.map((e, i) => (i !== idx ? e : { ...e, doNo: doUp })));
+        updateRow(idx, {
+          autoFetching: false, fetched: true, warningType: 'not_found',
+          fuelRecord: null, candidates: [], linked: false,
+        });
+        return;
+      }
+
+      if (ambiguous && matches.length > 1) {
+        setEntries(prev => prev.map((e, i) => (i !== idx ? e : { ...e, doNo: doUp })));
+        updateRow(idx, {
+          autoFetching: false,
+          fetched: true,
+          fuelRecord: null,
+          fuelRecordId: undefined,
+          alreadyDispensed: 0,
+          warningType: 'needs_choice',
+          linked: false,
+          candidates: matches,
+        });
+        if (openModalIfMany) {
+          setChoiceModal({ open: true, index: idx, truckNo: '', candidates: matches });
+        }
+        return;
+      }
+
+      applyCandidate(idx, fuelRecord, matches);
+    } catch {
+      updateRow(idx, {
+        autoFetching: false, fetched: true, warningType: 'not_found',
+        fuelRecord: null, candidates: [], linked: false,
+      });
+    }
+  }, [applyCandidate]);
+
+  const handleDoChange = useCallback((idx: number, value: string) => {
+    const doUp = value.toUpperCase();
+    updateEntry(idx, 'doNo', doUp);
+
+    if (doFetchTimers.current[idx]) clearTimeout(doFetchTimers.current[idx]);
+
+    const trimmed = doUp.trim();
+    if (!trimmed || trimmed === 'NIL' || trimmed === 'N/A' || trimmed.length < 3) return;
+
+    doFetchTimers.current[idx] = setTimeout(() => {
+      fetchByDo(idx, trimmed);
+    }, 400);
+  }, [fetchByDo]);
+
   const handleDoPaste = useCallback((idx: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData('text');
-    const lines = text.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+    const lines = text.split(/[\r\n\t]+/).map(l => l.trim()).filter(Boolean);
     if (lines.length <= 1) return;
     e.preventDefault();
     setEntries(prev => {
@@ -329,7 +402,11 @@ export default function DarYardLPOForm({
       }
       return next;
     });
-  }, []);
+    // Stagger DO→truck fetch (bulk paste: no modal spam for ambiguous DOs)
+    lines.forEach((line, i) => {
+      setTimeout(() => fetchByDo(idx + i, line, { openModalIfMany: false }), i * 80);
+    });
+  }, [fetchByDo]);
 
   const validEntries = entries.filter(
     e => e.truckNo.trim() && e.liters > 0 && e.rate > 0
@@ -382,16 +459,23 @@ export default function DarYardLPOForm({
   };
 
   const applyFuelLinks = async (lpoId: string, responseEntries: any[], validWithIdx: { i: number }[]) => {
-    const selections: { entryId: string; fuelRecordId: string; topUp?: boolean }[] = [];
+    const selections: { entryId: string; fuelRecordId: string; topUp?: boolean; dispenseLiters?: number }[] = [];
     validWithIdx.forEach(({ i }, j) => {
       const respEntry = responseEntries[j];
       const row = rows[i];
+      const entry = entries[i];
       const frId = row?.fuelRecordId != null ? String(row.fuelRecordId) : '';
       if (row?.linked && respEntry?._id && frId) {
+        const liters = Number(entry?.liters) || 0;
+        const disp =
+          entry?.dispenseLiters != null
+            ? Math.min(Math.max(0, Number(entry.dispenseLiters) || 0), liters)
+            : liters;
         selections.push({
           entryId: respEntry._id.toString(),
           fuelRecordId: frId,
           topUp: (row.alreadyDispensed ?? 0) > 0,
+          dispenseLiters: disp,
         });
       }
     });
@@ -770,11 +854,19 @@ export default function DarYardLPOForm({
                       <input
                         type="text"
                         value={entry.doNo}
-                        onChange={e => updateEntry(idx, 'doNo', e.target.value.toUpperCase())}
+                        onChange={e => handleDoChange(idx, e.target.value)}
                         onPaste={e => handleDoPaste(idx, e)}
-                        onKeyDown={darNav.handleKeyDown(idx, 1, entries.length)}
+                        onKeyDown={e => {
+                          darNav.handleKeyDown(idx, 1, entries.length)(e);
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (doFetchTimers.current[idx]) clearTimeout(doFetchTimers.current[idx]);
+                            fetchByDo(idx, entry.doNo);
+                          }
+                        }}
                         ref={darNav.cellRef(idx, 1)}
                         placeholder="DO #"
+                        title="Type or paste DO to fetch truck details"
                         style={{ width: '100%', padding: '7px 9px', fontSize: '13px', fontFamily: "'Geist Mono', ui-monospace, monospace", border: '1px solid #e2e4dd', borderRadius: '7px', background: '#fff', color: '#161a16', outline: 'none' }}
                       />
                     </div>
@@ -1049,9 +1141,17 @@ export default function DarYardLPOForm({
                       <input
                         type="text"
                         value={entry.doNo}
-                        onChange={e => updateEntry(idx, 'doNo', e.target.value.toUpperCase())}
+                        onChange={e => handleDoChange(idx, e.target.value)}
                         onPaste={e => handleDoPaste(idx, e)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (doFetchTimers.current[idx]) clearTimeout(doFetchTimers.current[idx]);
+                            fetchByDo(idx, entry.doNo);
+                          }
+                        }}
                         placeholder="DO #"
+                        title="Type or paste DO to fetch truck details"
                         className="w-full px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono focus:ring-1 focus:ring-green-500"
                       />
                     </div>
