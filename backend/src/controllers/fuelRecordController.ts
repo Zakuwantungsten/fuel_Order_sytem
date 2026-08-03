@@ -12,6 +12,7 @@ import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
 import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled } from '../services/journeyService';
+import type { JourneyStatus } from '../types';
 
 /**
  * Get available periods (year-month pairs) for the period picker dropdown.
@@ -211,7 +212,7 @@ export const getAvailableJourneyStatuses = async (req: AuthRequest, res: Respons
       FuelRecord.distinct('queueOrder', { ...filter, journeyStatus: 'queued', queueOrder: { $type: 'number', $gte: 1 } }),
     ]);
 
-    const validStatuses = ['queued', 'active', 'completed', 'cancelled'];
+    const validStatuses: JourneyStatus[] = ['queued', 'active', 'completed', 'cancelled'];
     const orderedStatuses = validStatuses.filter((s) => statuses.includes(s));
     const orderedQueueOrders = (queueOrders as number[])
       .filter((n) => typeof n === 'number' && Number.isFinite(n) && n >= 1)
