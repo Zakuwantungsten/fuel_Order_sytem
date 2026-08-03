@@ -861,7 +861,7 @@ export default function DarYardLPOForm({
                           if (e.key === 'Enter') {
                             e.preventDefault();
                             if (doFetchTimers.current[idx]) clearTimeout(doFetchTimers.current[idx]);
-                            fetchByDo(idx, entry.doNo);
+                            fetchByDo(idx, entry.doNo ?? '');
                           }
                         }}
                         ref={darNav.cellRef(idx, 1)}
@@ -1147,7 +1147,7 @@ export default function DarYardLPOForm({
                           if (e.key === 'Enter') {
                             e.preventDefault();
                             if (doFetchTimers.current[idx]) clearTimeout(doFetchTimers.current[idx]);
-                            fetchByDo(idx, entry.doNo);
+                            fetchByDo(idx, entry.doNo ?? '');
                           }
                         }}
                         placeholder="DO #"
