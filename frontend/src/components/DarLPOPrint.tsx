@@ -7,9 +7,9 @@ interface DarLPOPrintProps {
 }
 
 const DarLPOPrint = forwardRef<HTMLDivElement, DarLPOPrintProps>(({ data, preparedBy }, ref) => {
-  const fontSize = '12px';
-  const headerFontSize = '13px';
-  const ROWS_PER_PAGE = 30;
+  const fontSize = '13px';
+  const headerFontSize = '14px';
+  const ROWS_PER_PAGE = 25;
 
   const pages = useMemo(() => {
     const allPages: DarLPOEntry[][] = [];
@@ -49,13 +49,13 @@ const DarLPOPrint = forwardRef<HTMLDivElement, DarLPOPrintProps>(({ data, prepar
             key={h}
             style={{
               border: '1px solid #000',
-              padding: '4px 5px',
+              padding: '8px 6px',
               textAlign: 'center',
               fontWeight: 'bold',
               fontSize: headerFontSize,
               color: '#000',
               verticalAlign: 'middle',
-              lineHeight: '1.2',
+              lineHeight: '1.4',
             }}
           >
             {h}
@@ -74,13 +74,13 @@ const DarLPOPrint = forwardRef<HTMLDivElement, DarLPOPrintProps>(({ data, prepar
 
     return (
       <tr key={index} style={{ backgroundColor: rowBg }}>
-        <td style={{ border: '1px solid #000', padding: '4px 5px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: isCancelled ? '#cc0000' : '#000', fontWeight: '500', textDecoration, lineHeight: '1.2' }}>
+        <td style={{ border: '1px solid #000', padding: '8px 6px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: isCancelled ? '#cc0000' : '#000', fontWeight: '500', textDecoration, lineHeight: '1.4' }}>
           {isCancelled ? 'CANCELLED' : entry.doNo}
         </td>
-        <td style={{ border: '1px solid #000', padding: '4px 5px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: textColor, fontWeight: '500', lineHeight: '1.2' }}>
+        <td style={{ border: '1px solid #000', padding: '8px 6px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: textColor, fontWeight: '500', lineHeight: '1.4' }}>
           {entry.truckNo}
         </td>
-        <td style={{ border: '1px solid #000', padding: '4px 5px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: textColor, fontWeight: '500', textDecoration, lineHeight: '1.2' }}>
+        <td style={{ border: '1px solid #000', padding: '8px 6px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: textColor, fontWeight: '500', textDecoration, lineHeight: '1.4' }}>
           {isAmended && entry.originalLiters != null && (
             <span style={{ textDecoration: 'line-through', color: '#999', marginRight: '4px', fontSize: '11px' }}>
               {entry.originalLiters}
@@ -88,13 +88,13 @@ const DarLPOPrint = forwardRef<HTMLDivElement, DarLPOPrintProps>(({ data, prepar
           )}
           {entry.liters.toLocaleString()}
         </td>
-        <td style={{ border: '1px solid #000', padding: '4px 5px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: isCancelled ? '#cc0000' : '#333', textDecoration, lineHeight: '1.2' }}>
+        <td style={{ border: '1px solid #000', padding: '8px 6px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: isCancelled ? '#cc0000' : '#333', textDecoration, lineHeight: '1.4' }}>
           {entry.rate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
         </td>
-        <td style={{ border: '1px solid #000', padding: '4px 5px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: textColor, fontWeight: '500', textDecoration, lineHeight: '1.2' }}>
+        <td style={{ border: '1px solid #000', padding: '8px 6px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: textColor, fontWeight: '500', textDecoration, lineHeight: '1.4' }}>
           {entry.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </td>
-        <td style={{ border: '1px solid #000', padding: '4px 5px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: isCancelled ? '#cc0000' : '#333', textDecoration: isCancelled ? 'line-through' : 'none', lineHeight: '1.2' }}>
+        <td style={{ border: '1px solid #000', padding: '8px 6px', fontSize, textAlign: 'center', verticalAlign: 'middle', color: isCancelled ? '#cc0000' : '#333', textDecoration: isCancelled ? 'line-through' : 'none', lineHeight: '1.4' }}>
           {entry.dest}
         </td>
       </tr>
@@ -221,18 +221,18 @@ const DarLPOPrint = forwardRef<HTMLDivElement, DarLPOPrintProps>(({ data, prepar
                   <tr style={{ backgroundColor: '#e8e8e8' }}>
                     <td
                       colSpan={2}
-                      style={{ border: '1px solid #000', padding: '4px 5px', fontWeight: 'bold', fontSize: headerFontSize, textAlign: 'center', verticalAlign: 'middle', color: '#000', lineHeight: '1.2' }}
+                      style={{ border: '1px solid #000', padding: '8px 6px', fontWeight: 'bold', fontSize: headerFontSize, textAlign: 'center', verticalAlign: 'middle', color: '#000', lineHeight: '1.4' }}
                     >
                       TOTAL
                     </td>
-                    <td style={{ border: '1px solid #000', padding: '4px 5px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', fontSize: headerFontSize, color: '#000', lineHeight: '1.2' }}>
+                    <td style={{ border: '1px solid #000', padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', fontSize: headerFontSize, color: '#000', lineHeight: '1.4' }}>
                       {totalLiters.toLocaleString()}
                     </td>
-                    <td style={{ border: '1px solid #000', padding: '4px 5px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }} />
-                    <td style={{ border: '1px solid #000', padding: '4px 5px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', fontSize: headerFontSize, color: '#000', lineHeight: '1.2' }}>
+                    <td style={{ border: '1px solid #000', padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.4' }} />
+                    <td style={{ border: '1px solid #000', padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', fontSize: headerFontSize, color: '#000', lineHeight: '1.4' }}>
                       {formatAmount(totalAmount)}
                     </td>
-                    <td style={{ border: '1px solid #000', padding: '4px 5px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }} />
+                    <td style={{ border: '1px solid #000', padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.4' }} />
                   </tr>
                 )}
               </tbody>
