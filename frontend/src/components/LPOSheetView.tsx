@@ -29,7 +29,7 @@ import PickedAtModal from './PickedAtModal';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
 
 /** Stable id for a truck entry (subdocument _id), used for per-entry edit locks. */
-const entryLockId = (entry: LPODetail | undefined | null, index: number): string | null => {
+const entryLockId = (entry: LPODetail | undefined | null): string | null => {
   const id = (entry as any)?._id ?? entry?.id;
   if (id != null && String(id).trim()) return String(id);
   return null;
@@ -629,7 +629,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     if (isSaving) return; // Prevent double submission
     setIsSaving(true);
     try {
-      const entryId = entryLockId(editedSheet.entries[index], index)
+      const entryId = entryLockId(editedSheet.entries[index])
         || heldLockRef.current?.entryId
         || undefined;
 
@@ -842,7 +842,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const handleStartRowEdit = async (index: number) => {
     const sheetId = sheet.id;
     const entry = editedSheet.entries[index];
-    const eid = entryLockId(entry, index);
+    const eid = entryLockId(entry);
     if (sheetId) {
       if (!eid) {
         toast.error('This truck entry has no id yet — refresh the sheet and try again.');
@@ -1041,7 +1041,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     try {
       // Acquire per-truck lock before cancelling
       if (sheet.id && cancellingEntryIndex != null) {
-        const eid = entryLockId(editedSheet.entries[cancellingEntryIndex], cancellingEntryIndex);
+        const eid = entryLockId(editedSheet.entries[cancellingEntryIndex]);
         try {
           const res = await lpoDocumentsAPI.acquireLock(
             sheet.id,
@@ -1074,7 +1074,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         .reduce((sum, e) => sum + e.amount, 0);
 
       const targetEntry = updatedEntries[cancellingEntryIndex];
-      const cancelEntryId = entryLockId(targetEntry, cancellingEntryIndex);
+      const cancelEntryId = entryLockId(targetEntry);
       const updatedSheet: any = {
         ...editedSheet,
         entries: updatedEntries,
@@ -1170,7 +1170,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     try {
       // Acquire per-truck lock before restoring
       if (sheet.id) {
-        const eid = entryLockId(editedSheet.entries[index], index);
+        const eid = entryLockId(editedSheet.entries[index]);
         try {
           const res = await lpoDocumentsAPI.acquireLock(
             sheet.id,
@@ -1206,7 +1206,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         .filter(e => !e.isCancelled)
         .reduce((sum, e) => sum + e.amount, 0);
 
-      const restoreEntryId = entryLockId(originalEntry, index);
+      const restoreEntryId = entryLockId(originalEntry);
       const updatedSheet: any = {
         ...editedSheet,
         entries: updatedEntries,
