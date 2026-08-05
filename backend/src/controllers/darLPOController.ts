@@ -500,12 +500,8 @@ export const amendEntryInDarLPO = async (req: AuthRequest, res: Response): Promi
       await applyDarAmendDispense(fr, oldDispense, newDispense);
     } else if (entry.linkedFuelRecordId) {
       throw new ApiError(400, 'Linked fuel record not found — cannot cascade. Re-link the entry or uncheck cascade.');
-    } else {
-      throw new ApiError(
-        400,
-        'No fuel record found to update. Link this entry first (or check DO/truck), then amend.',
-      );
     }
+    // Unlinked: amend sheet only. Link later will push dispenseAmount(entry) to fuel.
   }
 
   lpo.markModified('entries');
