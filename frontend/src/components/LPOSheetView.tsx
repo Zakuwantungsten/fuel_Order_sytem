@@ -4,7 +4,7 @@ import { PenSquare, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint, FuelRecord } from '../types';
 import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI, FuelAutomationConfig } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
-import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOImageToClipboard, downloadLPOImage, preloadLPOImageGenerator, isLPOMultiPage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import { formatTruckNumber } from '../utils/dataCleanup';
@@ -69,6 +69,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [showCancellationReport, setShowCancellationReport] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingImage, setDownloadingImage] = useState(false);
+  const [copyingImage, setCopyingImage] = useState(false);
   
   // Cancellation modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -281,6 +282,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   // Reset selection whenever we switch to a different LPO.
   useEffect(() => { setSelectedIndices(new Set()); }, [lpoNo]);
+
+  useEffect(() => {
+    preloadLPOImageGenerator();
+  }, []);
 
   useEffect(() => {
     setEditedSheet(sheet);
@@ -1174,20 +1179,38 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   // Handle copy LPO image to clipboard
   const handleCopyImageToClipboard = async () => {
+    setShowCopyDropdown(false);
+    const entryCount = editedSheet.entries?.length ?? 0;
+    if (isLPOMultiPage(entryCount)) {
+      toast.warning('This LPO has multiple pages. Please download as PDF instead.');
+      return;
+    }
+    setCopyingImage(true);
+    const toastId = toast.loading(`Copying image — LPO ${editedSheet.lpoNo}...`, {
+      style: { background: '#0284c7', color: '#fff' },
+    });
     try {
       const lpoSummary = convertToLPOSummary();
-      const success = await copyLPOImageToClipboard(lpoSummary, user?.username, sheet.approvedBy);
-      
-      if (success) {
-        toast.success('LPO image copied to clipboard successfully!');
-      } else {
-        toast.error('Failed to copy LPO image to clipboard. Please try again.');
-      }
-    } catch (error) {
+      await copyLPOImageToClipboard(lpoSummary, user?.username, sheet.approvedBy);
+      toast.update(toastId, {
+        render: 'LPO image copied to clipboard successfully!',
+        type: 'success',
+        isLoading: false,
+        autoClose: 4000,
+        style: undefined,
+      });
+    } catch (error: any) {
       console.error('Error copying image to clipboard:', error);
-      toast.error('Failed to copy LPO image to clipboard. Your browser may not support this feature.');
+      toast.update(toastId, {
+        render: error?.message || 'Failed to copy LPO image. Your browser may not support this feature.',
+        type: 'error',
+        isLoading: false,
+        autoClose: 6000,
+        style: undefined,
+      });
+    } finally {
+      setCopyingImage(false);
     }
-    setShowCopyDropdown(false);
   };
 
   // Handle copy LPO text for WhatsApp
@@ -1243,18 +1266,38 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
 
   // Handle download LPO as Image
   const handleDownloadImage = async () => {
+    setShowCopyDropdown(false);
+    const entryCount = editedSheet.entries?.length ?? 0;
+    if (isLPOMultiPage(entryCount)) {
+      toast.warning('This LPO has multiple pages. Please download as PDF instead.');
+      return;
+    }
     setDownloadingImage(true);
+    const toastId = toast.loading(`Preparing image — LPO ${editedSheet.lpoNo}...`, {
+      style: { background: '#0284c7', color: '#fff' },
+    });
     try {
       const lpoSummary = convertToLPOSummary();
       await downloadLPOImage(lpoSummary, undefined, user?.username, sheet.approvedBy);
-      toast.success('LPO image downloaded successfully!');
-    } catch (error) {
+      toast.update(toastId, {
+        render: 'LPO image downloaded successfully!',
+        type: 'success',
+        isLoading: false,
+        autoClose: 4000,
+        style: undefined,
+      });
+    } catch (error: any) {
       console.error('Error downloading image:', error);
-      toast.error('Failed to download LPO as image. Please try again.');
+      toast.update(toastId, {
+        render: error?.message || 'Failed to download LPO as image. Please try again.',
+        type: 'error',
+        isLoading: false,
+        autoClose: 6000,
+        style: undefined,
+      });
     } finally {
       setDownloadingImage(false);
     }
-    setShowCopyDropdown(false);
   };
 
   /** Apply a fetched journey onto a sheet row (preserves liters/rate — correction case). */
@@ -1878,8 +1921,14 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
               <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50">
                 <div className="py-1">
                   <div className="px-3 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Copy</div>
-                  <button onClick={handleCopyImageToClipboard} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <Image className="w-4 h-4 mr-3 text-gray-400" />Copy as Image
+                  <button
+                    onClick={handleCopyImageToClipboard}
+                    disabled={copyingImage || isLPOMultiPage(editedSheet.entries?.length ?? 0)}
+                    title={isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
+                    className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {copyingImage ? <Loader2 className="w-4 h-4 mr-3 text-blue-500 animate-spin" /> : <Image className="w-4 h-4 mr-3 text-gray-400" />}
+                    {copyingImage ? 'Copying...' : isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Copy as Image (multi-page — use PDF)' : 'Copy as Image'}
                   </button>
                   <button onClick={handleCopyWhatsAppText} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
                     <MessageSquare className="w-4 h-4 mr-3 text-gray-400" />Copy for WhatsApp
@@ -1893,9 +1942,14 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                     {downloadingPdf ? <Loader2 className="w-4 h-4 mr-3 text-red-500 animate-spin" /> : <FileDown className="w-4 h-4 mr-3 text-red-500" />}
                     {downloadingPdf ? 'Downloading...' : 'Download as PDF'}
                   </button>
-                  <button onClick={handleDownloadImage} disabled={downloadingImage} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
+                  <button
+                    onClick={handleDownloadImage}
+                    disabled={downloadingImage || isLPOMultiPage(editedSheet.entries?.length ?? 0)}
+                    title={isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
+                    className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
                     {downloadingImage ? <Loader2 className="w-4 h-4 mr-3 text-green-500 animate-spin" /> : <Download className="w-4 h-4 mr-3 text-green-500" />}
-                    {downloadingImage ? 'Downloading...' : 'Download as Image'}
+                    {downloadingImage ? 'Downloading...' : isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Download as Image (use PDF)' : 'Download as Image'}
                   </button>
                   <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
                   <button onClick={handleStartEdit} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -2048,10 +2102,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         </div>
                         <button
                           onClick={handleCopyImageToClipboard}
-                          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          disabled={copyingImage || isLPOMultiPage(editedSheet.entries?.length ?? 0)}
+                          title={isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
+                          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          <Image className="w-4 h-4 mr-2" />
-                          Copy as Image
+                          {copyingImage ? (
+                            <Loader2 className="w-4 h-4 mr-2 text-blue-600 animate-spin" />
+                          ) : (
+                            <Image className="w-4 h-4 mr-2" />
+                          )}
+                          {copyingImage ? 'Copying...' : isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Copy as Image (use PDF)' : 'Copy as Image'}
                         </button>
                         <button
                           onClick={handleCopyWhatsAppText}
@@ -2087,15 +2147,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
                         </button>
                         <button
                           onClick={handleDownloadImage}
-                          disabled={downloadingImage}
-                          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={downloadingImage || isLPOMultiPage(editedSheet.entries?.length ?? 0)}
+                          title={isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
+                          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {downloadingImage ? (
                             <Loader2 className="w-4 h-4 mr-2 text-green-600 animate-spin" />
                           ) : (
                             <Download className="w-4 h-4 mr-2 text-green-600" />
                           )}
-                          {downloadingImage ? 'Downloading...' : 'Download as Image'}
+                          {downloadingImage ? 'Downloading...' : isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Download as Image (use PDF)' : 'Download as Image'}
                         </button>
                       </div>
                     </div>

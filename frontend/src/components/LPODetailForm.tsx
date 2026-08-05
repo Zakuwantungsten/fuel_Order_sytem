@@ -2495,7 +2495,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         const litersForNewDirection = newDirection === 'going'
           ? stationConfig.defaultLitersGoing
           : stationConfig.defaultLitersReturning;
-        if (!litersForNewDirection || litersForNewDirection === 0) {
+        const hasFormula = newDirection === 'going'
+          ? !!stationConfig.formulaGoing?.trim()
+          : !!stationConfig.formulaReturning?.trim();
+        if ((!litersForNewDirection || litersForNewDirection === 0) && !hasFormula) {
           setDirectionWarningModal({
             open: true,
             stationName: stationConfig.stationName,
@@ -3727,7 +3730,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 {station.stationName}
                               </span>
                               <span className="text-[11px] text-[#9aa6b6] font-medium truncate">
-                                Going {station.defaultLitersGoing}L · Return {station.defaultLitersReturning}L · @{station.defaultRate}/L
+                                Going {station.formulaGoing?.trim() ? 'Formula' : `${station.defaultLitersGoing}L`} · Return {station.formulaReturning?.trim() ? 'Formula' : `${station.defaultLitersReturning}L`} · @{station.defaultRate}/L
                               </span>
                             </span>
                             {active
@@ -3791,7 +3794,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       return (
                         <p className="m-0 mt-1.5 text-[11px] text-[#16a34a] dark:text-green-400 font-semibold flex items-center gap-1.5">
                           <Check className="w-3.5 h-3.5" />
-                          Going {station.defaultLitersGoing}L · Return {station.defaultLitersReturning}L @ {station.defaultRate}/L ({currency})
+                          Going {station.formulaGoing?.trim() ? 'Formula' : `${station.defaultLitersGoing}L`} · Return {station.formulaReturning?.trim() ? 'Formula' : `${station.defaultLitersReturning}L`} @ {station.defaultRate}/L ({currency})
                         </p>
                       );
                     }

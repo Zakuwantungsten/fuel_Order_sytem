@@ -735,11 +735,11 @@ export const generateLPOPDF = (
   const CONTENT_W = PAGE_W - 2 * MARGIN; // 515
   const FOOTER_Y = PAGE_H - MARGIN - 18;  // 784
   const TABLE_R = MARGIN + CONTENT_W;     // 555
-  const ROW_H = 22;
-  const HDR_H = 24;
-  // First page has a larger header, so fewer rows fit
-  const ROWS_PER_FIRST_PAGE = 15;
-  const ROWS_PER_PAGE = 20;
+  const ROW_H = 18;
+  const HDR_H = 20;
+  // First page has a larger branded header, so fewer rows fit; later pages ~30
+  const ROWS_PER_FIRST_PAGE = 22;
+  const ROWS_PER_PAGE = 30;
 
   // 7 columns: D.O NO | TRUCK NO | DESTINATION | DESCRIPTION | QTY | RATE | AMOUNT  (sum = 515)
   const C = [

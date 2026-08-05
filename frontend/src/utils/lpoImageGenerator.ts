@@ -1,46 +1,156 @@
 import React from 'react';
 import { LPOSummary } from '../types';
 import { createRoot } from 'react-dom/client';
-import LPOPrint from '../components/LPOPrint';
+import LPOPrint, { LPO_ROWS_PER_PAGE } from '../components/LPOPrint';
+
+export { LPO_ROWS_PER_PAGE };
+
+/** True when an LPO would render as more than one page in the image/PDF templates. */
+export const isLPOMultiPage = (entryCount: number): boolean =>
+  entryCount > LPO_ROWS_PER_PAGE;
+
+/** Cached dynamic import — first call pays ~580KB, later calls reuse the module. */
+let html2canvasPromise: Promise<typeof import('html2canvas')> | null = null;
+
+const loadHtml2Canvas = () => {
+  if (!html2canvasPromise) {
+    html2canvasPromise = import('html2canvas');
+  }
+  return html2canvasPromise;
+};
+
+/** Warm the html2canvas chunk early (e.g. when Copy/Download menu opens). */
+export const preloadLPOImageGenerator = (): void => {
+  void loadHtml2Canvas();
+};
+
+/** Wait for layout/paint without a fixed 100ms sleep. */
+const waitForPaint = (): Promise<void> =>
+  new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+
+/**
+ * Trim bottom/right whitespace from a captured canvas (single-page content crop).
+ */
+const cropCanvasToContent = (source: HTMLCanvasElement, padding = 12): HTMLCanvasElement => {
+  const ctx = source.getContext('2d');
+  if (!ctx) return source;
+
+  const { width, height } = source;
+  const { data } = ctx.getImageData(0, 0, width, height);
+
+  const isWhite = (i: number) =>
+    data[i] >= 250 && data[i + 1] >= 250 && data[i + 2] >= 250;
+
+  let top = 0;
+  let left = 0;
+  let right = width - 1;
+  let bottom = height - 1;
+
+  // Find bottom-most non-white row
+  outerBottom: for (let y = height - 1; y >= 0; y--) {
+    for (let x = 0; x < width; x++) {
+      if (!isWhite((y * width + x) * 4)) {
+        bottom = y;
+        break outerBottom;
+      }
+    }
+  }
+
+  // Find top-most non-white row
+  outerTop: for (let y = 0; y <= bottom; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!isWhite((y * width + x) * 4)) {
+        top = y;
+        break outerTop;
+      }
+    }
+  }
+
+  // Find right-most non-white column
+  outerRight: for (let x = width - 1; x >= 0; x--) {
+    for (let y = top; y <= bottom; y++) {
+      if (!isWhite((y * width + x) * 4)) {
+        right = x;
+        break outerRight;
+      }
+    }
+  }
+
+  // Find left-most non-white column
+  outerLeft: for (let x = 0; x <= right; x++) {
+    for (let y = top; y <= bottom; y++) {
+      if (!isWhite((y * width + x) * 4)) {
+        left = x;
+        break outerLeft;
+      }
+    }
+  }
+
+  const cropLeft = Math.max(0, left - padding);
+  const cropTop = Math.max(0, top - padding);
+  const cropRight = Math.min(width - 1, right + padding);
+  const cropBottom = Math.min(height - 1, bottom + padding);
+  const cropW = cropRight - cropLeft + 1;
+  const cropH = cropBottom - cropTop + 1;
+
+  // Nothing meaningful to crop
+  if (cropW >= width - 4 && cropH >= height - 4) return source;
+
+  const cropped = document.createElement('canvas');
+  cropped.width = cropW;
+  cropped.height = cropH;
+  const croppedCtx = cropped.getContext('2d');
+  if (!croppedCtx) return source;
+  croppedCtx.fillStyle = '#ffffff';
+  croppedCtx.fillRect(0, 0, cropW, cropH);
+  croppedCtx.drawImage(source, cropLeft, cropTop, cropW, cropH, 0, 0, cropW, cropH);
+  return cropped;
+};
 
 /**
  * Creates a temporary DOM element with the LPO print component
  * and returns the rendered element
  */
-const createLPOElement = (data: LPOSummary, preparedBy?: string, approvedBy?: string): Promise<HTMLElement> => {
+const createLPOElement = (
+  data: LPOSummary,
+  preparedBy?: string,
+  approvedBy?: string,
+  options?: { cropToContent?: boolean }
+): Promise<HTMLElement> => {
   return new Promise((resolve) => {
-    // Create a temporary container
     const container = document.createElement('div');
     container.style.position = 'absolute';
     container.style.left = '-9999px';
     container.style.top = '-9999px';
-    // Force desktop-equivalent rendering on all devices:
-    // disable mobile browser text auto-scaling so the captured output
-    // is always identical regardless of device screen size
-    container.style.width = '794px'; // ~210mm at 96dpi
+    container.style.width = '794px';
     container.style.minWidth = '794px';
     (container.style as any)['-webkit-text-size-adjust'] = '100%';
     (container.style as any)['text-size-adjust'] = '100%';
     container.style.zoom = '1';
     document.body.appendChild(container);
 
-    // Create a React root and render the component
     const root = createRoot(container);
-    // Keep a reference to the root so we can unmount it later during cleanup
     (container as any).__lpoRoot = root;
-    
-    // Create a ref callback to get the rendered element
+
     const ref = (element: HTMLDivElement | null) => {
       if (element) {
-        // Wait a bit for styles to be applied
-        setTimeout(() => {
-          resolve(element);
-        }, 100);
+        waitForPaint().then(() => resolve(element));
       }
     };
 
-    // Render the LPO component with preparedBy and approvedBy
-    root.render(React.createElement(LPOPrint, { ref, data, preparedBy, approvedBy }));
+    root.render(
+      React.createElement(LPOPrint, {
+        ref,
+        data,
+        preparedBy,
+        approvedBy,
+        cropToContent: options?.cropToContent,
+      })
+    );
   });
 };
 
@@ -50,7 +160,6 @@ const createLPOElement = (data: LPOSummary, preparedBy?: string, approvedBy?: st
 const cleanupElement = (element: HTMLElement) => {
   const container = element.parentElement;
   if (container && container.parentElement) {
-    // If a React root was attached, unmount it to free React internals and listeners
     const maybeRoot = (container as any).__lpoRoot;
     try {
       if (maybeRoot && typeof maybeRoot.unmount === 'function') {
@@ -65,20 +174,30 @@ const cleanupElement = (element: HTMLElement) => {
 };
 
 /**
- * Generate LPO as image blob using html2canvas
+ * Generate LPO as image blob using html2canvas.
+ * Single-page LPOs are cropped to content; multi-page throws (use PDF instead).
  */
-export const generateLPOImage = async (data: LPOSummary, preparedBy?: string, approvedBy?: string): Promise<Blob> => {
-  // html2canvas is ~580 KB — loaded on demand so tabs that import this module
-  // don't pay for it until an image is actually generated.
-  const { default: html2canvas } = await import('html2canvas');
-  const element = await createLPOElement(data, preparedBy, approvedBy);
-  
+export const generateLPOImage = async (
+  data: LPOSummary,
+  preparedBy?: string,
+  approvedBy?: string
+): Promise<Blob> => {
+  const entryCount = data.entries?.length ?? 0;
+  if (isLPOMultiPage(entryCount)) {
+    throw new Error(
+      'This LPO has multiple pages. Please download as PDF instead of copying/downloading as image.'
+    );
+  }
+
+  const html2canvasLoad = loadHtml2Canvas();
+  const element = await createLPOElement(data, preparedBy, approvedBy, { cropToContent: true });
+  const { default: html2canvas } = await html2canvasLoad;
+
   try {
-    // Get the actual dimensions of the element
     const elementHeight = element.scrollHeight;
-    
+
     const canvas = await html2canvas(element, {
-      scale: 2, // Higher quality
+      scale: 1.5,
       useCORS: true,
       backgroundColor: '#ffffff',
       logging: false,
@@ -86,16 +205,20 @@ export const generateLPOImage = async (data: LPOSummary, preparedBy?: string, ap
       height: elementHeight,
       windowWidth: 794,
       windowHeight: elementHeight,
+      imageTimeout: 0,
+      removeContainer: true,
     });
 
+    const finalCanvas = cropCanvasToContent(canvas);
+
     return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
+      finalCanvas.toBlob((blob) => {
         if (blob) {
           resolve(blob);
         } else {
           reject(new Error('Failed to create image blob'));
         }
-      }, 'image/png', 1.0);
+      }, 'image/png');
     });
   } finally {
     cleanupElement(element);
@@ -105,43 +228,51 @@ export const generateLPOImage = async (data: LPOSummary, preparedBy?: string, ap
 /**
  * Copy LPO image to clipboard
  */
-export const copyLPOImageToClipboard = async (data: LPOSummary, preparedBy?: string, approvedBy?: string): Promise<boolean> => {
+export const copyLPOImageToClipboard = async (
+  data: LPOSummary,
+  preparedBy?: string,
+  approvedBy?: string
+): Promise<boolean> => {
   try {
     const blob = await generateLPOImage(data, preparedBy, approvedBy);
-    
+
     if (!navigator.clipboard || !navigator.clipboard.write) {
       throw new Error('Clipboard API not supported');
     }
-    
+
     const item = new ClipboardItem({ 'image/png': blob });
     await navigator.clipboard.write([item]);
-    
+
     return true;
   } catch (error) {
     console.error('Failed to copy image to clipboard:', error);
-    return false;
+    throw error;
   }
 };
 
 /**
  * Download LPO as image (PNG)
  */
-export const downloadLPOImage = async (data: LPOSummary, filename?: string, preparedBy?: string, approvedBy?: string): Promise<void> => {
+export const downloadLPOImage = async (
+  data: LPOSummary,
+  filename?: string,
+  preparedBy?: string,
+  approvedBy?: string
+): Promise<void> => {
   try {
     const blob = await generateLPOImage(data, preparedBy, approvedBy);
     const url = URL.createObjectURL(blob);
-    
+
     const a = document.createElement('a');
     a.href = url;
     a.download = filename || `LPO-${data.lpoNo}-${data.date}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    
+
     URL.revokeObjectURL(url);
   } catch (error) {
     console.error('Failed to download image:', error);
     throw error;
   }
 };
-

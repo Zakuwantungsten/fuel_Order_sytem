@@ -68,7 +68,10 @@ const LPOSummary = ({
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>('');
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
+  /** Applied stations drive the query — only update on Apply / dropdown close. */
   const [localSelectedStations, setLocalSelectedStations] = useState<string[]>(selectedStations);
+  /** Draft stations for checkbox UI while the dropdown is open. */
+  const [draftStations, setDraftStations] = useState<string[]>(selectedStations);
   const [localDateFrom, setLocalDateFrom] = useState<string>(dateFrom);
   const [localDateTo, setLocalDateTo] = useState<string>(dateTo);
   const [showStationDropdown, setShowStationDropdown] = useState(false);
@@ -169,19 +172,50 @@ const LPOSummary = ({
     if (stationsInitialized.current || availableStations.length === 0) return;
     if (localSelectedStations.length === 0) {
       setLocalSelectedStations([...availableStations]);
+      setDraftStations([...availableStations]);
+    } else {
+      setDraftStations([...localSelectedStations]);
     }
     stationsInitialized.current = true;
   }, [availableStations, localSelectedStations.length]);
 
+  const applyStationDraft = (next: string[]) => {
+    setLocalSelectedStations(next);
+    setDraftStations(next);
+  };
+
+  const closeStationDropdown = (commit: boolean) => {
+    if (commit) {
+      applyStationDraft([...draftStations]);
+    } else {
+      setDraftStations([...localSelectedStations]);
+    }
+    setShowStationDropdown(false);
+  };
+
+  // When month/year changes, re-select all stations available for that period
+  const periodKey = `${selectedYear}|${selectedMonth}`;
+  const lastPeriodKey = useRef(periodKey);
+  useEffect(() => {
+    if (!stationsInitialized.current || availableStations.length === 0) return;
+    if (lastPeriodKey.current === periodKey) return;
+    lastPeriodKey.current = periodKey;
+    applyStationDraft([...availableStations]);
+  }, [periodKey, availableStations]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
-        setShowStationDropdown(false);
+        // Commit draft when clicking away so multi-select applies once
+        if (showStationDropdown) {
+          setLocalSelectedStations([...draftStations]);
+          setShowStationDropdown(false);
+        }
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [showStationDropdown, draftStations]);
 
   useEffect(() => {
     if (onFiltersChange) {
@@ -192,6 +226,23 @@ const LPOSummary = ({
       });
     }
   }, [localSelectedStations, localDateFrom, localDateTo, onFiltersChange]);
+
+  const stationButtonLabel = useMemo(() => {
+    const total = availableStations.length;
+    const selected = localSelectedStations.length;
+    if (total === 0) return 'No stations';
+    if (selected === 0) return `0 of ${total} stations`;
+    if (selected === total) return `All stations (${total})`;
+    return `${selected} of ${total} stations`;
+  }, [localSelectedStations.length, availableStations.length]);
+
+  const draftStationButtonHint = useMemo(() => {
+    if (!showStationDropdown) return null;
+    const total = availableStations.length;
+    const selected = draftStations.length;
+    if (selected === total) return `All (${total}) selected`;
+    return `${selected} of ${total} selected`;
+  }, [showStationDropdown, draftStations.length, availableStations.length]);
 
   const summary = useMemo<MonthlySummaryData | null>(() => {
     if (!selectedMonth || !fetchRange || !aggregate) return null;
@@ -296,7 +347,15 @@ const LPOSummary = ({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {(aggFetching || monthFetching) && (
+        <div className="absolute inset-x-0 top-0 z-10 flex justify-center pointer-events-none">
+          <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary-600/90 text-white text-xs font-medium px-3 py-1 shadow">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Updating…
+          </span>
+        </div>
+      )}
       {/* Header with Controls */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700/30 p-4 transition-colors">
         <div className="flex flex-col gap-4">
@@ -400,51 +459,81 @@ const LPOSummary = ({
               <div className="relative" ref={stationDropdownRef}>
                 <button
                   type="button"
-                  onClick={() => setShowStationDropdown(!showStationDropdown)}
-                  className="w-full min-w-[200px] px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+                  onClick={() => {
+                    if (showStationDropdown) {
+                      closeStationDropdown(true);
+                    } else {
+                      setDraftStations([...localSelectedStations]);
+                      setShowStationDropdown(true);
+                    }
+                  }}
+                  className="w-full min-w-[220px] px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
                 >
                   <span>
-                    {localSelectedStations.length === 0
-                      ? 'No Stations'
-                      : localSelectedStations.length === availableStations.length
-                        ? 'All Stations'
-                        : `${localSelectedStations.length} Station${localSelectedStations.length > 1 ? 's' : ''}`}
+                    {showStationDropdown && draftStationButtonHint
+                      ? draftStationButtonHint
+                      : stationButtonLabel}
                   </span>
                   <ChevronDown className="w-4 h-4 text-gray-400" />
                 </button>
                 {showStationDropdown && (
-                  <div className="absolute z-50 mt-1 w-56 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (localSelectedStations.length === availableStations.length) {
-                          setLocalSelectedStations([]);
-                        } else {
-                          setLocalSelectedStations([...availableStations]);
-                        }
-                      }}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
-                    >
-                      <span className="font-medium">Select All</span>
-                      {localSelectedStations.length === availableStations.length && <Check className="w-4 h-4 text-primary-600" />}
-                    </button>
-                    {availableStations.map((station) => (
+                  <div className="absolute z-50 mt-1 w-64 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg overflow-hidden">
+                    <div className="max-h-60 overflow-auto">
                       <button
-                        key={station}
                         type="button"
                         onClick={() => {
-                          if (localSelectedStations.includes(station)) {
-                            setLocalSelectedStations(prev => prev.filter(s => s !== station));
+                          if (draftStations.length === availableStations.length) {
+                            setDraftStations([]);
                           } else {
-                            setLocalSelectedStations(prev => [...prev, station]);
+                            setDraftStations([...availableStations]);
                           }
                         }}
                         className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
                       >
-                        <span>{station}</span>
-                        {localSelectedStations.includes(station) && <Check className="w-4 h-4 text-primary-600" />}
+                        <span className="font-medium">Select All</span>
+                        {draftStations.length === availableStations.length && availableStations.length > 0 && (
+                          <Check className="w-4 h-4 text-primary-600" />
+                        )}
                       </button>
-                    ))}
+                      {availableStations.map((station) => (
+                        <button
+                          key={station}
+                          type="button"
+                          onClick={() => {
+                            if (draftStations.includes(station)) {
+                              setDraftStations(prev => prev.filter(s => s !== station));
+                            } else {
+                              setDraftStations(prev => [...prev, station]);
+                            }
+                          }}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                        >
+                          <span>{station}</span>
+                          {draftStations.includes(station) && <Check className="w-4 h-4 text-primary-600" />}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="border-t border-gray-200 dark:border-gray-600 p-2 flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-800">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 px-1">
+                        {draftStations.length} of {availableStations.length} selected
+                      </span>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => closeStationDropdown(false)}
+                          className="px-2.5 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => closeStationDropdown(true)}
+                          className="px-2.5 py-1 text-xs rounded bg-primary-600 text-white hover:bg-primary-700"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -467,7 +556,7 @@ const LPOSummary = ({
               {/* Clear Filters */}
               <button
                 onClick={() => {
-                  setLocalSelectedStations([...availableStations]);
+                  applyStationDraft([...availableStations]);
                   setLocalDateFrom('');
                   setLocalDateTo('');
                 }}

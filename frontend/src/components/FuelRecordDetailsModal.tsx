@@ -61,6 +61,8 @@ function lpoTypeStyle(type: string): string {
     case 'return': return 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
     case 'cash': return 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
     case 'driver_account': return 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+    case 'dar_yard': return 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400';
+    case 'tanga_yard': return 'bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400';
     default: return 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
   }
 }
@@ -71,8 +73,14 @@ function lpoTypeLabel(type: string): string {
     case 'return': return 'RET';
     case 'cash': return 'CASH';
     case 'driver_account': return 'DRV';
+    case 'dar_yard': return 'DAR YARD';
+    case 'tanga_yard': return 'TANGA YARD';
     default: return type;
   }
+}
+
+function isYardJourneyType(type: string | undefined): boolean {
+  return type === 'dar_yard' || type === 'tanga_yard';
 }
 
 export default function FuelRecordDetailsModal({
@@ -527,7 +535,11 @@ export default function FuelRecordDetailsModal({
                                         NIL{lpo.originalDoNo ? ` (${lpo.originalDoNo})` : ''}
                                       </span>
                                     ) : !lpo.doSdo || lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' ? (
-                                      <span className="text-amber-600 dark:text-amber-400 italic">NIL (Cash)</span>
+                                      isYardJourneyType(lpo.journeyType) || lpo.source === 'dar' || lpo.source === 'tanga' ? (
+                                        <span className="text-violet-600 dark:text-violet-400 italic">NIL (Yard)</span>
+                                      ) : (
+                                        <span className="text-amber-600 dark:text-amber-400 italic">NIL (Cash)</span>
+                                      )
                                     ) : lpo.doSdo}
                                   </td>
                                   <td className="py-2 pr-3 text-right whitespace-nowrap">

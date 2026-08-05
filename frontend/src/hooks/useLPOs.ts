@@ -242,6 +242,7 @@ export function useLPOSummaryAggregate(
       }),
     enabled: enabled && !!filters.dateFrom && !!filters.dateTo,
     staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 }
 
@@ -259,6 +260,7 @@ export function useLPOSummaryEntries(
       }),
     enabled: enabled && !!filters.dateFrom && !!filters.dateTo,
     staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 }
 

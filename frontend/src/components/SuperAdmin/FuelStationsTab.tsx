@@ -420,11 +420,15 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400 text-xs">Going (L)</span>
-                <div className="text-gray-900 dark:text-gray-100 mt-0.5 font-medium">{station.defaultLitersGoing}</div>
+                <div className="text-gray-900 dark:text-gray-100 mt-0.5 font-medium" title={station.formulaGoing || undefined}>
+                  {station.formulaGoing?.trim() ? 'Formula' : station.defaultLitersGoing}
+                </div>
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400 text-xs">Returning (L)</span>
-                <div className="text-gray-900 dark:text-gray-100 mt-0.5 font-medium">{station.defaultLitersReturning}</div>
+                <div className="text-gray-900 dark:text-gray-100 mt-0.5 font-medium" title={station.formulaReturning || undefined}>
+                  {station.formulaReturning?.trim() ? 'Formula' : station.defaultLitersReturning}
+                </div>
               </div>
             </div>
           </div>
@@ -461,8 +465,12 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                   }`}>{station.currency || 'TZS'}</span>
                   {station.defaultRate}
                 </td>
-                <td className="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-400">{station.defaultLitersGoing}</td>
-                <td className="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-400">{station.defaultLitersReturning}</td>
+                <td className="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-400" title={station.formulaGoing || undefined}>
+                  {station.formulaGoing?.trim() ? 'Formula' : station.defaultLitersGoing}
+                </td>
+                <td className="px-3 py-2.5 text-sm text-gray-600 dark:text-gray-400" title={station.formulaReturning || undefined}>
+                  {station.formulaReturning?.trim() ? 'Formula' : station.defaultLitersReturning}
+                </td>
                 <td className="px-3 py-2.5 text-xs">
                   {station.fuelRecordFieldGoing && (
                     <div className="text-green-600 dark:text-green-400">↑ {station.fuelRecordFieldGoing}</div>

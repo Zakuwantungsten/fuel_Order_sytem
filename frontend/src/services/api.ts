@@ -1254,7 +1254,7 @@ export interface FuelRecordDetails {
     totalReturnFuel: number;
   };
   lpoEntries: (LPOEntry & {
-    journeyType: 'going' | 'return' | 'cash' | 'driver_account' | 'related';
+    journeyType: 'going' | 'return' | 'cash' | 'driver_account' | 'related' | 'dar_yard' | 'tanga_yard';
     isDriverAccount?: boolean;
     originalDoNo?: string;
     checkpoint?: string;

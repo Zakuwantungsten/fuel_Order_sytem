@@ -13,6 +13,7 @@ import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
 import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled } from '../services/journeyService';
 import type { JourneyStatus } from '../types';
+import { isYardStation, isDarYardStation, isTangaYardStation, YARD_STATION } from '../utils/yardStations';
 
 /**
  * Get available periods (year-month pairs) for the period picker dropdown.
@@ -1288,14 +1289,17 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
     // 1. A station is out of fuel and driver gets fuel from another station via cash
     // 2. Driver gets extra fuel due to circumstances (theft, etc.)
     // These entries have doSdo = 'NIL' and destinations = 'NIL'
+    // IMPORTANT: exclude yard stations — those are Dar Yard / Tanga Yard, not cash.
     const journeyFromStr = journeyStartDate.toISOString().split('T')[0];
     const journeyToStr   = journeyEndDate.toISOString().split('T')[0];
+    const yardStationNames = [YARD_STATION.DAR, YARD_STATION.TANGA, 'DAR YARD', 'TANGA YARD', 'Dar', 'Tanga'];
 
     const cashLpoEntries = await LPOSummary.aggregate([
       {
         $match: {
           isDeleted: false,
           date: { $gte: journeyFromStr, $lte: journeyToStr },
+          station: { $nin: yardStationNames },
           'entries.truckNo': fuelRecord.truckNo,
           $or: [
             { 'entries.doNo': { $in: ['NIL', 'nil', ''] } },
@@ -1340,6 +1344,79 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
           goingCheckpoint: '$entries.goingCheckpoint',
           returningCheckpoint: '$entries.returningCheckpoint',
           context: '$entries.context',
+        },
+      },
+      { $sort: { date: 1 } },
+    ]);
+
+    // Yard LPOSummary rows for this truck in the journey window (or linked to this fuel record).
+    // Kept separate from cash so NIL DO yard fills classify as Dar/Tanga Yard.
+    const yardLpoEntries = await LPOSummary.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+          station: { $in: yardStationNames },
+          $or: [
+            {
+              date: { $gte: journeyFromStr, $lte: journeyToStr },
+              'entries.truckNo': fuelRecord.truckNo,
+            },
+            { 'entries.linkedFuelRecordId': String(id) },
+          ],
+        },
+      },
+      { $unwind: '$entries' },
+      {
+        $match: {
+          $or: [
+            {
+              'entries.truckNo': fuelRecord.truckNo,
+              date: { $gte: journeyFromStr, $lte: journeyToStr },
+            },
+            { 'entries.linkedFuelRecordId': String(id) },
+          ],
+        },
+      },
+      {
+        $project: {
+          _id: '$entries._id',
+          lpoNo: 1,
+          date: 1,
+          dieselAt: {
+            $cond: {
+              if: { $gt: [{ $strLenCP: { $ifNull: ['$entries.pickedAtStation', ''] } }, 0] },
+              then: '$entries.pickedAtStation',
+              else: '$station',
+            },
+          },
+          pickedAtStation: '$entries.pickedAtStation',
+          orderStation: '$station',
+          doSdo: { $ifNull: ['$entries.doNo', 'NIL'] },
+          truckNo: '$entries.truckNo',
+          ltrs: '$entries.liters',
+          billedLiters: '$entries.liters',
+          dispenseLiters: '$entries.dispenseLiters',
+          pricePerLtr: '$entries.rate',
+          destinations: { $ifNull: ['$entries.dest', '-'] },
+          isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
+          isCancelled: { $ifNull: ['$entries.isCancelled', false] },
+          originalLtrs: '$entries.originalLiters',
+          goingCheckpoint: '$entries.goingCheckpoint',
+          returningCheckpoint: '$entries.returningCheckpoint',
+          context: '$entries.context',
+          linkedFuelRecordId: '$entries.linkedFuelRecordId',
+          source: {
+            $cond: {
+              if: {
+                $regexMatch: {
+                  input: { $ifNull: ['$station', ''] },
+                  regex: /dar/i,
+                },
+              },
+              then: 'dar',
+              else: 'tanga',
+            },
+          },
         },
       },
       { $sort: { date: 1 } },
@@ -1556,6 +1633,15 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
     for (const cashEntry of cashLpoEntries) {
       if (!existingIds.has(cashEntry._id?.toString())) {
         allLpoEntries.push(cashEntry);
+        existingIds.add(cashEntry._id?.toString());
+      }
+    }
+
+    // Add yard LPOSummary entries (Dar Yard / Tanga Yard) — not cash
+    for (const yardEntry of yardLpoEntries) {
+      if (!existingIds.has(yardEntry._id?.toString())) {
+        allLpoEntries.push(yardEntry);
+        existingIds.add(yardEntry._id?.toString());
       }
     }
 
@@ -1809,15 +1895,31 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
         };
 
         // Determine journey type
-        let journeyType: 'going' | 'return' | 'cash' | 'driver_account' | 'related';
+        let journeyType: 'going' | 'return' | 'cash' | 'driver_account' | 'related' | 'dar_yard' | 'tanga_yard';
         const isNilDo = !lpo.doSdo || lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || lpo.doSdo === '';
         const isNilDest = !lpo.destinations || lpo.destinations === 'NIL' || lpo.destinations === 'nil' || lpo.destinations === '';
         const isDriverAccount = lpo.isDriverAccount === true;
-        
+        const stationForYard = lpo.orderStation || lpo.dieselAt || '';
+        const isDarYard =
+          lpo.source === 'dar' || isDarYardStation(stationForYard);
+        const isTangaYard =
+          lpo.source === 'tanga' || isTangaYardStation(stationForYard);
+        const isYard =
+          isDarYard || isTangaYard || isYardStation(stationForYard);
+
         if (isDriverAccount) {
-          journeyType = 'driver_account'; // Driver's account entry
+          journeyType = 'driver_account';
+        } else if (isYard) {
+          // Yard fills (often NIL DO) must not be labeled as cash
+          journeyType = isDarYard ? 'dar_yard' : 'tanga_yard';
+          if (!lpo.source) {
+            lpo.source = isDarYard ? 'dar' : 'tanga';
+          }
+          if (!lpo.dieselAt || !isYardStation(lpo.dieselAt)) {
+            lpo.dieselAt = isDarYard ? YARD_STATION.DAR : YARD_STATION.TANGA;
+          }
         } else if (isNilDo || isNilDest) {
-          journeyType = 'cash'; // Cash mode payment (extra fuel or station out of fuel)
+          journeyType = 'cash';
         } else if (lpo.doSdo === fuelRecord.goingDo) {
           journeyType = 'going';
         } else if (lpo.doSdo === fuelRecord.returnDo) {
@@ -1877,11 +1979,22 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
         returnLPOs: filteredLPOs.filter((lpo: any) => lpo.doSdo === fuelRecord.returnDo).length,
         cashLPOs: filteredLPOs.filter((lpo: any) => {
           const isNilDo = !lpo.doSdo || lpo.doSdo === 'NIL' || lpo.doSdo === 'nil' || lpo.doSdo === '';
-          return isNilDo && !lpo.isDriverAccount;
+          const stationForYard = lpo.orderStation || lpo.dieselAt || '';
+          const isYard =
+            lpo.source === 'dar' ||
+            lpo.source === 'tanga' ||
+            isYardStation(stationForYard);
+          return isNilDo && !lpo.isDriverAccount && !isYard;
         }).length,
         driverAccountLPOs: filteredLPOs.filter((lpo: any) => lpo.isDriverAccount === true).length,
-        tangaLPOs: filteredLPOs.filter((lpo: any) => lpo.source === 'tanga').length,
-        darLPOs: filteredLPOs.filter((lpo: any) => lpo.source === 'dar').length,
+        tangaLPOs: filteredLPOs.filter((lpo: any) => {
+          const stationForYard = lpo.orderStation || lpo.dieselAt || '';
+          return lpo.source === 'tanga' || isTangaYardStation(stationForYard);
+        }).length,
+        darLPOs: filteredLPOs.filter((lpo: any) => {
+          const stationForYard = lpo.orderStation || lpo.dieselAt || '';
+          return lpo.source === 'dar' || isDarYardStation(stationForYard);
+        }).length,
       },
     };
 

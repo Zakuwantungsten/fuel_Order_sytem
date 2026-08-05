@@ -20,7 +20,7 @@ import DriverAccountWorkbook from '../components/DriverAccountWorkbook';
 import ReferWorkbook from '../components/ReferWorkbook';
 import { PermissionGuard } from '../components/ProtectedRoute';
 import { RESOURCES, ACTIONS } from '../utils/permissions';
-import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOImageToClipboard, downloadLPOImage, preloadLPOImageGenerator, isLPOMultiPage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -71,6 +71,11 @@ const LPOs = () => {
       localStorage.setItem('fuel-order:lpo:selectedYear', JSON.stringify(selectedYear));
     } catch { /* ignore */ }
   }, [selectedYear]);
+
+  // Warm html2canvas chunk so Copy as Image is faster on first use
+  useEffect(() => {
+    preloadLPOImageGenerator();
+  }, []);
   const [isDetailFormOpen, setIsDetailFormOpen] = useState(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get('action') === 'create-lpo') {
@@ -127,6 +132,7 @@ const LPOs = () => {
   const [selectedTruckNo, setSelectedTruckNo] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | number | null>(null);
   const [downloadingImage, setDownloadingImage] = useState<string | number | null>(null);
+  const [copyingImage, setCopyingImage] = useState<string | number | null>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -567,18 +573,42 @@ const LPOs = () => {
   // Handle copy LPO image to clipboard
   const handleCopyImageToClipboard = async (lpo: LPOEntry) => {
     closeAllDropdowns();
+    const lpoKey = lpo.id || lpo.lpoNo;
+    setCopyingImage(lpoKey);
+    const toastId = toast.loading(`Copying image — LPO ${lpo.lpoNo}...`, {
+      style: { background: '#0284c7', color: '#fff' },
+    });
     try {
       const lpoSummary = await resolveLpoSummaryForExport(lpo);
-      const success = await copyLPOImageToClipboard(lpoSummary, user?.username);
-      
-      if (success) {
-        toast.success('LPO image copied to clipboard. You can now paste it anywhere.');
-      } else {
-        toast.error('Failed to copy LPO image to clipboard. Please try again.');
+      if (isLPOMultiPage(lpoSummary.entries?.length ?? 0)) {
+        toast.update(toastId, {
+          render: `LPO ${lpo.lpoNo} has multiple pages. Please download as PDF instead.`,
+          type: 'warning',
+          isLoading: false,
+          autoClose: 5000,
+          style: undefined,
+        });
+        return;
       }
-    } catch (error) {
+      await copyLPOImageToClipboard(lpoSummary, user?.username);
+      toast.update(toastId, {
+        render: 'LPO image copied to clipboard. You can now paste it anywhere.',
+        type: 'success',
+        isLoading: false,
+        autoClose: 4000,
+        style: undefined,
+      });
+    } catch (error: any) {
       console.error('Error copying image to clipboard:', error);
-      toast.error('Failed to copy LPO image to clipboard. Your browser may not support this feature.');
+      toast.update(toastId, {
+        render: error?.message || 'Failed to copy LPO image. Your browser may not support this feature.',
+        type: 'error',
+        isLoading: false,
+        autoClose: 6000,
+        style: undefined,
+      });
+    } finally {
+      setCopyingImage(null);
     }
   };
 
@@ -623,6 +653,16 @@ const LPOs = () => {
     });
     try {
       const lpoSummary = await resolveLpoSummaryForExport(lpo);
+      if (isLPOMultiPage(lpoSummary.entries?.length ?? 0)) {
+        toast.update(toastId, {
+          render: `LPO ${lpo.lpoNo} has multiple pages. Please download as PDF instead.`,
+          type: 'warning',
+          isLoading: false,
+          autoClose: 5000,
+          style: undefined,
+        });
+        return;
+      }
       await downloadLPOImage(lpoSummary, undefined, user?.username);
       toast.update(toastId, {
         render: `Image downloaded: LPO ${lpo.lpoNo}`,
@@ -634,7 +674,7 @@ const LPOs = () => {
     } catch (error: any) {
       console.error('Error downloading image:', error);
       toast.update(toastId, {
-        render: `Image download failed: ${error?.message || 'Unknown error'}`,
+        render: error?.message || `Image download failed: ${error?.message || 'Unknown error'}`,
         type: 'error',
         isLoading: false,
         autoClose: 6000,
@@ -1755,10 +1795,15 @@ const LPOs = () => {
                               </div>
                               <button
                                 onClick={() => handleCopyImageToClipboard(lpo)}
-                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                disabled={copyingImage === (lpo.id || lpo.lpoNo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Image className="w-4 h-4 mr-2" />
-                                Copy as Image
+                                {copyingImage === (lpo.id || lpo.lpoNo) ? (
+                                  <Loader2 className="w-4 h-4 mr-2 text-blue-600 animate-spin" />
+                                ) : (
+                                  <Image className="w-4 h-4 mr-2" />
+                                )}
+                                {copyingImage === (lpo.id || lpo.lpoNo) ? 'Copying...' : 'Copy as Image'}
                               </button>
                               <button
                                 onClick={() => handleCopyWhatsAppText(lpo)}
@@ -1937,10 +1982,15 @@ const LPOs = () => {
                                     </div>
                                     <button
                                       onClick={() => handleCopyImageToClipboard(lpo)}
-                                      className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                      disabled={copyingImage === (lpo.id || lpo.lpoNo)}
+                                      className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                      <Image className="w-4 h-4 mr-2" />
-                                      Copy as Image
+                                      {copyingImage === (lpo.id || lpo.lpoNo) ? (
+                                        <Loader2 className="w-4 h-4 mr-2 text-blue-600 animate-spin" />
+                                      ) : (
+                                        <Image className="w-4 h-4 mr-2" />
+                                      )}
+                                      {copyingImage === (lpo.id || lpo.lpoNo) ? 'Copying...' : 'Copy as Image'}
                                     </button>
                                     <button
                                       onClick={() => handleCopyWhatsAppText(lpo)}

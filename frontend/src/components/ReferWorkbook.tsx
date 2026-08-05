@@ -8,7 +8,7 @@ import type { LPOEntry, LPOSummary } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { lpoDocumentsAPI } from '../services/api';
 import { useReferEntries } from '../hooks/useLPOs';
-import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOImageToClipboard, downloadLPOImage, preloadLPOImageGenerator, isLPOMultiPage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 
 interface ReferWorkbookProps {
@@ -33,10 +33,15 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
   const [entryDropdownPosition, setEntryDropdownPosition] = useState<{ top?: number; bottom?: number; left: number }>({ left: 0 });
   const [downloadingPdf, setDownloadingPdf] = useState<string | number | null>(null);
   const [downloadingImage, setDownloadingImage] = useState<string | number | null>(null);
+  const [copyingImage, setCopyingImage] = useState<string | number | null>(null);
 
   const stationDropdownRef = useRef<HTMLDivElement>(null);
   const monthDropdownRef = useRef<HTMLDivElement>(null);
   const wasAutoFallback = useRef(false);
+
+  useEffect(() => {
+    preloadLPOImageGenerator();
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -214,13 +219,29 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
   };
 
   const handleCopyEntryAsImage = async (entry: LPOEntry) => {
+    const lpoKey = entry.id || entry.lpoNo;
+    setCopyingImage(lpoKey);
+    const toastId = toast.loading(`Copying image — LPO ${entry.lpoNo}...`, { style: { background: '#0284c7', color: '#fff' } });
     try {
       const lpo = await fetchFullLPO(entry.lpoNo);
-      if (!lpo) { toast.error('Could not find full LPO data'); return; }
-      const success = await copyLPOImageToClipboard(lpo, user?.username);
-      if (success) toast.success(`Image copied: LPO ${entry.lpoNo}`, { autoClose: 4000 });
-      else toast.error('Failed to copy image to clipboard.');
-    } catch { toast.error('Failed to copy image.'); }
+      if (!lpo) throw new Error('Could not find full LPO data');
+      if (isLPOMultiPage(lpo.entries?.length ?? 0)) {
+        toast.update(toastId, {
+          render: `LPO ${entry.lpoNo} has multiple pages. Please download as PDF instead.`,
+          type: 'warning', isLoading: false, autoClose: 5000, style: undefined,
+        });
+        return;
+      }
+      await copyLPOImageToClipboard(lpo, user?.username);
+      toast.update(toastId, { render: `Image copied: LPO ${entry.lpoNo}`, type: 'success', isLoading: false, autoClose: 4000, style: undefined });
+    } catch (error: any) {
+      toast.update(toastId, {
+        render: error?.message || 'Failed to copy image to clipboard.',
+        type: 'error', isLoading: false, autoClose: 6000, style: undefined,
+      });
+    } finally {
+      setCopyingImage(null);
+    }
   };
 
   const handleCopyWhatsApp = async (entry: LPOEntry) => {
@@ -264,10 +285,17 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
     try {
       const lpo = await fetchFullLPO(entry.lpoNo);
       if (!lpo) throw new Error('LPO not found');
+      if (isLPOMultiPage(lpo.entries?.length ?? 0)) {
+        toast.update(toastId, {
+          render: `LPO ${entry.lpoNo} has multiple pages. Please download as PDF instead.`,
+          type: 'warning', isLoading: false, autoClose: 5000, style: undefined,
+        });
+        return;
+      }
       await downloadLPOImage(lpo, undefined, user?.username);
       toast.update(toastId, { render: `Image downloaded: LPO ${entry.lpoNo}`, type: 'success', isLoading: false, autoClose: 4000, style: undefined });
     } catch (error: any) {
-      toast.update(toastId, { render: `Image download failed: ${error?.message || 'Unknown error'}`, type: 'error', isLoading: false, autoClose: 6000, style: undefined });
+      toast.update(toastId, { render: error?.message || `Image download failed: ${error?.message || 'Unknown error'}`, type: 'error', isLoading: false, autoClose: 6000, style: undefined });
     } finally { setDownloadingImage(null); }
   };
 
@@ -599,7 +627,16 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
                           >
                             <div className="py-1">
                               <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Copy Options</div>
-                              <button onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><Image className="w-4 h-4 mr-2" />Copy as Image</button>
+                              <button
+                                onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }}
+                                disabled={copyingImage === (entry.id || entry.lpoNo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                              >
+                                {copyingImage === (entry.id || entry.lpoNo)
+                                  ? <Loader2 className="w-4 h-4 mr-2 text-blue-600 animate-spin" />
+                                  : <Image className="w-4 h-4 mr-2" />}
+                                {copyingImage === (entry.id || entry.lpoNo) ? 'Copying...' : 'Copy as Image'}
+                              </button>
                               <button onClick={() => { handleCopyWhatsApp(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><MessageSquare className="w-4 h-4 mr-2" />Copy for WhatsApp</button>
                               <button onClick={() => { handleCopyCsvText(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><FileSpreadsheet className="w-4 h-4 mr-2" />Copy as CSV Text</button>
                               <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
@@ -703,7 +740,16 @@ const ReferWorkbook: React.FC<ReferWorkbookProps> = ({ onNavigateToSheet }) => {
                             >
                               <div className="py-1">
                                 <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Copy Options</div>
-                                <button onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><Image className="w-4 h-4 mr-2" />Copy as Image</button>
+                                <button
+                                onClick={() => { handleCopyEntryAsImage(entry); setOpenEntryDropdown(null); }}
+                                disabled={copyingImage === (entry.id || entry.lpoNo)}
+                                className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                              >
+                                {copyingImage === (entry.id || entry.lpoNo)
+                                  ? <Loader2 className="w-4 h-4 mr-2 text-blue-600 animate-spin" />
+                                  : <Image className="w-4 h-4 mr-2" />}
+                                {copyingImage === (entry.id || entry.lpoNo) ? 'Copying...' : 'Copy as Image'}
+                              </button>
                                 <button onClick={() => { handleCopyWhatsApp(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><MessageSquare className="w-4 h-4 mr-2" />Copy for WhatsApp</button>
                                 <button onClick={() => { handleCopyCsvText(entry); setOpenEntryDropdown(null); }} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><FileSpreadsheet className="w-4 h-4 mr-2" />Copy as CSV Text</button>
                                 <div className="border-t border-gray-200 dark:border-gray-600 my-1" />

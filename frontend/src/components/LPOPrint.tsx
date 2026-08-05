@@ -5,6 +5,8 @@ interface LPOPrintProps {
   data: LPOSummary;
   preparedBy?: string; // Username for prepared by field
   approvedBy?: string; // Name of approver (for Driver's Account LPOs)
+  /** When true (single-page image capture), drop fixed A4 min-height so content can be cropped. */
+  cropToContent?: boolean;
 }
 
 interface LPOEntry {
@@ -20,13 +22,16 @@ interface LPOEntry {
   referenceDoNo?: string;
 }
 
-const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, approvedBy }, ref) => {
-  // Fixed sizing for consistent, readable PDFs across all LPOs
-  const fontSize = '13px';
-  const headerFontSize = '14px';
+/** Rows per page for LPO image/print templates — keep in sync with PDF continuation pages. */
+export const LPO_ROWS_PER_PAGE = 30;
+
+const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, approvedBy, cropToContent }, ref) => {
+  // Fixed sizing for consistent, readable images/prints across all LPOs
+  const fontSize = '12px';
+  const headerFontSize = '13px';
   
-  // Calculate pagination - approximately 15 rows per page (accounting for header, footer, signatures)
-  const ROWS_PER_PAGE = 20;
+  // ~30 rows per page (tighter cell padding so content still fits A4 with signatures)
+  const ROWS_PER_PAGE = LPO_ROWS_PER_PAGE;
   
   const pages = useMemo(() => {
     const allPages: LPOEntry[][] = [];
@@ -71,7 +76,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
       <tr style={{ backgroundColor: '#f5f5f5' }}>
         <th style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           textAlign: 'center',
           fontWeight: 'bold',
           fontSize: headerFontSize,
@@ -83,7 +88,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
         </th>
         <th style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           textAlign: 'center',
           fontWeight: 'bold',
           fontSize: headerFontSize,
@@ -95,7 +100,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
         </th>
         <th style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           textAlign: 'center',
           fontWeight: 'bold',
           fontSize: headerFontSize,
@@ -107,7 +112,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
         </th>
         <th style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           textAlign: 'center',
           fontWeight: 'bold',
           fontSize: headerFontSize,
@@ -119,7 +124,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
         </th>
         <th style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           textAlign: 'center',
           fontWeight: 'bold',
           fontSize: headerFontSize,
@@ -131,7 +136,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
         </th>
         <th style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           textAlign: 'center',
           fontWeight: 'bold',
           fontSize: headerFontSize,
@@ -171,51 +176,51 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
       <tr key={index} style={{ backgroundColor: rowBgColor }}>
         <td style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           fontSize,
           textAlign: 'center',
           verticalAlign: 'middle',
           color: isCancelled ? '#cc0000' : isRefer ? '#c2410c' : isDriverAccount ? '#cc6600' : '#000',
           fontWeight: '500',
           textDecoration: isCancelled ? 'line-through' : 'none',
-          lineHeight: '1.4'
+          lineHeight: '1.25'
         }}>
           {displayDoNo}
         </td>
         <td style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           fontSize,
           textAlign: 'center',
           verticalAlign: 'middle',
           color: textColor,
           fontWeight: '500',
-          lineHeight: '1.4'
+          lineHeight: '1.25'
         }}>
           {entry.truckNo}
         </td>
         <td style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           fontSize,
           textAlign: 'center',
           verticalAlign: 'middle',
           color: textColor,
           fontWeight: '500',
           textDecoration,
-          lineHeight: '1.4'
+          lineHeight: '1.25'
         }}>
           {entry.liters.toLocaleString()}
         </td>
         <td style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           fontSize,
           textAlign: 'center',
           verticalAlign: 'middle',
           color: isCancelled ? '#cc0000' : '#333',
           textDecoration,
-          lineHeight: '1.4'
+          lineHeight: '1.25'
         }}>
           {entry.rate.toLocaleString('en-US', {
             minimumFractionDigits: 1,
@@ -224,14 +229,14 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
         </td>
         <td style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           fontSize,
           textAlign: 'center',
           verticalAlign: 'middle',
           color: textColor,
           fontWeight: '500',
           textDecoration,
-          lineHeight: '1.4'
+          lineHeight: '1.25'
         }}>
           {entry.amount.toLocaleString('en-US', {
             minimumFractionDigits: 2,
@@ -240,13 +245,13 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
         </td>
         <td style={{ 
           border: '1px solid #000',
-          padding: '8px 6px',
+          padding: '4px 5px',
           fontSize,
           textAlign: 'center',
           verticalAlign: 'middle',
           color: isCancelled ? '#cc0000' : isDriverAccount ? '#cc6600' : '#333',
           textDecoration: isCancelled ? 'line-through' : 'none',
-          lineHeight: '1.4'
+          lineHeight: '1.25'
         }}>
           {displayDest}
         </td>
@@ -273,8 +278,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             className="lpo-page"
             style={{
               width: '100%',
-              minHeight: '297mm',
-              padding: '15mm 20mm 25mm 20mm',
+              minHeight: cropToContent ? undefined : '297mm',
+              height: cropToContent ? 'auto' : undefined,
+              padding: cropToContent ? '12mm 16mm 12mm 16mm' : '15mm 20mm 25mm 20mm',
               boxSizing: 'border-box',
               position: 'relative',
               pageBreakAfter: isLastPage ? 'auto' : 'always',
@@ -324,9 +330,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                         LPO No. {data.lpoNo}
                       </div>
                       <div style={{ 
-                        fontSize: '12px',
-                        color: '#555',
-                        fontWeight: '500'
+                        fontSize: '15px',
+                        color: '#000',
+                        fontWeight: '700'
                       }}>
                         Date: {new Date(data.date).toLocaleDateString('en-GB', {
                           day: '2-digit',
@@ -345,8 +351,8 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                     fontSize: '13px'
                   }}>
                     <div>
-                      <span style={{ fontWeight: 'bold', color: '#000' }}>Station:</span>{' '}
-                      <span style={{ color: '#333' }}>{data.station}</span>
+                      <span style={{ fontWeight: '400', color: '#000' }}>Station:</span>{' '}
+                      <span style={{ color: '#000', fontWeight: '700', fontSize: '15px' }}>{data.station}</span>
                     </div>
                     <div>
                       <span style={{ fontWeight: 'bold', color: '#000' }}>Order of:</span>{' '}
@@ -400,9 +406,9 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                     </h2>
                   </div>
                   <div style={{ 
-                    fontSize: '12px',
-                    color: '#555',
-                    fontWeight: '500'
+                    fontSize: '15px',
+                    color: '#000',
+                    fontWeight: '700'
                   }}>
                     Date: {new Date(data.date).toLocaleDateString('en-GB', {
                       day: '2-digit',
@@ -432,51 +438,51 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                   <tr style={{ backgroundColor: '#e8e8e8' }}>
                     <td style={{ 
                       border: '1px solid #000',
-                      padding: '8px 6px',
+                      padding: '4px 5px',
                       fontWeight: 'bold',
                       fontSize: headerFontSize,
                       textAlign: 'center',
                       verticalAlign: 'middle',
                       color: '#000',
-                      lineHeight: '1.4'
+                      lineHeight: '1.25'
                     }} colSpan={2}>
                       TOTAL
                     </td>
                     <td style={{ 
                       border: '1px solid #000',
-                      padding: '8px 6px',
+                      padding: '4px 5px',
                       textAlign: 'center',
                       verticalAlign: 'middle',
                       fontWeight: 'bold',
                       fontSize: headerFontSize,
                       color: '#000',
-                      lineHeight: '1.4'
+                      lineHeight: '1.25'
                     }}>
                       {totalLiters.toLocaleString()}
                     </td>
                     <td style={{ 
                       border: '1px solid #000',
-                      padding: '8px 6px',
+                      padding: '4px 5px',
                       verticalAlign: 'middle',
-                      lineHeight: '1.4'
+                      lineHeight: '1.25'
                     }}></td>
                     <td style={{ 
                       border: '1px solid #000',
-                      padding: '8px 6px',
+                      padding: '4px 5px',
                       textAlign: 'center',
                       verticalAlign: 'middle',
                       fontWeight: 'bold',
                       fontSize: headerFontSize,
                       color: '#000',
-                      lineHeight: '1.4'
+                      lineHeight: '1.25'
                     }}>
                       {formatAmount(totalAmount)}
                     </td>
                     <td style={{ 
                       border: '1px solid #000',
-                      padding: '8px 6px',
+                      padding: '4px 5px',
                       verticalAlign: 'middle',
-                      lineHeight: '1.4'
+                      lineHeight: '1.25'
                     }}></td>
                   </tr>
                 )}
@@ -490,8 +496,8 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                   display: 'grid',
                   gridTemplateColumns: 'repeat(3, 1fr)',
                   gap: '32px',
-                  marginTop: '40px',
-                  marginBottom: '24px'
+                  marginTop: '20px',
+                  marginBottom: '16px'
                 }}>
                   <div>
                     <div style={{ 
@@ -603,10 +609,11 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
 
             {/* Page Footer */}
             <div style={{
-              position: 'absolute',
-              bottom: '10mm',
-              left: '20mm',
-              right: '20mm',
+              position: cropToContent ? 'relative' : 'absolute',
+              bottom: cropToContent ? undefined : '10mm',
+              left: cropToContent ? undefined : '20mm',
+              right: cropToContent ? undefined : '20mm',
+              marginTop: cropToContent ? '16px' : undefined,
               textAlign: 'center',
               fontSize: '11px',
               color: '#666',

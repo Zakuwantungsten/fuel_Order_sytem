@@ -9,7 +9,7 @@ import TangaYardLPOForm from '../components/TangaYardLPOForm';
 import TangaLPOWorkbook from '../components/TangaLPOWorkbook';
 import TangaLPOSummary from '../components/TangaLPOSummary';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
-import { copyLPOImageToClipboard, downloadLPOImage } from '../utils/lpoImageGenerator';
+import { copyLPOImageToClipboard, downloadLPOImage, preloadLPOImageGenerator, isLPOMultiPage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { tangaLPOAPI } from '../services/api';
 import type { TangaLPO, LPOSummary as LPOSummaryType } from '../types';
@@ -93,6 +93,7 @@ export default function TangaLPOs() {
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number }>({ top: 0, left: 0 });
   const [downloadingImage, setDownloadingImage] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
+  const [copyingImage, setCopyingImage] = useState<string | null>(null);
 
   useRealtimeSync('tanga_lpo_documents', () => {}, 'rt-tanga-lpo-page');
 
@@ -166,6 +167,10 @@ export default function TangaLPOs() {
 
   // Reset to page 1 whenever any filter changes
   useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, filterMonth, entityFilter, linkedFilter, statusFilter]);
+
+  useEffect(() => {
+    preloadLPOImageGenerator();
+  }, []);
 
   // Keep Month / Entity selections valid when the available options change
   useEffect(() => {
@@ -259,14 +264,30 @@ export default function TangaLPOs() {
 
   const handleCopyImage = async (lpo: TangaLPO) => {
     closeAllDropdowns();
+    const key = (lpo._id ?? lpo.id ?? lpo.lpoNo) as string;
+    const entryCount = lpo.entries?.length ?? 0;
+    if (isLPOMultiPage(entryCount)) {
+      toast.warning(`LPO ${lpo.lpoNo} has multiple pages. Please download as PDF instead.`);
+      return;
+    }
+    setCopyingImage(key);
+    const toastId = toast.loading(`Copying image — LPO ${lpo.lpoNo}...`, {
+      style: { background: '#2563eb', color: '#fff' },
+    });
     try {
-      const ok = await copyLPOImageToClipboard(convertToLPOSummary(lpo), user?.username);
-      ok
-        ? toast.success('LPO image copied to clipboard. You can now paste it anywhere.')
-        : toast.error('Failed to copy LPO image to clipboard. Please try again.');
-    } catch (error) {
+      await copyLPOImageToClipboard(convertToLPOSummary(lpo), user?.username);
+      toast.update(toastId, {
+        render: 'LPO image copied to clipboard. You can now paste it anywhere.',
+        type: 'success', isLoading: false, autoClose: 4000, style: undefined,
+      });
+    } catch (error: any) {
       console.error('Error copying image to clipboard:', error);
-      toast.error('Failed to copy LPO image. Your browser may not support this feature.');
+      toast.update(toastId, {
+        render: error?.message || 'Failed to copy LPO image. Your browser may not support this feature.',
+        type: 'error', isLoading: false, autoClose: 6000, style: undefined,
+      });
+    } finally {
+      setCopyingImage(null);
     }
   };
 
@@ -299,6 +320,10 @@ export default function TangaLPOs() {
   const handleDownloadImage = async (lpo: TangaLPO) => {
     closeAllDropdowns();
     const key = (lpo._id ?? lpo.id ?? lpo.lpoNo) as string;
+    if (isLPOMultiPage(lpo.entries?.length ?? 0)) {
+      toast.warning(`LPO ${lpo.lpoNo} has multiple pages. Please download as PDF instead.`);
+      return;
+    }
     setDownloadingImage(key);
     const toastId = toast.loading(`Preparing image — LPO ${lpo.lpoNo}...`, {
       style: { background: '#2563eb', color: '#fff' },
@@ -312,7 +337,7 @@ export default function TangaLPOs() {
     } catch (error: any) {
       console.error('Error downloading image:', error);
       toast.update(toastId, {
-        render: `Image download failed: ${error?.message || 'Unknown error'}`,
+        render: error?.message || `Image download failed: ${error?.message || 'Unknown error'}`,
         type: 'error', isLoading: false, autoClose: 6000, style: undefined,
       });
     } finally {
@@ -369,8 +394,20 @@ export default function TangaLPOs() {
     >
       <div className="py-1">
         <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Copy Options</div>
-        <button onClick={() => handleCopyImage(lpo)} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-          <ImageIcon className="w-4 h-4 mr-2" /> Copy as Image
+        <button
+          onClick={() => handleCopyImage(lpo)}
+          disabled={copyingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo) || isLPOMultiPage(lpo.entries?.length ?? 0)}
+          title={isLPOMultiPage(lpo.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
+          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {copyingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo)
+            ? <Loader2 className="w-4 h-4 mr-2 text-blue-600 animate-spin" />
+            : <ImageIcon className="w-4 h-4 mr-2" />}
+          {copyingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo)
+            ? 'Copying...'
+            : isLPOMultiPage(lpo.entries?.length ?? 0)
+              ? 'Copy as Image (use PDF)'
+              : 'Copy as Image'}
         </button>
         <button onClick={() => handleCopyWhatsApp(lpo)} className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
           <MessageSquare className="w-4 h-4 mr-2" /> Copy for WhatsApp
@@ -382,13 +419,18 @@ export default function TangaLPOs() {
         <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Download Options</div>
         <button
           onClick={() => handleDownloadImage(lpo)}
-          disabled={downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo)}
-          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo) || isLPOMultiPage(lpo.entries?.length ?? 0)}
+          title={isLPOMultiPage(lpo.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
+          className="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo)
             ? <Loader2 className="w-4 h-4 mr-2 text-blue-600 animate-spin" />
             : <Download className="w-4 h-4 mr-2 text-blue-600" />}
-          {downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo) ? 'Downloading...' : 'Download as Image'}
+          {downloadingImage === (lpo._id ?? lpo.id ?? lpo.lpoNo)
+            ? 'Downloading...'
+            : isLPOMultiPage(lpo.entries?.length ?? 0)
+              ? 'Download as Image (use PDF)'
+              : 'Download as Image'}
         </button>
         <button
           onClick={() => handleDownloadPdf(lpo)}
