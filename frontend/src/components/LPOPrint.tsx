@@ -5,8 +5,6 @@ interface LPOPrintProps {
   data: LPOSummary;
   preparedBy?: string; // Username for prepared by field
   approvedBy?: string; // Name of approver (for Driver's Account LPOs)
-  /** When true (single-page image capture), drop fixed A4 min-height so content can be cropped. */
-  cropToContent?: boolean;
 }
 
 interface LPOEntry {
@@ -25,7 +23,7 @@ interface LPOEntry {
 /** Rows per page for LPO image/print templates — keep in sync with PDF continuation pages. */
 export const LPO_ROWS_PER_PAGE = 30;
 
-const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, approvedBy, cropToContent }, ref) => {
+const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, approvedBy }, ref) => {
   // Fixed sizing for consistent, readable images/prints across all LPOs
   const fontSize = '12px';
   const headerFontSize = '13px';
@@ -183,7 +181,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           color: isCancelled ? '#cc0000' : isRefer ? '#c2410c' : isDriverAccount ? '#cc6600' : '#000',
           fontWeight: '500',
           textDecoration: isCancelled ? 'line-through' : 'none',
-          lineHeight: '1.25'
+          lineHeight: '1.2'
         }}>
           {displayDoNo}
         </td>
@@ -195,7 +193,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           verticalAlign: 'middle',
           color: textColor,
           fontWeight: '500',
-          lineHeight: '1.25'
+          lineHeight: '1.2'
         }}>
           {entry.truckNo}
         </td>
@@ -208,7 +206,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           color: textColor,
           fontWeight: '500',
           textDecoration,
-          lineHeight: '1.25'
+          lineHeight: '1.2'
         }}>
           {entry.liters.toLocaleString()}
         </td>
@@ -220,7 +218,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           verticalAlign: 'middle',
           color: isCancelled ? '#cc0000' : '#333',
           textDecoration,
-          lineHeight: '1.25'
+          lineHeight: '1.2'
         }}>
           {entry.rate.toLocaleString('en-US', {
             minimumFractionDigits: 1,
@@ -236,7 +234,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           color: textColor,
           fontWeight: '500',
           textDecoration,
-          lineHeight: '1.25'
+          lineHeight: '1.2'
         }}>
           {entry.amount.toLocaleString('en-US', {
             minimumFractionDigits: 2,
@@ -251,7 +249,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           verticalAlign: 'middle',
           color: isCancelled ? '#cc0000' : isDriverAccount ? '#cc6600' : '#333',
           textDecoration: isCancelled ? 'line-through' : 'none',
-          lineHeight: '1.25'
+          lineHeight: '1.2'
         }}>
           {displayDest}
         </td>
@@ -278,9 +276,8 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
             className="lpo-page"
             style={{
               width: '100%',
-              minHeight: cropToContent ? undefined : '297mm',
-              height: cropToContent ? 'auto' : undefined,
-              padding: cropToContent ? '12mm 16mm 12mm 16mm' : '15mm 20mm 25mm 20mm',
+              minHeight: '297mm',
+              padding: '15mm 20mm 25mm 20mm',
               boxSizing: 'border-box',
               position: 'relative',
               pageBreakAfter: isLastPage ? 'auto' : 'always',
@@ -444,7 +441,7 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                       textAlign: 'center',
                       verticalAlign: 'middle',
                       color: '#000',
-                      lineHeight: '1.25'
+                      lineHeight: '1.2'
                     }} colSpan={2}>
                       TOTAL
                     </td>
@@ -456,15 +453,16 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                       fontWeight: 'bold',
                       fontSize: headerFontSize,
                       color: '#000',
-                      lineHeight: '1.25'
+                      lineHeight: '1.2'
                     }}>
                       {totalLiters.toLocaleString()}
                     </td>
                     <td style={{ 
                       border: '1px solid #000',
                       padding: '4px 5px',
+                      textAlign: 'center',
                       verticalAlign: 'middle',
-                      lineHeight: '1.25'
+                      lineHeight: '1.2'
                     }}></td>
                     <td style={{ 
                       border: '1px solid #000',
@@ -474,15 +472,16 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
                       fontWeight: 'bold',
                       fontSize: headerFontSize,
                       color: '#000',
-                      lineHeight: '1.25'
+                      lineHeight: '1.2'
                     }}>
                       {formatAmount(totalAmount)}
                     </td>
                     <td style={{ 
                       border: '1px solid #000',
                       padding: '4px 5px',
+                      textAlign: 'center',
                       verticalAlign: 'middle',
-                      lineHeight: '1.25'
+                      lineHeight: '1.2'
                     }}></td>
                   </tr>
                 )}
@@ -609,11 +608,10 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
 
             {/* Page Footer */}
             <div style={{
-              position: cropToContent ? 'relative' : 'absolute',
-              bottom: cropToContent ? undefined : '10mm',
-              left: cropToContent ? undefined : '20mm',
-              right: cropToContent ? undefined : '20mm',
-              marginTop: cropToContent ? '16px' : undefined,
+              position: 'absolute',
+              bottom: '10mm',
+              left: '20mm',
+              right: '20mm',
               textAlign: 'center',
               fontSize: '11px',
               color: '#666',
@@ -667,9 +665,11 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           display: table-header-group !important;
         }
         
-        tbody tr td {
+        .lpo-print-container table th,
+        .lpo-print-container table td {
+          text-align: center !important;
           vertical-align: middle !important;
-          line-height: 1.4 !important;
+          line-height: 1.2 !important;
         }
         
         /* Prevent page breaks right after table header */

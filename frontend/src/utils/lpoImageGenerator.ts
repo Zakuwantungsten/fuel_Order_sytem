@@ -33,93 +33,13 @@ const waitForPaint = (): Promise<void> =>
   });
 
 /**
- * Trim bottom/right whitespace from a captured canvas (single-page content crop).
- */
-const cropCanvasToContent = (source: HTMLCanvasElement, padding = 12): HTMLCanvasElement => {
-  const ctx = source.getContext('2d');
-  if (!ctx) return source;
-
-  const { width, height } = source;
-  const { data } = ctx.getImageData(0, 0, width, height);
-
-  const isWhite = (i: number) =>
-    data[i] >= 250 && data[i + 1] >= 250 && data[i + 2] >= 250;
-
-  let top = 0;
-  let left = 0;
-  let right = width - 1;
-  let bottom = height - 1;
-
-  // Find bottom-most non-white row
-  outerBottom: for (let y = height - 1; y >= 0; y--) {
-    for (let x = 0; x < width; x++) {
-      if (!isWhite((y * width + x) * 4)) {
-        bottom = y;
-        break outerBottom;
-      }
-    }
-  }
-
-  // Find top-most non-white row
-  outerTop: for (let y = 0; y <= bottom; y++) {
-    for (let x = 0; x < width; x++) {
-      if (!isWhite((y * width + x) * 4)) {
-        top = y;
-        break outerTop;
-      }
-    }
-  }
-
-  // Find right-most non-white column
-  outerRight: for (let x = width - 1; x >= 0; x--) {
-    for (let y = top; y <= bottom; y++) {
-      if (!isWhite((y * width + x) * 4)) {
-        right = x;
-        break outerRight;
-      }
-    }
-  }
-
-  // Find left-most non-white column
-  outerLeft: for (let x = 0; x <= right; x++) {
-    for (let y = top; y <= bottom; y++) {
-      if (!isWhite((y * width + x) * 4)) {
-        left = x;
-        break outerLeft;
-      }
-    }
-  }
-
-  const cropLeft = Math.max(0, left - padding);
-  const cropTop = Math.max(0, top - padding);
-  const cropRight = Math.min(width - 1, right + padding);
-  const cropBottom = Math.min(height - 1, bottom + padding);
-  const cropW = cropRight - cropLeft + 1;
-  const cropH = cropBottom - cropTop + 1;
-
-  // Nothing meaningful to crop
-  if (cropW >= width - 4 && cropH >= height - 4) return source;
-
-  const cropped = document.createElement('canvas');
-  cropped.width = cropW;
-  cropped.height = cropH;
-  const croppedCtx = cropped.getContext('2d');
-  if (!croppedCtx) return source;
-  croppedCtx.fillStyle = '#ffffff';
-  croppedCtx.fillRect(0, 0, cropW, cropH);
-  croppedCtx.drawImage(source, cropLeft, cropTop, cropW, cropH, 0, 0, cropW, cropH);
-  return cropped;
-};
-
-/**
  * Creates a temporary DOM element with the LPO print component
  * and returns the rendered element
  */
 const createLPOElement = (
   data: LPOSummary,
   preparedBy?: string,
-  approvedBy?: string,
-  options?: { cropToContent?: boolean }
+  approvedBy?: string
 ): Promise<HTMLElement> => {
   return new Promise((resolve) => {
     const container = document.createElement('div');
@@ -148,7 +68,6 @@ const createLPOElement = (
         data,
         preparedBy,
         approvedBy,
-        cropToContent: options?.cropToContent,
       })
     );
   });
@@ -174,8 +93,8 @@ const cleanupElement = (element: HTMLElement) => {
 };
 
 /**
- * Generate LPO as image blob using html2canvas.
- * Single-page LPOs are cropped to content; multi-page throws (use PDF instead).
+ * Generate LPO as image blob using html2canvas (full A4 page, scale 2).
+ * Multi-page throws (use PDF instead).
  */
 export const generateLPOImage = async (
   data: LPOSummary,
@@ -190,14 +109,14 @@ export const generateLPOImage = async (
   }
 
   const html2canvasLoad = loadHtml2Canvas();
-  const element = await createLPOElement(data, preparedBy, approvedBy, { cropToContent: true });
+  const element = await createLPOElement(data, preparedBy, approvedBy);
   const { default: html2canvas } = await html2canvasLoad;
 
   try {
     const elementHeight = element.scrollHeight;
 
     const canvas = await html2canvas(element, {
-      scale: 1.5,
+      scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
       logging: false,
@@ -209,10 +128,8 @@ export const generateLPOImage = async (
       removeContainer: true,
     });
 
-    const finalCanvas = cropCanvasToContent(canvas);
-
     return new Promise((resolve, reject) => {
-      finalCanvas.toBlob((blob) => {
+      canvas.toBlob((blob) => {
         if (blob) {
           resolve(blob);
         } else {
