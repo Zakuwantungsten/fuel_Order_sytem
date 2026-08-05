@@ -4,6 +4,7 @@ import { PenSquare, Save, X, Calculator, Copy, MessageSquare, Image, ChevronDown
 import { LPOSheet, LPODetail, LPOSummary, CancellationReport, CancellationPoint, FuelRecord } from '../types';
 import { lpoWorkbookAPI, fuelRecordsAPI, lpoDocumentsAPI, FuelAutomationConfig } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
+import { useEditLockSession } from '../hooks/useEditLockSession';
 import { copyLPOImageToClipboard, downloadLPOImage, preloadLPOImageGenerator, isLPOMultiPage } from '../utils/lpoImageGenerator';
 import { copyLPOForWhatsApp, copyLPOTextToClipboard } from '../utils/lpoTextGenerator';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,6 +27,26 @@ import {
 import PickupAtModal from './PickupAtModal';
 import PickedAtModal from './PickedAtModal';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
+
+/** Stable id for a truck entry (subdocument _id), used for per-entry edit locks. */
+const entryLockId = (entry: LPODetail | undefined | null, index: number): string | null => {
+  const id = (entry as any)?._id ?? entry?.id;
+  if (id != null && String(id).trim()) return String(id);
+  return null;
+};
+
+/** Ensure DO is never empty string (Mongoose required rejects ''). */
+const normalizeEntriesDo = <T extends { doNo?: string }>(entries: T[]): T[] =>
+  entries.map((e) => ({
+    ...e,
+    doNo: (e.doNo || '').trim() || 'NIL',
+  }));
+
+type HeldEditLock = {
+  scope: 'doc' | 'entry';
+  entryId?: string;
+  lockedUntil: string;
+};
 
 /** Per-row journey lookup state while editing truck/DO in the sheet. */
 interface RowLookupState {
@@ -63,6 +84,15 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [isEditing, setIsEditing] = useState(false);
   const [editedSheet, setEditedSheet] = useState<LPOSheet>(sheet);
   const [editingRow, setEditingRow] = useState<number | null>(null);
+  const [heldLock, setHeldLock] = useState<HeldEditLock | null>(null);
+  const heldLockRef = useRef<HeldEditLock | null>(null);
+  const editingRowRef = useRef<number | null>(null);
+  editingRowRef.current = editingRow;
+
+  const rememberHeldLock = useCallback((lock: HeldEditLock | null) => {
+    heldLockRef.current = lock;
+    setHeldLock(lock);
+  }, []);
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
   const [isSaving, setIsSaving] = useState(false); // Prevent double submissions
   const [cancellationReport, setCancellationReport] = useState<CancellationReport | null>(null);
@@ -212,12 +242,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     [editedSheet.id, editedSheet.lpoNo, editedSheet.station, editedSheet.orderOf, editedSheet.date]
   );
 
-  // Acquire the LPO edit lock before opening pickup (same lock the detail form / row
-  // edit use) so another user can't edit or pick up this LPO until we close the modal.
+  // Acquire the LPO edit lock before opening pickup (whole-sheet lock — pickup
+  // moves trucks across LPOs). Entry-level row edits use a separate per-truck lock.
   const handleOpenPickup = async () => {
     if (sheet.id) {
       try {
-        await lpoDocumentsAPI.acquireLock(sheet.id);
+        const res = await lpoDocumentsAPI.acquireLock(sheet.id);
+        rememberHeldLock({
+          scope: 'doc',
+          lockedUntil: String(res?.lockedUntil || ''),
+        });
       } catch (err: any) {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
@@ -245,7 +279,11 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     if (!entry || entry.isCancelled) return;
     if (sheet.id) {
       try {
-        await lpoDocumentsAPI.acquireLock(sheet.id);
+        const res = await lpoDocumentsAPI.acquireLock(sheet.id);
+        rememberHeldLock({
+          scope: 'doc',
+          lockedUntil: String(res?.lockedUntil || ''),
+        });
       } catch (err: any) {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
@@ -452,12 +490,16 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setEditedSheet(prev => ({ ...prev, [field]: value }));
   };
 
-  /** Acquire edit lock before entering edit mode */
+  /** Acquire document-level edit lock before entering full-sheet edit mode */
   const handleStartEdit = async () => {
     const sheetId = sheet.id;
     if (sheetId) {
       try {
-        await lpoDocumentsAPI.acquireLock(sheetId);
+        const res = await lpoDocumentsAPI.acquireLock(sheetId);
+        rememberHeldLock({
+          scope: 'doc',
+          lockedUntil: String(res?.lockedUntil || ''),
+        });
       } catch (err: any) {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
@@ -471,19 +513,92 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setIsEditing(true);
   };
 
-  /** Release edit lock helper */
+  /** Release the currently held edit lock (document or per-entry) immediately. */
   const releaseLockIfNeeded = async () => {
     const sheetId = sheet.id;
-    if (sheetId) {
-      try { await lpoDocumentsAPI.releaseLock(sheetId); } catch { /* ignore */ }
-    }
+    const current = heldLockRef.current;
+    if (!sheetId || !current) return;
+    try {
+      await lpoDocumentsAPI.releaseLock(
+        sheetId,
+        current.scope === 'entry' && current.entryId
+          ? { entryId: current.entryId }
+          : undefined,
+      );
+    } catch { /* ignore — lock may already be expired */ }
+    rememberHeldLock(null);
   };
+
+  /** Exit edit mode as soon as the lock TTL elapses (no wait for Save → 409). */
+  const exitEditOnLockExpire = useCallback(() => {
+    toast.warn('Edit session expired — exited edit mode.');
+    const row = editingRowRef.current;
+    if (row != null) {
+      const originalEntry = sheet.entries[row];
+      if (originalEntry) {
+        setEditedSheet((prev) => {
+          const updatedEntries = [...prev.entries];
+          updatedEntries[row] = { ...originalEntry };
+          return { ...prev, entries: updatedEntries };
+        });
+      }
+      setRowLookup((prev) => {
+        const next = { ...prev };
+        delete next[row];
+        return next;
+      });
+      delete editOriginDirectionRef.current[row];
+    } else if (isEditing) {
+      setEditedSheet(sheet);
+    }
+    setEditingRow(null);
+    setIsEditing(false);
+    setEditCheckpoint({
+      open: false,
+      index: null,
+      direction: null,
+      oldDirection: null,
+      fuelRecordId: null,
+      field: '',
+      revertField: '',
+      isDirectionSwap: false,
+      loading: false,
+    });
+    void releaseLockIfNeeded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet, isEditing, rememberHeldLock]);
+
+  useEditLockSession({
+    active: !!heldLock,
+    lockedUntil: heldLock?.lockedUntil,
+    onExpire: exitEditOnLockExpire,
+    renew: async () => {
+      const sheetId = sheet.id;
+      const current = heldLockRef.current;
+      if (!sheetId || !current) return;
+      const res = await lpoDocumentsAPI.acquireLock(
+        sheetId,
+        current.scope === 'entry' && current.entryId
+          ? { entryId: current.entryId }
+          : undefined,
+      );
+      const until = res?.lockedUntil;
+      if (until) {
+        rememberHeldLock({ ...current, lockedUntil: String(until) });
+      }
+      return { lockedUntil: until };
+    },
+  });
 
   const handleSave = async () => {
     if (isSaving) return; // Prevent double submission
     setIsSaving(true);
     try {
-      const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, editedSheet);
+      const payload = {
+        ...editedSheet,
+        entries: normalizeEntriesDo(editedSheet.entries || []),
+      };
+      const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, payload);
       onUpdate(updatedSheet);
       setIsEditing(false);
       await releaseLockIfNeeded();
@@ -514,9 +629,33 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     if (isSaving) return; // Prevent double submission
     setIsSaving(true);
     try {
-      let payload: any = editedSheet;
+      const entryId = entryLockId(editedSheet.entries[index], index)
+        || heldLockRef.current?.entryId
+        || undefined;
+
+      // Merge this row onto the latest sheet so concurrent edits to other trucks aren't wiped.
+      let baseSheet: LPOSheet = editedSheet;
+      try {
+        if (sheet.id) {
+          const fresh = await lpoDocumentsAPI.getById(sheet.id);
+          if (fresh) baseSheet = fresh as unknown as LPOSheet;
+        }
+      } catch { /* fall back to local sheet */ }
+
+      const mergedEntries = normalizeEntriesDo(
+        (baseSheet.entries || []).map((e, i) =>
+          i === index ? { ...editedSheet.entries[index] } : e,
+        ),
+      );
+
+      let payload: any = {
+        ...baseSheet,
+        ...editedSheet,
+        entries: mergedEntries,
+        ...(entryId ? { editLockEntryId: entryId } : {}),
+      };
       if (manualField) {
-        const cur = editedSheet.entries[index];
+        const cur = mergedEntries[index];
         const orig = sheet.entries[index];
         const checkpoints: Record<string, string> = {
           [`${cur.doNo}-${cur.truckNo}`]: manualField,
@@ -528,7 +667,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         ) {
           checkpoints[`${orig.doNo}-${orig.truckNo}`] = opts?.revertField || manualField;
         }
-        payload = { ...editedSheet, manualCheckpoints: checkpoints };
+        payload = { ...payload, manualCheckpoints: checkpoints };
       }
       const updatedSheet = await lpoWorkbookAPI.updateSheet(workbookId, sheet.id!, payload);
       onUpdate(updatedSheet);
@@ -563,7 +702,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     } catch (error: any) {
       console.error('Error saving entry:', error);
       if (error?.response?.status === 409) {
-        toast.error('Edit session expired — click the edit button to start a new edit.');
+        toast.error('Edit session expired — exited edit mode.');
         setEditingRow(null);
         setEditCheckpoint({
           open: false,
@@ -578,7 +717,8 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         });
         await releaseLockIfNeeded();
       } else {
-        toast.error('Error saving entry. Please try again.');
+        const msg = error?.response?.data?.message || 'Error saving entry. Please try again.';
+        toast.error(msg);
       }
     } finally {
       setIsSaving(false);
@@ -698,16 +838,27 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     await releaseLockIfNeeded();
   };
 
-  /** Acquire lock before starting row-level edit */
+  /** Acquire per-entry lock before starting row-level edit (other trucks stay editable). */
   const handleStartRowEdit = async (index: number) => {
     const sheetId = sheet.id;
+    const entry = editedSheet.entries[index];
+    const eid = entryLockId(entry, index);
     if (sheetId) {
+      if (!eid) {
+        toast.error('This truck entry has no id yet — refresh the sheet and try again.');
+        return;
+      }
       try {
-        await lpoDocumentsAPI.acquireLock(sheetId);
+        const res = await lpoDocumentsAPI.acquireLock(sheetId, { entryId: eid });
+        rememberHeldLock({
+          scope: 'entry',
+          entryId: eid,
+          lockedUntil: String(res?.lockedUntil || ''),
+        });
       } catch (err: any) {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-          toast.error(`This LPO is being edited by ${lockHolder}.`);
+          toast.error(`This truck is being edited by ${lockHolder}.`);
         } else {
           toast.error('Could not acquire edit lock. Please try again.');
         }
@@ -717,7 +868,6 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setEditingRow(index);
 
     // Hydrate journey for direction toggle — do not overwrite liters/DO/truck on the row.
-    const entry = editedSheet.entries[index];
     if (entryDirections[index]) {
       editOriginDirectionRef.current[index] = entryDirections[index];
     }
@@ -889,14 +1039,23 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setIsSaving(true);
 
     try {
-      // Acquire edit lock before saving
-      if (sheet.id) {
+      // Acquire per-truck lock before cancelling
+      if (sheet.id && cancellingEntryIndex != null) {
+        const eid = entryLockId(editedSheet.entries[cancellingEntryIndex], cancellingEntryIndex);
         try {
-          await lpoDocumentsAPI.acquireLock(sheet.id);
+          const res = await lpoDocumentsAPI.acquireLock(
+            sheet.id,
+            eid ? { entryId: eid } : undefined,
+          );
+          rememberHeldLock({
+            scope: eid ? 'entry' : 'doc',
+            entryId: eid || undefined,
+            lockedUntil: String(res?.lockedUntil || ''),
+          });
         } catch (err: any) {
           if (err.response?.status === 423) {
             const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-            toast.error(`This LPO is being edited by ${lockHolder}.`);
+            toast.error(`This truck is being edited by ${lockHolder}.`);
             return;
           }
         }
@@ -915,10 +1074,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         .reduce((sum, e) => sum + e.amount, 0);
 
       const targetEntry = updatedEntries[cancellingEntryIndex];
+      const cancelEntryId = entryLockId(targetEntry, cancellingEntryIndex);
       const updatedSheet: any = {
         ...editedSheet,
         entries: updatedEntries,
-        total: newTotal
+        total: newTotal,
+        ...(cancelEntryId ? { editLockEntryId: cancelEntryId } : {}),
       };
       // Manual checkpoint override (automation OFF) — backend reverts the chosen column.
       if (needsManualCheckpoint && cancelManualField) {
@@ -1007,14 +1168,23 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     setIsSaving(true);
 
     try {
-      // Acquire edit lock before saving
+      // Acquire per-truck lock before restoring
       if (sheet.id) {
+        const eid = entryLockId(editedSheet.entries[index], index);
         try {
-          await lpoDocumentsAPI.acquireLock(sheet.id);
+          const res = await lpoDocumentsAPI.acquireLock(
+            sheet.id,
+            eid ? { entryId: eid } : undefined,
+          );
+          rememberHeldLock({
+            scope: eid ? 'entry' : 'doc',
+            entryId: eid || undefined,
+            lockedUntil: String(res?.lockedUntil || ''),
+          });
         } catch (err: any) {
           if (err.response?.status === 423) {
             const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
-            toast.error(`This LPO is being edited by ${lockHolder}.`);
+            toast.error(`This truck is being edited by ${lockHolder}.`);
             return;
           }
         }
@@ -1036,10 +1206,12 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         .filter(e => !e.isCancelled)
         .reduce((sum, e) => sum + e.amount, 0);
 
+      const restoreEntryId = entryLockId(originalEntry, index);
       const updatedSheet: any = {
         ...editedSheet,
         entries: updatedEntries,
-        total: newTotal
+        total: newTotal,
+        ...(restoreEntryId ? { editLockEntryId: restoreEntryId } : {}),
       };
       // Manual checkpoint override (automation OFF) — backend re-deducts the chosen column.
       if (manualField) {
@@ -1315,10 +1487,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       const returnDo = usableDo(result.returnDo) || usableDo(fr.returnDo);
       const returnDoMissing = !returnDo;
 
-      // Going → going DO. Returning with no return DO → leave DO empty (Detail Form parity).
-      // Returning with return DO → use it. Never write the literal "NIL" placeholder as DO.
+      // Going → going DO. Returning with no return DO → NIL placeholder (required field).
+      // Returning with return DO → use it. Never persist empty string as DO.
       const doNumber =
-        direction === 'going' ? goingDo : returnDoMissing ? '' : returnDo;
+        direction === 'going' ? goingDo || 'NIL' : returnDoMissing ? 'NIL' : returnDo;
 
       const dest =
         direction === 'going'
@@ -1577,17 +1749,27 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
         const prevTruck = formatTruckNumber(cur.truckNo || '').toUpperCase();
         const nextTruck = String(processedValue || '').toUpperCase();
         truckIdentityChanged = prevTruck !== nextTruck;
-        // Only DA / REF flags block truck lookup — not a cleared/empty DO
-        blockedAsNonFuel = !!cur.isDriverAccount || !!(cur as any).isRefer;
+        // NIL / DA / REF are non-fuel — keep their DO and skip journey lookup
+        blockedAsNonFuel =
+          !!cur.isDriverAccount ||
+          !!(cur as any).isRefer ||
+          isSpecialDo(cur.doNo || '');
       } else if (field === 'doNo') {
-        blockedAsNonFuel = !!cur.isDriverAccount || !!(cur as any).isRefer;
+        blockedAsNonFuel =
+          !!cur.isDriverAccount ||
+          !!(cur as any).isRefer ||
+          isSpecialDo(String(processedValue || ''));
       }
+
+      const keepSpecialDo =
+        truckIdentityChanged &&
+        (!!cur.isDriverAccount || !!(cur as any).isRefer || isSpecialDo(cur.doNo || ''));
 
       updatedEntries[index] = {
         ...cur,
         [field]: processedValue,
-        // Clear stale journey fields when truck changes; fetch will refill (Detail Form parity)
-        ...(truckIdentityChanged ? { doNo: '', dest: 'NIL' } : {}),
+        // Clear stale journey fields when a regular truck changes; preserve NIL/DA/REF DO
+        ...(truckIdentityChanged && !keepSpecialDo ? { doNo: 'NIL', dest: 'NIL' } : {}),
       };
 
       if (field === 'liters' || field === 'rate') {

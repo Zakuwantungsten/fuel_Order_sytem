@@ -5,13 +5,30 @@ import { EditLock, User } from '../models';
  * Shared edit-lock primitives operating on the dedicated `EditLock` collection.
  *
  * A lock is identified by (collectionName, documentId). For per-document edit
- * locks `documentId` is the record's id; for named "resource" locks (e.g. only
- * one DO-creation at a time) `documentId` is a synthetic key. These functions are
+ * locks `documentId` is the record's id; for per-entry locks on an LPO it is
+ * `${lpoId}::entry::${entryId}`; for named "resource" locks (e.g. only one
+ * DO-creation at a time) `documentId` is a synthetic key. These functions are
  * pure lock mechanics — broadcasting (the "Editing: …" badge) is the caller's job,
  * so resource locks can stay silent.
  */
 
 export const LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/** Separator used to nest an entry lock under a parent document id. */
+export const ENTRY_LOCK_SEP = '::entry::';
+
+export function makeEntryLockId(documentId: string, entryId: string): string {
+  return `${documentId}${ENTRY_LOCK_SEP}${entryId}`;
+}
+
+export function isEntryLockId(documentId: string): boolean {
+  return documentId.includes(ENTRY_LOCK_SEP);
+}
+
+export function parentDocIdFromEntryLock(documentId: string): string {
+  const idx = documentId.indexOf(ENTRY_LOCK_SEP);
+  return idx >= 0 ? documentId.slice(0, idx) : documentId;
+}
 
 /**
  * Resolve a friendly display name for a username ("First Last"), falling back to
@@ -31,10 +48,58 @@ function isDuplicateKeyError(err: any): boolean {
   return err && (err.code === 11000 || err.code === 11001);
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export interface AcquiredLock {
   lockedBy: string;
   lockedByName: string;
   lockedUntil: Date;
+}
+
+/**
+ * Block cross-scope conflicts:
+ * - Entry lock blocked if another user holds the parent document lock
+ * - Document lock blocked if another user holds any live entry lock under it
+ * Same-user locks are allowed (e.g. escalate from entry → document for pickup).
+ */
+async function assertNoScopeConflict(
+  collectionName: string,
+  documentId: string,
+  username: string,
+): Promise<void> {
+  const now = new Date();
+
+  if (isEntryLockId(documentId)) {
+    const parentId = parentDocIdFromEntryLock(documentId);
+    const parentLock = await EditLock.findOne({
+      collectionName,
+      documentId: parentId,
+      lockedUntil: { $gt: now },
+    }).lean();
+    if (parentLock && parentLock.lockedBy !== username) {
+      const holderName = parentLock.lockedByName
+        || (await getDisplayName(parentLock.lockedBy));
+      throw new ApiError(423, `Record is being edited by ${holderName}`)
+        .withData({ editLock: { lockedByName: holderName } });
+    }
+    return;
+  }
+
+  const entryLocks = await EditLock.find({
+    collectionName,
+    documentId: { $regex: `^${escapeRegex(documentId)}${ENTRY_LOCK_SEP}` },
+    lockedUntil: { $gt: now },
+    lockedBy: { $ne: username },
+  }).limit(1).lean();
+
+  if (entryLocks.length > 0) {
+    const lock = entryLocks[0];
+    const holderName = lock.lockedByName || (await getDisplayName(lock.lockedBy));
+    throw new ApiError(423, `Record is being edited by ${holderName}`)
+      .withData({ editLock: { lockedByName: holderName } });
+  }
 }
 
 /**
@@ -49,6 +114,8 @@ export async function acquireLock(
 ): Promise<AcquiredLock> {
   const now = new Date();
   const lockUntil = new Date(now.getTime() + LOCK_TTL_MS);
+
+  await assertNoScopeConflict(collectionName, documentId, username);
 
   try {
     // Match when the lock is free to take (ours already, or expired). upsert

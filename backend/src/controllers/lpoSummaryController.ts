@@ -1356,13 +1356,20 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
 export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const newData = req.body;
+  // Client may hold a per-entry lock (truck row) instead of the whole-LPO lock.
+  const editLockEntryId = newData?.editLockEntryId != null
+    ? String(newData.editLockEntryId).trim()
+    : '';
+  if (newData && typeof newData === 'object') {
+    delete newData.editLockEntryId;
+  }
 
   // Pre-flight: auth + lock enforcement (outside transaction — no writes needed)
   const username = req.user?.username;
     if (!username) throw new ApiError(401, 'Authentication required');
     const preflightLpo = await LPOSummary.findOne({ _id: id, isDeleted: false }).select('_id station').lean();
     if (!preflightLpo) throw new ApiError(404, 'LPO document not found');
-    await enforceEditLock(LPOSummary, id, username, 'lpo_summaries');
+    await enforceEditLock(LPOSummary, id, username, 'lpo_summaries', editLockEntryId || undefined);
 
     // Yard LPOs (Tanga/Dar): never run checkpoint fuel deduct/revert on update.
     // Entry appends and fuel linking go through the yard dual-read APIs

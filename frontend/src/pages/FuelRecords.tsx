@@ -17,6 +17,7 @@ import { exportToXLSXMultiSheet } from '../utils/csvParser';
 import { subscribeToNotifications, unsubscribeFromNotifications } from '../services/websocket';
 import { useRealtimeSync, isOwnDataChange } from '../hooks/useRealtimeSync';
 import { useEditLockSync } from '../hooks/useEditLockSync';
+import { useEditLockSession } from '../hooks/useEditLockSession';
 import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
 import { NewRecordsPill } from '../components/NewRecordsPill';
 import { countRelevantNewRecords } from '../utils/realtimeRelevance';
@@ -146,6 +147,7 @@ const FuelRecords = () => {
   const [searchTerm, setSearchTerm] = usePersistedState('fr:searchTerm', '');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FuelRecord | undefined>();
+  const [editLockUntil, setEditLockUntil] = useState<string | null>(null);
   const [routeFilter, setRouteFilter] = usePersistedState('fr:routeFilter', '');
   const [routeTypeFilter, setRouteTypeFilter] = usePersistedState<'IMPORT' | 'EXPORT'>('fr:routeTypeFilter', 'IMPORT');
   const [statusFilter, setStatusFilter] = usePersistedState<'all' | 'active' | 'cancelled'>('fr:statusFilter', 'all');
@@ -759,7 +761,8 @@ const FuelRecords = () => {
     const recordId = record.id || (record as any)._id;
     if (recordId) {
       try {
-        await fuelRecordsAPI.acquireLock(recordId);
+        const res = await fuelRecordsAPI.acquireLock(recordId);
+        setEditLockUntil(String(res?.lockedUntil || ''));
       } catch (err: any) {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
@@ -783,19 +786,25 @@ const FuelRecords = () => {
     }
     setIsFormOpen(false);
     setSelectedRecord(undefined);
+    setEditLockUntil(null);
   };
 
-  // Renew the edit lock every 3 minutes while the form is open so it doesn't
-  // expire mid-edit (lock TTL is 5 minutes; 3-minute renewal keeps it alive).
-  useEffect(() => {
-    if (!isFormOpen || !selectedRecord) return;
-    const recordId = selectedRecord.id || (selectedRecord as any)._id;
-    if (!recordId) return;
-    const interval = setInterval(async () => {
-      try { await fuelRecordsAPI.acquireLock(recordId); } catch { /* silent — user will be informed on save */ }
-    }, 3 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [isFormOpen, selectedRecord]);
+  // Renew while open; auto-exit edit mode the moment the lock TTL elapses.
+  useEditLockSession({
+    active: isFormOpen && !!selectedRecord && !!editLockUntil,
+    lockedUntil: editLockUntil,
+    onExpire: () => {
+      toast.warn('Edit session expired — exited edit mode.');
+      void handleCloseForm();
+    },
+    renew: async () => {
+      const recordId = selectedRecord?.id || (selectedRecord as any)?._id;
+      if (!recordId) return;
+      const res = await fuelRecordsAPI.acquireLock(recordId);
+      if (res?.lockedUntil) setEditLockUntil(String(res.lockedUntil));
+      return { lockedUntil: res?.lockedUntil };
+    },
+  });
 
   const handleRowClick = (record: FuelRecord) => {
     const recordId = record.id || (record as any)._id;

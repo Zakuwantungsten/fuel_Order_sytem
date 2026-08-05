@@ -8,6 +8,7 @@ import {
 import FuelRecordInspectModal from './FuelRecordInspectModal';
 import { useAuth } from '../contexts/AuthContext';
 import { tangaLPOAPI } from '../services/api';
+import { useEditLockSession } from '../hooks/useEditLockSession';
 import TangaYardLPOForm from './TangaYardLPOForm';
 import TangaLPOEntryForm from './TangaLPOEntryForm';
 import TangaLPOPrint from './TangaLPOPrint';
@@ -920,6 +921,8 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
   // Entry modals
   const [showYardAddForm, setShowYardAddForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<{ index: number; entry: TangaLPOEntry } | null>(null);
+  const [entryLockUntil, setEntryLockUntil] = useState<string | null>(null);
+  const [entryLockId, setEntryLockId] = useState<string | null>(null);
   const [amendingEntry, setAmendingEntry] = useState<TangaLPOEntry | null>(null);
   const [cancellingEntry, setCancellingEntry] = useState<TangaLPOEntry | null>(null);
   const [linkingEntry, setLinkingEntry] = useState<TangaLPOEntry | null>(null);
@@ -1011,6 +1014,51 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
     }
   };
 
+  const startEntryEdit = async (index: number, entry: TangaLPOEntry) => {
+    const eid = entry._id ? String(entry._id) : null;
+    if (!eid) {
+      toast.error('This truck entry has no id yet — refresh and try again.');
+      return;
+    }
+    try {
+      const res = await tangaLPOAPI.acquireLock(lpoId, { entryId: eid });
+      setEntryLockId(eid);
+      setEntryLockUntil(String(res?.lockedUntil || ''));
+      setEditingEntry({ index, entry });
+    } catch (err: any) {
+      if (err?.response?.status === 423) {
+        const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+        toast.error(`This truck is being edited by ${holder}`);
+      } else {
+        toast.error(err?.response?.data?.message || 'Could not acquire edit lock');
+      }
+    }
+  };
+
+  const closeEntryEdit = async () => {
+    if (entryLockId) {
+      await tangaLPOAPI.releaseLock(lpoId, { entryId: entryLockId }).catch(() => {});
+    }
+    setEditingEntry(null);
+    setEntryLockId(null);
+    setEntryLockUntil(null);
+  };
+
+  useEditLockSession({
+    active: !!editingEntry && !!entryLockUntil,
+    lockedUntil: entryLockUntil,
+    onExpire: () => {
+      toast.warn('Edit session expired — exited edit mode.');
+      void closeEntryEdit();
+    },
+    renew: async () => {
+      if (!entryLockId) return;
+      const res = await tangaLPOAPI.acquireLock(lpoId, { entryId: entryLockId });
+      if (res?.lockedUntil) setEntryLockUntil(String(res.lockedUntil));
+      return { lockedUntil: res?.lockedUntil };
+    },
+  });
+
   const handleEditEntry = async (updatedEntry: Omit<TangaLPOEntry, '_id'>) => {
     if (!editingEntry) return;
     // Liters / dispense / context / linkage only change via Amend.
@@ -1027,22 +1075,37 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
     };
     setIsSaving(true);
     try {
-      await tangaLPOAPI.acquireLock(lpoId);
+      const eid = entryLockId || (editingEntry.entry._id ? String(editingEntry.entry._id) : undefined);
+      if (!eid) {
+        await tangaLPOAPI.acquireLock(lpoId);
+      }
       try {
         const updatedEntries = lpo.entries.map((e, i) =>
           i === editingEntry.index ? { ...editingEntry.entry, ...safeEntry } : e
         );
-        const updated = await tangaLPOAPI.update(lpoId, { entries: updatedEntries });
+        const updated = await tangaLPOAPI.update(lpoId, {
+          entries: updatedEntries,
+          ...(eid ? { editLockEntryId: eid } : {}),
+        } as any);
         toast.success('Entry updated');
         handleMutationResult(updated as TangaLPO);
         setEditingEntry(null);
+        setEntryLockId(null);
+        setEntryLockUntil(null);
       } finally {
-        await tangaLPOAPI.releaseLock(lpoId).catch(() => {});
+        if (eid) {
+          await tangaLPOAPI.releaseLock(lpoId, { entryId: eid }).catch(() => {});
+        } else {
+          await tangaLPOAPI.releaseLock(lpoId).catch(() => {});
+        }
       }
     } catch (err: any) {
       if (err?.response?.status === 423) {
         const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
         toast.error(`Locked by ${holder} — try again later`);
+      } else if (err?.response?.status === 409) {
+        toast.warn('Edit session expired — exited edit mode.');
+        await closeEntryEdit();
       } else {
         toast.error(err?.response?.data?.message || 'Failed to update entry');
       }
@@ -1593,7 +1656,7 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
                               </button>
                             )}
                             <button
-                              onClick={() => setEditingEntry({ index: realIdx, entry })}
+                              onClick={() => startEntryEdit(realIdx, entry)}
                               disabled={isSaving}
                               className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#dde3ec] bg-white text-[#344256] text-[12px] font-bold disabled:opacity-50"
                             >
@@ -1793,7 +1856,7 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
                           </button>
                         )}
                         <button
-                          onClick={() => setEditingEntry({ index: realIdx, entry })}
+                          onClick={() => startEntryEdit(realIdx, entry)}
                           disabled={isSaving}
                           className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 disabled:opacity-40"
                           title="Edit"
@@ -1912,11 +1975,10 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
           lockLiters
           onAmendLiters={() => {
             const row = editingEntry.entry;
-            setEditingEntry(null);
-            setAmendingEntry(row);
+            void closeEntryEdit().then(() => setAmendingEntry(row));
           }}
           onSave={handleEditEntry}
-          onClose={() => setEditingEntry(null)}
+          onClose={() => { void closeEntryEdit(); }}
         />
       )}
 

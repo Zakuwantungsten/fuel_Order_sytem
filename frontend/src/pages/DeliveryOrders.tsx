@@ -22,6 +22,7 @@ import { useTruckBatches } from '../hooks/useTruckBatches';
 import { useRoutes } from '../hooks/useRoutes';
 import { useRealtimeSync, isOwnDataChange } from '../hooks/useRealtimeSync';
 import { useEditLockSync } from '../hooks/useEditLockSync';
+import { useEditLockSession } from '../hooks/useEditLockSession';
 import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
 import { NewRecordsPill } from '../components/NewRecordsPill';
 import { countRelevantNewRecords } from '../utils/realtimeRelevance';
@@ -72,6 +73,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editLockUntil, setEditLockUntil] = useState<string | null>(null);
   const [isBulkFormOpen, setIsBulkFormOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isAmendedDOsModalOpen, setIsAmendedDOsModalOpen] = useState(false);
@@ -524,12 +526,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   // Creation lock: only one DO creation (single-form OR bulk) may be in progress
   // at a time, globally. We acquire a 'do_create' resource lock whenever a create
   // UI is open (editing an existing DO uses the per-document lock instead, so it's
-  // excluded) and release it when the UI closes. A held lock blocks the new flow.
+  // excluded) and release it when the UI closes. Auto-close when the lock TTL expires.
   const doCreateActive = (isFormOpen && !editingOrder) || isBulkFormOpen;
+  const [createLockUntil, setCreateLockUntil] = useState<string | null>(null);
   useEffect(() => {
-    if (!doCreateActive) return;
+    if (!doCreateActive) {
+      setCreateLockUntil(null);
+      return;
+    }
     let cancelled = false;
-    resourceLockAPI.acquire('do_create').catch((err: any) => {
+    resourceLockAPI.acquire('do_create').then((res) => {
+      if (!cancelled && res?.lockedUntil) setCreateLockUntil(String(res.lockedUntil));
+    }).catch((err: any) => {
       if (err?.response?.status === 423) {
         const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
         toast.error(`DO creation is currently in use by ${holder}. Please try again shortly.`);
@@ -543,9 +551,28 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     });
     return () => {
       cancelled = true;
+      setCreateLockUntil(null);
       resourceLockAPI.release('do_create').catch(() => { /* idempotent / not holder */ });
     };
   }, [doCreateActive]);
+
+  useEditLockSession({
+    active: doCreateActive && !!createLockUntil,
+    lockedUntil: createLockUntil,
+    onExpire: () => {
+      toast.warn('Create session expired — closing form.');
+      resourceLockAPI.release('do_create').catch(() => {});
+      setCreateLockUntil(null);
+      setIsFormOpen(false);
+      setEditingOrder(null);
+      setIsBulkFormOpen(false);
+    },
+    renew: async () => {
+      const res = await resourceLockAPI.acquire('do_create');
+      if (res?.lockedUntil) setCreateLockUntil(String(res.lockedUntil));
+      return { lockedUntil: res?.lockedUntil };
+    },
+  });
 
   const handleExportWorkbook = async (year: number, workbookType?: string) => {
     try {
@@ -741,7 +768,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     const orderId = order.id || (order as any)._id;
     if (orderId) {
       try {
-        await deliveryOrdersAPI.acquireLock(orderId);
+        const res = await deliveryOrdersAPI.acquireLock(orderId);
+        setEditLockUntil(String(res?.lockedUntil || ''));
       } catch (err: any) {
         if (err.response?.status === 423) {
           const lockHolder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
@@ -765,7 +793,24 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     }
     setEditingOrder(null);
     setIsFormOpen(false);
+    setEditLockUntil(null);
   };
+
+  useEditLockSession({
+    active: isFormOpen && !!editingOrder && !editingOrder.isPendingDo && !!editLockUntil,
+    lockedUntil: editLockUntil,
+    onExpire: () => {
+      toast.warn('Edit session expired — exited edit mode.');
+      void handleCloseForm();
+    },
+    renew: async () => {
+      const orderId = editingOrder?.id || (editingOrder as any)?._id;
+      if (!orderId || editingOrder?.isPendingDo) return;
+      const res = await deliveryOrdersAPI.acquireLock(orderId);
+      if (res?.lockedUntil) setEditLockUntil(String(res.lockedUntil));
+      return { lockedUntil: res?.lockedUntil };
+    },
+  });
 
   const handleSaveOrder = async (orderData: Partial<DeliveryOrder>): Promise<DeliveryOrder | void> => {
     try {

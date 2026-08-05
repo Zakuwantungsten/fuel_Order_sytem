@@ -7,6 +7,7 @@
 
 const mockEditLock = {
   findOne: jest.fn(),
+  find: jest.fn(),
   findOneAndUpdate: jest.fn(),
   findOneAndDelete: jest.fn(),
 };
@@ -55,6 +56,15 @@ beforeEach(() => {
   mockUser.findOne.mockReturnValue({
     select: jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue({ firstName: 'Alice', lastName: 'A' }),
+    }),
+  });
+  // Scope-conflict checks (parent/entry) — default to no conflicting locks
+  mockEditLock.findOne.mockReturnValue({
+    lean: jest.fn().mockResolvedValue(null),
+  });
+  mockEditLock.find.mockReturnValue({
+    limit: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue([]),
     }),
   });
 });

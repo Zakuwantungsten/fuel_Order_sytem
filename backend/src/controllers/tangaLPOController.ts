@@ -329,6 +329,12 @@ export const createTangaLPO = async (req: AuthRequest, res: Response): Promise<v
 export const updateTangaLPO = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const newData = req.body;
+  const editLockEntryId = newData?.editLockEntryId != null
+    ? String(newData.editLockEntryId).trim()
+    : '';
+  if (newData && typeof newData === 'object') {
+    delete newData.editLockEntryId;
+  }
 
   const resolved = await findYardLpoById(YARD, id);
   if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
@@ -337,7 +343,7 @@ export const updateTangaLPO = async (req: AuthRequest, res: Response): Promise<v
   if (!username) throw new ApiError(401, 'Authentication required');
   const LockModel = resolved.source === 'legacy' ? TangaLPODocument : LPOSummary;
   const lockChannel = resolved.source === 'legacy' ? 'tanga_lpo_documents' : 'lpo_summaries';
-  await enforceEditLock(LockModel as any, id, username, lockChannel);
+  await enforceEditLock(LockModel as any, id, username, lockChannel, editLockEntryId || undefined);
 
   if (newData.date) {
     newData.year = new Date(newData.date).getFullYear();

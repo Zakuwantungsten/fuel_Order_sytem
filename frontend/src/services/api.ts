@@ -486,7 +486,7 @@ export const deliveryOrdersAPI = {
   // Edit lock management
   acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
     const response = await apiClient.post(`/delivery-orders/${id}/lock`);
-    return response.data;
+    return response.data?.data ?? response.data;
   },
 
   releaseLock: async (id: string | number): Promise<void> => {
@@ -1142,14 +1142,23 @@ export const lpoDocumentsAPI = {
     return response.data.data;
   },
 
-  // Edit lock management
-  acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
-    const response = await apiClient.post(`/lpo-documents/${id}/lock`);
-    return response.data;
+  // Edit lock management — optional entryId locks one truck row so other users
+  // can edit different entries on the same LPO at the same time.
+  acquireLock: async (
+    id: string | number,
+    opts?: { entryId?: string },
+  ): Promise<{ lockedUntil: string; entryId?: string | null }> => {
+    const response = await apiClient.post(
+      `/lpo-documents/${id}/lock`,
+      opts?.entryId ? { entryId: opts.entryId } : {},
+    );
+    return response.data?.data ?? response.data;
   },
 
-  releaseLock: async (id: string | number): Promise<void> => {
-    await apiClient.delete(`/lpo-documents/${id}/lock`);
+  releaseLock: async (id: string | number, opts?: { entryId?: string }): Promise<void> => {
+    await apiClient.delete(`/lpo-documents/${id}/lock`, {
+      params: opts?.entryId ? { entryId: opts.entryId } : undefined,
+    });
   },
 
 };
@@ -1444,7 +1453,7 @@ export const fuelRecordsAPI = {
   // Edit lock management
   acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
     const response = await apiClient.post(`/fuel-records/${id}/lock`);
-    return response.data;
+    return response.data?.data ?? response.data;
   },
 
   releaseLock: async (id: string | number): Promise<void> => {
@@ -2963,12 +2972,17 @@ export const tangaLPOAPI = {
     const response = await apiClient.post(`/tanga-lpo/${id}/cancel-all`, { cancellationReason });
     return response.data.data;
   },
-  acquireLock: async (id: string) => {
-    const response = await apiClient.post(`/tanga-lpo/${id}/lock`);
+  acquireLock: async (id: string, opts?: { entryId?: string }) => {
+    const response = await apiClient.post(
+      `/tanga-lpo/${id}/lock`,
+      opts?.entryId ? { entryId: opts.entryId } : {},
+    );
     return response.data.data;
   },
-  releaseLock: async (id: string) => {
-    const response = await apiClient.delete(`/tanga-lpo/${id}/lock`);
+  releaseLock: async (id: string, opts?: { entryId?: string }) => {
+    const response = await apiClient.delete(`/tanga-lpo/${id}/lock`, {
+      params: opts?.entryId ? { entryId: opts.entryId } : undefined,
+    });
     return response.data.data;
   },
   manualLink: async (data: { lpoId: string; entryId: string; doNo: string; dispenseLiters?: number }) => {
@@ -3116,12 +3130,17 @@ export const darLPOAPI = {
     const response = await apiClient.post(`/dar-lpo/${id}/cancel-all`, { cancellationReason });
     return response.data.data;
   },
-  acquireLock: async (id: string) => {
-    const response = await apiClient.post(`/dar-lpo/${id}/lock`);
+  acquireLock: async (id: string, opts?: { entryId?: string }) => {
+    const response = await apiClient.post(
+      `/dar-lpo/${id}/lock`,
+      opts?.entryId ? { entryId: opts.entryId } : {},
+    );
     return response.data.data;
   },
-  releaseLock: async (id: string) => {
-    const response = await apiClient.delete(`/dar-lpo/${id}/lock`);
+  releaseLock: async (id: string, opts?: { entryId?: string }) => {
+    const response = await apiClient.delete(`/dar-lpo/${id}/lock`, {
+      params: opts?.entryId ? { entryId: opts.entryId } : undefined,
+    });
     return response.data.data;
   },
   manualLink: async (data: { lpoId: string; entryId: string; doNo: string; dispenseLiters?: number }) => {

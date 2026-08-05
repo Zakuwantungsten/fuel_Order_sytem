@@ -6,6 +6,7 @@ import YardEntriesTable from './YardEntriesTable';
 import type { YardEntriesTableHandle } from './YardEntriesTable';
 import { isYardStation, isDarYardStation, YARD_STATION, YARD_DEFAULT_ORDER_OF } from '../utils/yardStations';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
+import { useEditLockSession } from '../hooks/useEditLockSession';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
 import { useQueryClient } from '@tanstack/react-query';
@@ -452,11 +453,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   // Creation lock: only one user may use the new-LPO form at a time. Acquire a
   // global 'lpo_create' resource lock while the form is open (creating only),
-  // and release it on close/unmount. The 5-minute TTL backs out abandoned locks.
+  // and release it on close/unmount. Auto-close when the lock TTL expires.
+  const [createLockUntil, setCreateLockUntil] = useState<string | null>(null);
   useEffect(() => {
-    if (!isOpen || initialData) return;
+    if (!isOpen || initialData) {
+      setCreateLockUntil(null);
+      return;
+    }
     let cancelled = false;
-    resourceLockAPI.acquire('lpo_create').catch((err: any) => {
+    resourceLockAPI.acquire('lpo_create').then((res) => {
+      if (!cancelled && res?.lockedUntil) setCreateLockUntil(String(res.lockedUntil));
+    }).catch((err: any) => {
       if (err?.response?.status === 423) {
         const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
         toast.error(`The LPO form is currently being used by ${holder}. Please try again shortly.`);
@@ -466,11 +473,28 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     });
     return () => {
       cancelled = true;
+      setCreateLockUntil(null);
       resourceLockAPI.release('lpo_create').catch(() => { /* idempotent / not holder */ });
     };
     // onClose intentionally omitted — captured by closure; effect keys on open state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialData]);
+
+  useEditLockSession({
+    active: isOpen && !initialData && !!createLockUntil,
+    lockedUntil: createLockUntil,
+    onExpire: () => {
+      toast.warn('Create session expired — closing form.');
+      resourceLockAPI.release('lpo_create').catch(() => {});
+      setCreateLockUntil(null);
+      onClose();
+    },
+    renew: async () => {
+      const res = await resourceLockAPI.acquire('lpo_create');
+      if (res?.lockedUntil) setCreateLockUntil(String(res.lockedUntil));
+      return { lockedUntil: res?.lockedUntil };
+    },
+  });
 
   // Forward LPO Modal state
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);

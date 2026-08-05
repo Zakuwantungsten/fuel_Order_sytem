@@ -8,6 +8,7 @@ import {
 import FuelRecordInspectModal from './FuelRecordInspectModal';
 import { useAuth } from '../contexts/AuthContext';
 import { darLPOAPI } from '../services/api';
+import { useEditLockSession } from '../hooks/useEditLockSession';
 import DarYardLPOForm from './DarYardLPOForm';
 import DarLPOEntryForm from './DarLPOEntryForm';
 import DarLPOPrint from './DarLPOPrint';
@@ -857,6 +858,8 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
 
   const [showYardAddForm, setShowYardAddForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<{ index: number; entry: DarLPOEntry } | null>(null);
+  const [entryLockUntil, setEntryLockUntil] = useState<string | null>(null);
+  const [entryLockId, setEntryLockId] = useState<string | null>(null);
   const [amendingEntry, setAmendingEntry] = useState<DarLPOEntry | null>(null);
   const [cancellingEntry, setCancellingEntry] = useState<DarLPOEntry | null>(null);
   const [linkingEntry, setLinkingEntry] = useState<DarLPOEntry | null>(null);
@@ -948,6 +951,51 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
     }
   };
 
+  const startEntryEdit = async (index: number, entry: DarLPOEntry) => {
+    const eid = entry._id ? String(entry._id) : null;
+    if (!eid) {
+      toast.error('This truck entry has no id yet — refresh and try again.');
+      return;
+    }
+    try {
+      const res = await darLPOAPI.acquireLock(lpoId, { entryId: eid });
+      setEntryLockId(eid);
+      setEntryLockUntil(String(res?.lockedUntil || ''));
+      setEditingEntry({ index, entry });
+    } catch (err: any) {
+      if (err?.response?.status === 423) {
+        const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
+        toast.error(`This truck is being edited by ${holder}`);
+      } else {
+        toast.error(err?.response?.data?.message || 'Could not acquire edit lock');
+      }
+    }
+  };
+
+  const closeEntryEdit = async () => {
+    if (entryLockId) {
+      await darLPOAPI.releaseLock(lpoId, { entryId: entryLockId }).catch(() => {});
+    }
+    setEditingEntry(null);
+    setEntryLockId(null);
+    setEntryLockUntil(null);
+  };
+
+  useEditLockSession({
+    active: !!editingEntry && !!entryLockUntil,
+    lockedUntil: entryLockUntil,
+    onExpire: () => {
+      toast.warn('Edit session expired — exited edit mode.');
+      void closeEntryEdit();
+    },
+    renew: async () => {
+      if (!entryLockId) return;
+      const res = await darLPOAPI.acquireLock(lpoId, { entryId: entryLockId });
+      if (res?.lockedUntil) setEntryLockUntil(String(res.lockedUntil));
+      return { lockedUntil: res?.lockedUntil };
+    },
+  });
+
   const handleEditEntry = async (updatedEntry: Omit<DarLPOEntry, '_id'>) => {
     if (!editingEntry) return;
     // Liters / dispense / context / linkage only change via Amend.
@@ -964,22 +1012,38 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
     };
     setIsSaving(true);
     try {
-      await darLPOAPI.acquireLock(lpoId);
+      const eid = entryLockId || (editingEntry.entry._id ? String(editingEntry.entry._id) : undefined);
+      // Lock already held from startEntryEdit — renew if needed, then save
+      if (!eid) {
+        await darLPOAPI.acquireLock(lpoId);
+      }
       try {
         const updatedEntries = lpo.entries.map((e, i) =>
           i === editingEntry.index ? { ...editingEntry.entry, ...safeEntry } : e
         );
-        const updated = await darLPOAPI.update(lpoId, { entries: updatedEntries });
+        const updated = await darLPOAPI.update(lpoId, {
+          entries: updatedEntries,
+          ...(eid ? { editLockEntryId: eid } : {}),
+        } as any);
         toast.success('Entry updated');
         handleMutationResult(updated as DarLPO);
         setEditingEntry(null);
+        setEntryLockId(null);
+        setEntryLockUntil(null);
       } finally {
-        await darLPOAPI.releaseLock(lpoId).catch(() => {});
+        if (eid) {
+          await darLPOAPI.releaseLock(lpoId, { entryId: eid }).catch(() => {});
+        } else {
+          await darLPOAPI.releaseLock(lpoId).catch(() => {});
+        }
       }
     } catch (err: any) {
       if (err?.response?.status === 423) {
         const holder = err.response?.data?.data?.editLock?.lockedByName || 'another user';
         toast.error(`Locked by ${holder} — try again later`);
+      } else if (err?.response?.status === 409) {
+        toast.warn('Edit session expired — exited edit mode.');
+        await closeEntryEdit();
       } else {
         toast.error(err?.response?.data?.message || 'Failed to update entry');
       }
@@ -1449,7 +1513,7 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
                                 <Link2 className="w-3.5 h-3.5" /> Link
                               </button>
                             )}
-                            <button onClick={() => setEditingEntry({ index: realIdx, entry })} disabled={isSaving}
+                            <button onClick={() => startEntryEdit(realIdx, entry)} disabled={isSaving}
                               className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#dde3ec] bg-white text-[#344256] text-[12px] font-bold disabled:opacity-50">
                               <Edit2 className="w-3.5 h-3.5" /> Edit
                             </button>
@@ -1614,7 +1678,7 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
                             <Link2 className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        <button onClick={() => setEditingEntry({ index: realIdx, entry })} disabled={isSaving}
+                        <button onClick={() => startEntryEdit(realIdx, entry)} disabled={isSaving}
                           className="p-1 text-green-600 hover:text-green-800 dark:text-green-400 disabled:opacity-40" title="Edit">
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -1706,11 +1770,10 @@ export default function DarLPOSheetView({ lpo: initialLpo, onUpdated, onBack, in
           lockLiters
           onAmendLiters={() => {
             const row = editingEntry.entry;
-            setEditingEntry(null);
-            setAmendingEntry(row);
+            void closeEntryEdit().then(() => setAmendingEntry(row));
           }}
           onSave={handleEditEntry}
-          onClose={() => setEditingEntry(null)}
+          onClose={() => { void closeEntryEdit(); }}
         />
       )}
       {amendingEntry && (

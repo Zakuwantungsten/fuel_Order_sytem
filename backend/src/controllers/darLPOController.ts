@@ -315,6 +315,12 @@ export const createDarLPO = async (req: AuthRequest, res: Response): Promise<voi
 export const updateDarLPO = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const newData = req.body;
+  const editLockEntryId = newData?.editLockEntryId != null
+    ? String(newData.editLockEntryId).trim()
+    : '';
+  if (newData && typeof newData === 'object') {
+    delete newData.editLockEntryId;
+  }
 
   const resolved = await findYardLpoById(YARD, id);
   if (!resolved) throw new ApiError(404, 'Dar LPO not found');
@@ -323,7 +329,7 @@ export const updateDarLPO = async (req: AuthRequest, res: Response): Promise<voi
   if (!username) throw new ApiError(401, 'Authentication required');
   const LockModel = resolved.source === 'legacy' ? DarLPODocument : LPOSummary;
   const lockChannel = resolved.source === 'legacy' ? 'dar_lpo_documents' : 'lpo_summaries';
-  await enforceEditLock(LockModel as any, id, username, lockChannel);
+  await enforceEditLock(LockModel as any, id, username, lockChannel, editLockEntryId || undefined);
 
   if (newData.date) {
     newData.year = new Date(newData.date).getFullYear();
