@@ -266,12 +266,14 @@ export const createFuelStation = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    // At least one default liter value should be provided
-    if ((defaultLitersGoing == null || defaultLitersGoing === 0) && 
-        (defaultLitersReturning == null || defaultLitersReturning === 0)) {
+    // 0 liters = no fixed default (user enters freely). A formula for a direction
+    // also counts as configured — no numeric default is required in that case.
+    const goingLiters = defaultLitersGoing != null ? Number(defaultLitersGoing) : 0;
+    const returningLiters = defaultLitersReturning != null ? Number(defaultLitersReturning) : 0;
+    if (goingLiters < 0 || returningLiters < 0) {
       res.status(400).json({
         success: false,
-        message: 'At least one of defaultLitersGoing or defaultLitersReturning must be greater than 0',
+        message: 'Liters values cannot be negative',
       });
       return;
     }

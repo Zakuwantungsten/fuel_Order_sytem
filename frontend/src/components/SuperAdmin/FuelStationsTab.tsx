@@ -177,13 +177,11 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         return;
       }
 
-      const going = parseFloat(stationForm.defaultLitersGoing) || 0;
-      const returning = parseFloat(stationForm.defaultLitersReturning) || 0;
-      
-      if (going === 0 && returning === 0) {
-        onMessage('error', 'Please enter at least one: Default Liters Going or Default Liters Returning (must be greater than 0)');
-        return;
-      }
+      const hasFormulaGoing = !!stationForm.formulaGoing?.trim();
+      const hasFormulaReturning = !!stationForm.formulaReturning?.trim();
+      // Formula directions store 0 as default (formula supplies liters at fill time)
+      const going = hasFormulaGoing ? 0 : (parseFloat(stationForm.defaultLitersGoing) || 0);
+      const returning = hasFormulaReturning ? 0 : (parseFloat(stationForm.defaultLitersReturning) || 0);
 
       if (going < 0 || returning < 0) {
         onMessage('error', 'Liters values cannot be negative');
@@ -240,13 +238,11 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
         return;
       }
 
-      const going = parseFloat(stationForm.defaultLitersGoing) || 0;
-      const returning = parseFloat(stationForm.defaultLitersReturning) || 0;
-      
-      if (going === 0 && returning === 0) {
-        onMessage('error', 'Please enter at least one: Default Liters Going or Default Liters Returning (must be greater than 0)');
-        return;
-      }
+      const hasFormulaGoing = !!stationForm.formulaGoing?.trim();
+      const hasFormulaReturning = !!stationForm.formulaReturning?.trim();
+      // Formula directions store 0 as default (formula supplies liters at fill time)
+      const going = hasFormulaGoing ? 0 : (parseFloat(stationForm.defaultLitersGoing) || 0);
+      const returning = hasFormulaReturning ? 0 : (parseFloat(stationForm.defaultLitersReturning) || 0);
 
       if (going < 0 || returning < 0) {
         onMessage('error', 'Liters values cannot be negative');
@@ -599,20 +595,40 @@ export default function FuelStationsTab({ onMessage }: FuelStationsTabProps) {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Going (L)</label>
-                    <input type="number" value={stationForm.defaultLitersGoing} onChange={(e) => setStationForm({ ...stationForm, defaultLitersGoing: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="0 or 450" />
-                    <p className="mt-1 text-xs text-gray-500">0 if not used</p>
+                    {stationForm.formulaGoing?.trim() ? (
+                      <>
+                        <input type="text" value="Formula" readOnly
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-blue-700 dark:text-blue-300 font-medium cursor-not-allowed" />
+                        <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">Set by Going Formula below</p>
+                      </>
+                    ) : (
+                      <>
+                        <input type="number" value={stationForm.defaultLitersGoing} onChange={(e) => setStationForm({ ...stationForm, defaultLitersGoing: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="0 or 450" />
+                        <p className="mt-1 text-xs text-gray-500">0 = no default (user enters freely)</p>
+                      </>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Returning (L)</label>
-                    <input type="number" value={stationForm.defaultLitersReturning} onChange={(e) => setStationForm({ ...stationForm, defaultLitersReturning: e.target.value })}
-                      className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="0 or 400" />
-                    <p className="mt-1 text-xs text-gray-500">0 if not used</p>
+                    {stationForm.formulaReturning?.trim() ? (
+                      <>
+                        <input type="text" value="Formula" readOnly
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-blue-700 dark:text-blue-300 font-medium cursor-not-allowed" />
+                        <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">Set by Returning Formula below</p>
+                      </>
+                    ) : (
+                      <>
+                        <input type="number" value={stationForm.defaultLitersReturning} onChange={(e) => setStationForm({ ...stationForm, defaultLitersReturning: e.target.value })}
+                          className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" placeholder="0 or 400" />
+                        <p className="mt-1 text-xs text-gray-500">0 = no default (user enters freely)</p>
+                      </>
+                    )}
                   </div>
                 </div>
-                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
-                  <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                    ⚠️ At least one of Going or Returning must be greater than 0
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                  <p className="text-xs text-blue-800 dark:text-blue-200">
+                    Tip: Enter a formula below to calculate liters automatically — Default (L) becomes &quot;Formula&quot;. Use 0 when you want users to type any amount freely for that direction.
                   </p>
                 </div>
                 <div>
