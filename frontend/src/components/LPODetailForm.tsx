@@ -22,6 +22,7 @@ import ForwardLPOModal from './ForwardLPOModal';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
 import { toast } from 'react-toastify';
 import { isReturnDoMissing, pendingDoStatusLabel, isPendingDo } from '../utils/pendingDo';
+import { evaluateFormula } from '../utils/evaluateFormula';
 
 // STATIONS array removed - now using dynamic stations from database
 // CASH and CUSTOM are always available in the dropdown
@@ -1526,36 +1527,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       };
     }
   }, []);
-
-  /**
-   * Safely evaluate a mathematical formula with given context variables
-   * @param formula - The formula string (e.g., "balance - 900" or "((totalLiters + extraLiters) - 900)")
-   * @param context - Variables available in the formula (e.g., { totalLiters: 3500, extraLiters: 500, balance: 1560 })
-   * @returns The evaluated number or null if evaluation fails
-   */
-  const evaluateFormula = (formula: string, context: Record<string, number>): number | null => {
-    try {
-      // Create a safe function that evaluates the formula with context
-      const contextKeys = Object.keys(context);
-      const contextValues = Object.values(context);
-      
-      // Build a function that has access to the context variables
-      const evaluator = new Function(...contextKeys, `'use strict'; return (${formula});`);
-      
-      // Execute with context values
-      const result = evaluator(...contextValues);
-      
-      // Validate result is a number
-      if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
-        return Math.round(result); // Round to nearest integer for liters
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Formula evaluation error:', error);
-      return null;
-    }
-  };
 
   // Get default fuel amount based on station, direction, and destination
   // Special rules:
