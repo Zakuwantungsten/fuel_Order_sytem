@@ -1,5 +1,13 @@
 import { ClientSession } from 'mongoose';
-import { Counter, FuelRecord, LPOSummary, DarLPODocument, TangaLPODocument } from '../models';
+import {
+  Counter,
+  DeliveryOrder,
+  FuelRecord,
+  LPOSummary,
+  DarLPODocument,
+  TangaLPODocument,
+  PendingDoHistory,
+} from '../models';
 import {
   formatPendingDoNumber,
   isPendingGoingDo,
@@ -10,6 +18,7 @@ import {
   pickBestPendingReturnTarget,
 } from '../utils/pendingDoNumber';
 import logger from '../utils/logger';
+import { AuditService } from '../utils/auditService';
 import type { DeliveryOrderLike } from '../utils/fuelRecordCalculator';
 import { buildImportFuelRecord, buildReturnUpdate } from '../utils/fuelRecordCalculator';
 
@@ -25,7 +34,15 @@ export type PendingDoDisplayStatus =
   | 'completed_do_pending'
   | 'completed_return_do_pending'
   | 'completed_both_do_pending'
-  | 'cancelled';
+  | 'cancelled'
+  | 'assigned';
+
+export interface PendingPromotionContext {
+  username?: string;
+  userId?: string;
+  deliveryOrderId?: string;
+  ipAddress?: string;
+}
 
 /** Pending follow-up lists include completed journeys (imported going legs often land as completed). */
 const PENDING_LIST_JOURNEY_STATUSES = ['active', 'queued', 'completed'] as const;
@@ -176,6 +193,7 @@ export async function createPendingGoingFuelRecord(
     pendingConfigReason: 'both',
     isPendingGoing: true,
     isPendingReturn: false,
+    pendingGoingAt: new Date(),
     tangaYard: 0,
     darYard: 0,
     mmsaYard: 0,
@@ -214,6 +232,21 @@ export async function createPendingGoingFuelRecord(
   const created = session
     ? (await FuelRecord.create([payload], { session }))[0]
     : await FuelRecord.create(payload);
+
+  const historyPayload = {
+    kind: 'going' as const,
+    pendingDo,
+    truckNo,
+    fuelRecordId: created._id,
+    status: 'pending' as const,
+    pendingAt: payload.pendingGoingAt,
+    createdBy: input.username,
+  };
+  if (session) {
+    await PendingDoHistory.create([historyPayload], { session });
+  } else {
+    await PendingDoHistory.create(historyPayload);
+  }
 
   logger.info(
     `Pending going DO ${pendingDo} created for truck ${truckNo} by ${input.username} (status=${payload.journeyStatus})`
@@ -333,9 +366,25 @@ export async function createPendingReturnDo(
   }
   record.returnDo = pendingDo;
   record.isPendingReturn = true;
+  record.pendingReturnAt = new Date();
   record.from = TBA;
   record.to = TBA;
   await record.save({ session: session || undefined });
+
+  const historyPayload = {
+    kind: 'return' as const,
+    pendingDo,
+    truckNo,
+    fuelRecordId: record._id,
+    status: 'pending' as const,
+    pendingAt: record.pendingReturnAt,
+    createdBy: input.username,
+  };
+  if (session) {
+    await PendingDoHistory.create([historyPayload], { session });
+  } else {
+    await PendingDoHistory.create(historyPayload);
+  }
 
   logger.info(
     `Pending return DO ${pendingDo} attached to fuel record ${record._id} (truck ${truckNo}, status=${record.journeyStatus}) by ${input.username}`
@@ -436,10 +485,11 @@ export async function updatePendingDoFuelRecord(input: {
  * Prefer updating the pending record over inserting a duplicate journey.
  */
 export async function promotePendingGoingToImport(
-  order: DeliveryOrderLike & { truckNo: string; doNumber: string },
+  order: DeliveryOrderLike & { truckNo: string; doNumber: string; _id?: any; id?: string },
   totalLiters: number | null,
   extraFuel: number | null,
-  session?: ClientSession
+  session?: ClientSession,
+  ctx?: PendingPromotionContext
 ): Promise<{ promoted: boolean; fuelRecordId?: string; previousPendingDo?: string }> {
   const truckNo = order.truckNo;
   const pendingQuery = FuelRecord.findOne({
@@ -457,8 +507,11 @@ export async function promotePendingGoingToImport(
   }
 
   const previousPendingDo = pending.goingDo;
+  const pendingAssignedAt = pending.pendingGoingAt || pending.createdAt || new Date();
+  const promotedAt = new Date();
   const built = buildImportFuelRecord(order, totalLiters, extraFuel);
   const rec = built.fuelRecord;
+  const deliveryOrderId = String(ctx?.deliveryOrderId || order._id || order.id || '');
 
   // Preserve dispensed checkpoint liters and journey queue fields
   const update: Record<string, any> = {
@@ -473,6 +526,9 @@ export async function promotePendingGoingToImport(
     isLocked: rec.isLocked,
     pendingConfigReason: rec.pendingConfigReason,
     isPendingGoing: false,
+    previousPendingGoingDo: previousPendingDo,
+    previousPendingGoingAt: pendingAssignedAt,
+    previousPendingGoingPromotedAt: promotedAt,
     balance: recalculateBalancePreservingCheckpoints(pending, rec.totalLts, rec.extra),
   };
 
@@ -484,6 +540,47 @@ export async function promotePendingGoingToImport(
     newDest: order.destination || rec.to,
     truckNo,
     session,
+  });
+
+  await markPendingDoAssigned({
+    kind: 'going',
+    pendingDo: previousPendingDo,
+    fuelRecordId: String(pending._id),
+    truckNo,
+    realDoNumber: order.doNumber,
+    deliveryOrderId: deliveryOrderId || undefined,
+    pendingAt: pendingAssignedAt,
+    promotedAt,
+    promotedBy: ctx?.username,
+    session,
+  });
+
+  if (deliveryOrderId) {
+    await DeliveryOrder.updateOne(
+      { _id: deliveryOrderId },
+      {
+        $set: {
+          promotedFromPendingDo: previousPendingDo,
+          promotedFromPendingAt: promotedAt,
+          pendingAssignedAt: pendingAssignedAt,
+        },
+      },
+      session ? { session } : {}
+    );
+  }
+
+  await writePromotionAudits({
+    kind: 'going',
+    previousPendingDo,
+    realDoNumber: order.doNumber,
+    truckNo,
+    fuelRecordId: String(pending._id),
+    deliveryOrderId: deliveryOrderId || undefined,
+    pendingAssignedAt,
+    promotedAt,
+    username: ctx?.username || 'system',
+    userId: ctx?.userId,
+    ipAddress: ctx?.ipAddress,
   });
 
   logger.info(
@@ -503,9 +600,10 @@ export async function promotePendingGoingToImport(
  */
 export async function promotePendingReturnToExport(
   existingRecord: Record<string, any>,
-  returnDeliveryOrder: DeliveryOrderLike & { doNumber: string; truckNo?: string },
+  returnDeliveryOrder: DeliveryOrderLike & { doNumber: string; truckNo?: string; _id?: any; id?: string },
   exportRouteLiters: number,
-  session?: ClientSession
+  session?: ClientSession,
+  ctx?: PendingPromotionContext
 ): Promise<{ update: Record<string, any>; info: Record<string, any>; previousPendingDo?: string }> {
   const previousPendingDo =
     isPendingReturnDo(existingRecord.returnDo) || existingRecord.isPendingReturn
@@ -515,17 +613,191 @@ export async function promotePendingReturnToExport(
   const { update, info } = buildReturnUpdate(existingRecord, returnDeliveryOrder, exportRouteLiters);
   update.isPendingReturn = false;
 
+  const promotedAt = new Date();
+  const pendingAssignedAt =
+    existingRecord.pendingReturnAt || existingRecord.updatedAt || existingRecord.createdAt || promotedAt;
+  const deliveryOrderId = String(
+    ctx?.deliveryOrderId || returnDeliveryOrder._id || returnDeliveryOrder.id || ''
+  );
+  const truckNo = returnDeliveryOrder.truckNo || existingRecord.truckNo;
+
   if (previousPendingDo) {
+    update.previousPendingReturnDo = previousPendingDo;
+    update.previousPendingReturnAt = pendingAssignedAt;
+    update.previousPendingReturnPromotedAt = promotedAt;
+
     await replacePendingDoReferences({
       previousDo: previousPendingDo,
       newDo: returnDeliveryOrder.doNumber,
       newDest: returnDeliveryOrder.destination || update.to,
-      truckNo: returnDeliveryOrder.truckNo || existingRecord.truckNo,
+      truckNo,
       session,
+    });
+
+    await markPendingDoAssigned({
+      kind: 'return',
+      pendingDo: previousPendingDo,
+      fuelRecordId: String(existingRecord._id),
+      truckNo,
+      realDoNumber: returnDeliveryOrder.doNumber,
+      deliveryOrderId: deliveryOrderId || undefined,
+      pendingAt: pendingAssignedAt,
+      promotedAt,
+      promotedBy: ctx?.username,
+      session,
+    });
+
+    if (deliveryOrderId) {
+      await DeliveryOrder.updateOne(
+        { _id: deliveryOrderId },
+        {
+          $set: {
+            promotedFromPendingDo: previousPendingDo,
+            promotedFromPendingAt: promotedAt,
+            pendingAssignedAt: pendingAssignedAt,
+          },
+        },
+        session ? { session } : {}
+      );
+    }
+
+    await writePromotionAudits({
+      kind: 'return',
+      previousPendingDo,
+      realDoNumber: returnDeliveryOrder.doNumber,
+      truckNo,
+      fuelRecordId: String(existingRecord._id),
+      deliveryOrderId: deliveryOrderId || undefined,
+      pendingAssignedAt,
+      promotedAt,
+      username: ctx?.username || 'system',
+      userId: ctx?.userId,
+      ipAddress: ctx?.ipAddress,
     });
   }
 
   return { update, info, previousPendingDo };
+}
+
+async function markPendingDoAssigned(opts: {
+  kind: 'going' | 'return';
+  pendingDo: string;
+  fuelRecordId: string;
+  truckNo: string;
+  realDoNumber: string;
+  deliveryOrderId?: string;
+  pendingAt: Date;
+  promotedAt: Date;
+  promotedBy?: string;
+  session?: ClientSession;
+}): Promise<void> {
+  const filter = {
+    pendingDo: opts.pendingDo,
+    fuelRecordId: opts.fuelRecordId,
+    kind: opts.kind,
+    status: 'pending',
+  };
+  const setFields: Record<string, any> = {
+    status: 'assigned',
+    realDoNumber: opts.realDoNumber,
+    promotedAt: opts.promotedAt,
+    promotedBy: opts.promotedBy || null,
+    truckNo: opts.truckNo,
+    pendingAt: opts.pendingAt,
+  };
+  if (opts.deliveryOrderId) setFields.deliveryOrderId = opts.deliveryOrderId;
+
+  const updateQuery = PendingDoHistory.findOneAndUpdate(
+    filter,
+    { $set: setFields },
+    { new: true }
+  );
+  if (opts.session) updateQuery.session(opts.session);
+  const updated = await updateQuery;
+
+  if (!updated) {
+    const createPayload = {
+      kind: opts.kind,
+      pendingDo: opts.pendingDo,
+      truckNo: opts.truckNo,
+      fuelRecordId: opts.fuelRecordId,
+      deliveryOrderId: opts.deliveryOrderId || null,
+      realDoNumber: opts.realDoNumber,
+      status: 'assigned' as const,
+      pendingAt: opts.pendingAt,
+      promotedAt: opts.promotedAt,
+      promotedBy: opts.promotedBy || null,
+    };
+    if (opts.session) {
+      await PendingDoHistory.create([createPayload], { session: opts.session });
+    } else {
+      await PendingDoHistory.create(createPayload);
+    }
+  }
+}
+
+async function writePromotionAudits(opts: {
+  kind: 'going' | 'return';
+  previousPendingDo: string;
+  realDoNumber: string;
+  truckNo: string;
+  fuelRecordId: string;
+  deliveryOrderId?: string;
+  pendingAssignedAt: Date;
+  promotedAt: Date;
+  username: string;
+  userId?: string;
+  ipAddress?: string;
+}): Promise<void> {
+  const kindLabel = opts.kind === 'going' ? 'going' : 'return';
+  const pendingAtStr = new Date(opts.pendingAssignedAt).toLocaleString();
+  const details =
+    `Before real ${opts.kind === 'going' ? 'IMPORT' : 'EXPORT'} DO ${opts.realDoNumber} was created, ` +
+    `truck ${opts.truckNo} had pending ${kindLabel} ID ${opts.previousPendingDo} at ${pendingAtStr}. ` +
+    `Promoted to ${opts.realDoNumber}.`;
+
+  const previousValue = {
+    pendingDo: opts.previousPendingDo,
+    truckNo: opts.truckNo,
+    kind: opts.kind,
+    pendingAt: opts.pendingAssignedAt,
+  };
+  const newValue = {
+    realDo: opts.realDoNumber,
+    truckNo: opts.truckNo,
+    kind: opts.kind,
+    promotedAt: opts.promotedAt,
+  };
+
+  await AuditService.log({
+    userId: opts.userId,
+    username: opts.username,
+    action: 'UPDATE',
+    resourceType: 'FuelRecord',
+    resourceId: opts.fuelRecordId,
+    previousValue,
+    newValue,
+    details,
+    ipAddress: opts.ipAddress,
+    severity: 'medium',
+    tags: ['pending_do', 'promotion', opts.kind],
+  });
+
+  if (opts.deliveryOrderId) {
+    await AuditService.log({
+      userId: opts.userId,
+      username: opts.username,
+      action: 'UPDATE',
+      resourceType: 'DeliveryOrder',
+      resourceId: opts.deliveryOrderId,
+      previousValue,
+      newValue,
+      details,
+      ipAddress: opts.ipAddress,
+      severity: 'medium',
+      tags: ['pending_do', 'promotion', opts.kind],
+    });
+  }
 }
 
 function recalculateBalancePreservingCheckpoints(
@@ -546,6 +818,7 @@ function recalculateBalancePreservingCheckpoints(
 /**
  * Rewrite doNo + dest on standard LPO entries, Dar LPO entries, and Tanga LPO entries
  * that still reference the pending DO for this truck.
+ * Keeps previousPendingDo on the entry for summary export strikethrough.
  */
 export async function replacePendingDoReferences(opts: {
   previousDo: string;
@@ -561,6 +834,12 @@ export async function replacePendingDoReferences(opts: {
 
   const truck = truckNo.trim();
   const sessionOpt = session ? { session } : {};
+  const entrySet = {
+    'entries.$[e].doNo': newDo,
+    'entries.$[e].dest': newDest,
+    'entries.$[e].previousPendingDo': previousDo,
+  };
+  const arrayFilters = [{ 'e.doNo': previousDo, 'e.truckNo': truck }];
 
   const lpoResult = await LPOSummary.updateMany(
     {
@@ -568,16 +847,8 @@ export async function replacePendingDoReferences(opts: {
       'entries.doNo': previousDo,
       'entries.truckNo': truck,
     },
-    {
-      $set: {
-        'entries.$[e].doNo': newDo,
-        'entries.$[e].dest': newDest,
-      },
-    },
-    {
-      ...sessionOpt,
-      arrayFilters: [{ 'e.doNo': previousDo, 'e.truckNo': truck }],
-    }
+    { $set: entrySet },
+    { ...sessionOpt, arrayFilters }
   );
 
   const darResult = await DarLPODocument.updateMany(
@@ -586,16 +857,8 @@ export async function replacePendingDoReferences(opts: {
       'entries.doNo': previousDo,
       'entries.truckNo': truck,
     },
-    {
-      $set: {
-        'entries.$[e].doNo': newDo,
-        'entries.$[e].dest': newDest,
-      },
-    },
-    {
-      ...sessionOpt,
-      arrayFilters: [{ 'e.doNo': previousDo, 'e.truckNo': truck }],
-    }
+    { $set: entrySet },
+    { ...sessionOpt, arrayFilters }
   );
 
   const tangaResult = await TangaLPODocument.updateMany(
@@ -604,16 +867,8 @@ export async function replacePendingDoReferences(opts: {
       'entries.doNo': previousDo,
       'entries.truckNo': truck,
     },
-    {
-      $set: {
-        'entries.$[e].doNo': newDo,
-        'entries.$[e].dest': newDest,
-      },
-    },
-    {
-      ...sessionOpt,
-      arrayFilters: [{ 'e.doNo': previousDo, 'e.truckNo': truck }],
-    }
+    { $set: entrySet },
+    { ...sessionOpt, arrayFilters }
   );
 
   const counts = {
@@ -635,10 +890,11 @@ export async function countPendingDos(): Promise<{
   total: number;
   goingPending: number;
   returnPending: number;
+  assigned: number;
 }> {
   const base = pendingFuelRecordBaseFilter();
 
-  const [goingPending, returnPending] = await Promise.all([
+  const [goingPending, returnPending, assigned] = await Promise.all([
     FuelRecord.countDocuments({
       ...base,
       $or: [{ isPendingGoing: true }, { goingDo: { $regex: /^PG\d{1,4}$/i } }],
@@ -647,9 +903,11 @@ export async function countPendingDos(): Promise<{
       ...base,
       $or: [{ isPendingReturn: true }, { returnDo: { $regex: /^PR\d{1,4}$/i } }],
     }),
+    PendingDoHistory.countDocuments({ status: 'assigned' }),
   ]);
 
   // A record can be counted in both; total = unique records with any pending
+  // (Assigned history is separate and not included in All/total.)
   const total = await FuelRecord.countDocuments({
     ...base,
     $or: [
@@ -660,15 +918,43 @@ export async function countPendingDos(): Promise<{
     ],
   });
 
-  return { total, goingPending, returnPending };
+  return { total, goingPending, returnPending, assigned };
 }
 
 export async function listPendingDos(opts?: {
-  kind?: 'going' | 'return' | 'all';
+  kind?: 'going' | 'return' | 'all' | 'assigned';
   limit?: number;
 }): Promise<any[]> {
   const kind = opts?.kind || 'all';
   const limit = opts?.limit ?? 100;
+
+  if (kind === 'assigned') {
+    const rows = await PendingDoHistory.find({ status: 'assigned' })
+      .sort({ promotedAt: -1 })
+      .limit(limit)
+      .lean();
+    return rows.map((r: any) => ({
+      id: String(r._id),
+      _id: r._id,
+      fuelRecordId: String(r.fuelRecordId),
+      deliveryOrderId: r.deliveryOrderId ? String(r.deliveryOrderId) : null,
+      truckNo: r.truckNo,
+      kind: r.kind,
+      pendingDo: r.pendingDo,
+      goingDo: r.kind === 'going' ? r.pendingDo : r.realDoNumber || '—',
+      returnDo: r.kind === 'return' ? r.pendingDo : r.realDoNumber || '—',
+      realDoNumber: r.realDoNumber,
+      pendingAt: r.pendingAt,
+      promotedAt: r.promotedAt,
+      createdBy: r.createdBy,
+      promotedBy: r.promotedBy,
+      from: '—',
+      to: '—',
+      journeyStatus: 'assigned',
+      displayStatus: 'assigned' as PendingDoDisplayStatus,
+    }));
+  }
+
   const base: Record<string, any> = { ...pendingFuelRecordBaseFilter() };
 
   if (kind === 'going') {

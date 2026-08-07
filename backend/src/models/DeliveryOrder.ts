@@ -163,6 +163,17 @@ const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
       type: String,
       trim: true,
     },
+    /** Pending DO (PG/PR) this real DO replaced, if any */
+    promotedFromPendingDo: {
+      type: String,
+      trim: true,
+    },
+    promotedFromPendingAt: {
+      type: Date,
+    },
+    pendingAssignedAt: {
+      type: Date,
+    },
     // Soft delete fields
     isDeleted: {
       type: Boolean,

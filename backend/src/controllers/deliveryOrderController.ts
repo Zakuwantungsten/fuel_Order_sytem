@@ -1231,6 +1231,7 @@ type FuelSideEffectOpts = {
    * (caller must run linking after the transaction commits).
    */
   linkYardFuel?: boolean;
+  username?: string;
 };
 
 /** Yard-fuel linking is best-effort and must run after a successful DO+fuel commit. */
@@ -1335,7 +1336,11 @@ const applyImportFuelRecords = async (
       order as unknown as DeliveryOrderLike,
       totalLiters,
       extraFuel,
-      session
+      session,
+      {
+        username,
+        deliveryOrderId: order._id ? String(order._id) : order.id ? String(order.id) : undefined,
+      }
     );
     if (promoted.promoted && promoted.fuelRecordId) {
       linkTargets.push({
@@ -1495,7 +1500,11 @@ const applyExportFuelUpdates = async (
       match,
       order as unknown as DeliveryOrderLike,
       exportLiters,
-      session
+      session,
+      {
+        username: opts.username,
+        deliveryOrderId: order._id ? String(order._id) : order.id ? String(order.id) : undefined,
+      }
     );
     bulkOps.push({ updateOne: { filter: { _id: match._id }, update: { $set: update } } });
   }
@@ -1602,7 +1611,7 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
             yardLinkTargets = importResult.linkTargets;
           } else if (needsExportFuel) {
             const { routes } = await loadFuelConfig();
-            const exportResult = await applyExportFuelUpdates([order], routes, { session });
+            const exportResult = await applyExportFuelUpdates([order], routes, { session, username });
             if (exportResult.unlinkedExports.length > 0) {
               // Roll back the DO — automation is on, so an unlinked export is a hard failure.
               throw new ApiError(
@@ -1903,7 +1912,7 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
         }
 
         if (exportDOs.length > 0 && fuelFlags.doExportUpdate) {
-          const exportResult = await applyExportFuelUpdates(exportDOs, routes, { session });
+          const exportResult = await applyExportFuelUpdates(exportDOs, routes, { session, username });
           if (exportResult.unlinkedExports.length > 0) {
             // Should be rare after pre-check; fail hard so nothing is left half-written.
             const sample = exportResult.unlinkedExports
@@ -2297,7 +2306,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
               const exportResult = await applyExportFuelUpdates(
                 [deliveryOrder.toObject()],
                 routes,
-                { session }
+                { session, username }
               );
               if (exportResult.unlinkedExports.length > 0) {
                 throw new ApiError(
@@ -4970,7 +4979,12 @@ export const relinkExportDOToFuelRecord = async (req: AuthRequest, res: Response
     const { update: updateData, info } = await promotePendingReturnToExport(
       matchingFuelRecord.toObject(),
       deliveryOrder as unknown as DeliveryOrderLike,
-      exportRouteLiters
+      exportRouteLiters,
+      undefined,
+      {
+        username,
+        deliveryOrderId: String(deliveryOrder._id || id),
+      }
     );
 
     await FuelRecord.findByIdAndUpdate(matchingFuelRecord._id, updateData);
@@ -5178,7 +5192,14 @@ export const confirmExportLink = async (req: AuthRequest, res: Response): Promis
     const { update, info } = await promotePendingReturnToExport(
       fuelRecord.toObject(),
       deliveryOrder as unknown as DeliveryOrderLike,
-      exportRouteLiters
+      exportRouteLiters,
+      undefined,
+      {
+        username,
+        userId: req.user?.userId,
+        deliveryOrderId: String(deliveryOrder._id || id),
+        ipAddress: req.ip,
+      }
     );
 
     const updatedFuelRecord = await FuelRecord.findByIdAndUpdate(

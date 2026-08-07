@@ -28,6 +28,13 @@ export { SecurityIncident, ISecurityIncidentDocument } from './SecurityIncident'
 export { ConditionalAccessPolicy, IConditionalAccessPolicyDocument } from './ConditionalAccessPolicy';
 export { Counter, ICounter } from './Counter';
 export { EditLock, IEditLockDocument } from './EditLock';
+export {
+  PendingDoHistory,
+  IPendingDoHistory,
+  IPendingDoHistoryDocument,
+  PendingDoHistoryKind,
+  PendingDoHistoryStatus,
+} from './PendingDoHistory';
 
 // Export fleet tracking models
 export { Checkpoint, ICheckpoint } from './Checkpoint';

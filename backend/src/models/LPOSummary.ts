@@ -94,6 +94,11 @@ const lpoDetailSchema = new Schema<ILPODetail>(
       type: String,
       trim: true,
     },
+    /** Pending DO (PG/PR) that this entry used before promotion to a real DO */
+    previousPendingDo: {
+      type: String,
+      trim: true,
+    },
     cancellationReason: {
       type: String,
       trim: true,

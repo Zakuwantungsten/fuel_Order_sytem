@@ -3,6 +3,16 @@ import { AuthRequest } from '../middleware/auth';
 import { AuditLog } from '../models/AuditLog';
 import logger from '../utils/logger';
 
+/** Writers historically used PascalCase; history routes used snake_case — accept both. */
+function resourceTypeAliases(resourceType: string): string[] {
+  const aliases = new Set<string>([resourceType]);
+  if (resourceType === 'fuel_record') aliases.add('FuelRecord');
+  if (resourceType === 'FuelRecord') aliases.add('fuel_record');
+  if (resourceType === 'delivery_order') aliases.add('DeliveryOrder');
+  if (resourceType === 'DeliveryOrder') aliases.add('delivery_order');
+  return Array.from(aliases);
+}
+
 /**
  * Get audit history for a specific resource.
  * Returns timeline entries (timestamp, user, action, diff) for the given
@@ -13,8 +23,12 @@ export const getResourceHistory = (resourceType: string) => {
     try {
       const { id } = req.params;
       const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const types = resourceTypeAliases(resourceType);
 
-      const logs = await AuditLog.find({ resourceType, resourceId: id })
+      const logs = await AuditLog.find({
+        resourceType: types.length === 1 ? types[0] : { $in: types },
+        resourceId: id,
+      })
         .sort({ timestamp: -1 })
         .limit(limit)
         .select('timestamp username action previousValue newValue details severity')

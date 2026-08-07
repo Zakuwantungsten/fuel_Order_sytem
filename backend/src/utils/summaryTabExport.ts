@@ -161,6 +161,8 @@ function resolveLpoEntryType(entry: any): string {
 
 /**
  * Build LPO Monthly Summary sheets (no Payment Mode / Paybill columns).
+ * Includes Pending DO column (strikethrough red when a pending was replaced by a real DO).
+ * DO/SDO still shows live doNo — including PG/PR when still pending.
  */
 export function addLpoSummaryMonthSheet(
   workbook: ExcelJS.Workbook,
@@ -168,13 +170,13 @@ export function addLpoSummaryMonthSheet(
   entries: any[]
 ): void {
   const headers = [
-    'S/N', 'Date', 'LPO No.', 'Diesel At', 'Currency', 'DO/SDO',
+    'S/N', 'Date', 'LPO No.', 'Diesel At', 'Currency', 'DO/SDO', 'Pending DO',
     'Truck No.', 'Liters', 'Price per Liter', 'Total Amount', 'Destinations', 'Type',
   ];
 
   const sheet = workbook.addWorksheet(sheetName.slice(0, 31));
   sheet.columns = [
-    { width: 6 }, { width: 12 }, { width: 10 }, { width: 15 }, { width: 10 }, { width: 10 },
+    { width: 6 }, { width: 12 }, { width: 10 }, { width: 15 }, { width: 10 }, { width: 12 }, { width: 12 },
     { width: 12 }, { width: 10 }, { width: 12 }, { width: 15 }, { width: 18 }, { width: 15 },
   ];
 
@@ -185,6 +187,7 @@ export function addLpoSummaryMonthSheet(
   entries.forEach((entry, index) => {
     const liters = entry.ltrs ?? entry.liters ?? 0;
     const rate = entry.pricePerLtr ?? entry.rate ?? 0;
+    const previousPending = entry.previousPendingDo || '';
     const row = sheet.getRow(index + 2);
     row.values = [
       index + 1,
@@ -193,6 +196,7 @@ export function addLpoSummaryMonthSheet(
       entry.dieselAt || entry.station,
       getCurrencyFromStation(entry.dieselAt || entry.station || ''),
       entry.doSdo || 'NIL',
+      previousPending,
       entry.truckNo,
       liters,
       rate,
@@ -201,6 +205,10 @@ export function addLpoSummaryMonthSheet(
       resolveLpoEntryType(entry),
     ];
     styleDataRow(row, headers.length, !!entry.isCancelled);
+    if (previousPending && !entry.isCancelled) {
+      const pendingCell = row.getCell(7);
+      pendingCell.font = { color: { argb: 'FFFF0000' }, strike: true };
+    }
   });
 }
 

@@ -288,6 +288,10 @@ export interface IDeliveryOrder {
   editHistory?: IDeliveryOrderEditHistory[];
   lastEditedAt?: Date;
   lastEditedBy?: string;
+  /** Pending DO (PG/PR) this real DO replaced, if any */
+  promotedFromPendingDo?: string;
+  promotedFromPendingAt?: Date;
+  pendingAssignedAt?: Date;
   // Soft delete fields
   isDeleted: boolean;
   deletedAt?: Date;
@@ -359,6 +363,8 @@ export interface ILPODetail {
   goingCheckpoint?: CancellationPoint;
   returningCheckpoint?: CancellationPoint;
   originalDoNo?: string;
+  /** Pending DO (PG/PR) this entry used before promotion to a real DO */
+  previousPendingDo?: string;
   cancellationReason?: string;
   cancelledAt?: Date;
   // Reference DO for NIL entries to link to a journey
@@ -557,6 +563,14 @@ export interface IFuelRecord {
   isPendingGoing?: boolean;
   /** True while returnDo is a temporary PR#### pending DO */
   isPendingReturn?: boolean;
+  pendingGoingAt?: Date;
+  pendingReturnAt?: Date;
+  previousPendingGoingDo?: string;
+  previousPendingGoingAt?: Date;
+  previousPendingGoingPromotedAt?: Date;
+  previousPendingReturnDo?: string;
+  previousPendingReturnAt?: Date;
+  previousPendingReturnPromotedAt?: Date;
   // Cancellation fields
   isCancelled?: boolean;
   cancelledAt?: Date;
@@ -718,6 +732,8 @@ export interface ITangaLPOEntry {
   cancellationReason?: string;
   cancelledAt?: Date;
   linkedFuelRecordId?: string;
+  /** Pending DO (PG/PR) this entry used before promotion to a real DO */
+  previousPendingDo?: string;
 }
 
 export interface ITangaLPODocument {

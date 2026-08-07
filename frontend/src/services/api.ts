@@ -1353,12 +1353,12 @@ export const fuelRecordsAPI = {
     return response.data;
   },
 
-  getPendingDoStats: async (): Promise<{ total: number; goingPending: number; returnPending: number }> => {
+  getPendingDoStats: async (): Promise<{ total: number; goingPending: number; returnPending: number; assigned?: number }> => {
     const response = await apiClient.get('/fuel-records/pending-dos/stats');
-    return response.data.data || { total: 0, goingPending: 0, returnPending: 0 };
+    return response.data.data || { total: 0, goingPending: 0, returnPending: 0, assigned: 0 };
   },
 
-  getPendingDoList: async (params?: { kind?: 'going' | 'return' | 'all'; limit?: number }) => {
+  getPendingDoList: async (params?: { kind?: 'going' | 'return' | 'all' | 'assigned'; limit?: number }) => {
     const response = await apiClient.get('/fuel-records/pending-dos', { params });
     return response.data.data || [];
   },

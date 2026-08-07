@@ -172,6 +172,7 @@ export async function getAllLPOEntries(options: ExportOptions = {}): Promise<any
                   { $ifNull: ['$entries.doNo', 'PENDING'] }]}]}
             ]
           },
+          previousPendingDo: { $ifNull: ['$entries.previousPendingDo', null] },
           truckNo: '$entries.truckNo',
           ltrs: '$entries.liters',
           pricePerLtr: '$entries.rate',

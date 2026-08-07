@@ -2031,14 +2031,24 @@ export const createPendingGoingDo = async (req: AuthRequest, res: Response): Pro
       username,
     });
 
-    await AuditService.logCreate(
-      req.user?.userId || 'system',
+    await AuditService.log({
+      userId: req.user?.userId || 'system',
       username,
-      'FuelRecord',
-      fuelRecord._id.toString(),
-      { truckNo, goingDo: pendingDo, pending: true, kind: 'going' },
-      req.ip
-    );
+      action: 'CREATE',
+      resourceType: 'FuelRecord',
+      resourceId: fuelRecord._id.toString(),
+      newValue: {
+        truckNo,
+        goingDo: pendingDo,
+        pending: true,
+        kind: 'going',
+        pendingAt: fuelRecord.pendingGoingAt || fuelRecord.createdAt,
+      },
+      details: `Pending going DO ${pendingDo} assigned to truck ${truckNo}`,
+      ipAddress: req.ip,
+      severity: 'low',
+      tags: ['pending_do', 'going'],
+    });
 
     emitDataChange('fuel_records', 'create');
 
@@ -2081,9 +2091,16 @@ export const createPendingReturnDo = async (req: AuthRequest, res: Response): Pr
       action: 'UPDATE',
       resourceType: 'FuelRecord',
       resourceId: String(fuelRecord._id),
-      details: `Pending return DO ${pendingDo} attached to truck ${truckNo}`,
+      previousValue: { returnDo: null },
+      newValue: {
+        returnDo: pendingDo,
+        kind: 'return',
+        pendingAt: fuelRecord.pendingReturnAt,
+      },
+      details: `Pending return DO ${pendingDo} assigned to truck ${truckNo}`,
       ipAddress: req.ip,
       severity: 'medium',
+      tags: ['pending_do', 'return'],
     });
 
     emitDataChange('fuel_records', 'update');
@@ -2166,7 +2183,7 @@ export const getPendingDoStats = async (_req: AuthRequest, res: Response): Promi
 /** List fuel records that still have pending going/return DOs */
 export const getPendingDoList = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const kind = (req.query.kind as 'going' | 'return' | 'all') || 'all';
+    const kind = (req.query.kind as 'going' | 'return' | 'all' | 'assigned') || 'all';
     const limit = Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 500);
     const { listPendingDos } = await import('../services/pendingDoService');
     const rows = await listPendingDos({ kind, limit });

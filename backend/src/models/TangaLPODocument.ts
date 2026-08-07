@@ -76,6 +76,10 @@ const tangaLPOEntrySchema = new Schema<ITangaLPOEntry>(
       type: String,
       trim: true,
     },
+    previousPendingDo: {
+      type: String,
+      trim: true,
+    },
   },
   { _id: true }
 );

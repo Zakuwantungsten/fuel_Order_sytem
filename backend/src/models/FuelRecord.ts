@@ -224,6 +224,36 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
       type: Boolean,
       default: false,
     },
+    /** When current/last pending going DO was assigned */
+    pendingGoingAt: {
+      type: Date,
+    },
+    /** When current/last pending return DO was assigned */
+    pendingReturnAt: {
+      type: Date,
+    },
+    /** Last promoted pending going ID (kept after real IMPORT replaces PG####) */
+    previousPendingGoingDo: {
+      type: String,
+      trim: true,
+    },
+    previousPendingGoingAt: {
+      type: Date,
+    },
+    previousPendingGoingPromotedAt: {
+      type: Date,
+    },
+    /** Last promoted pending return ID (kept after real EXPORT replaces PR####) */
+    previousPendingReturnDo: {
+      type: String,
+      trim: true,
+    },
+    previousPendingReturnAt: {
+      type: Date,
+    },
+    previousPendingReturnPromotedAt: {
+      type: Date,
+    },
     // Cancellation fields
     isCancelled: {
       type: Boolean,

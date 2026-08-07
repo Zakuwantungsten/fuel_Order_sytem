@@ -64,6 +64,9 @@ const RecordTimeline = ({ fetchHistory, isOpen }: RecordTimelineProps) => {
     RESTORE: 'text-amber-600 dark:text-amber-400',
   };
 
+  const isPendingPromotion = (entry: AuditEntry) =>
+    /pending/i.test(entry.details || '') && /promot/i.test(entry.details || '');
+
   const diffFields = (prev?: Record<string, any>, next?: Record<string, any>) => {
     if (!prev || !next) return [];
     const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
@@ -80,12 +83,21 @@ const RecordTimeline = ({ fetchHistory, isOpen }: RecordTimelineProps) => {
     <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
       {entries.map((entry) => {
         const diffs = diffFields(entry.previousValue, entry.newValue);
+        const promotion = isPendingPromotion(entry);
         return (
           <div
             key={entry._id}
-            className="relative pl-6 pb-3 border-l-2 border-gray-200 dark:border-gray-700 last:border-transparent"
+            className={`relative pl-6 pb-3 border-l-2 last:border-transparent ${
+              promotion
+                ? 'border-amber-300 dark:border-amber-700'
+                : 'border-gray-200 dark:border-gray-700'
+            }`}
           >
-            <div className="absolute left-[-5px] top-1 w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500" />
+            <div
+              className={`absolute left-[-5px] top-1 w-2 h-2 rounded-full ${
+                promotion ? 'bg-amber-500' : 'bg-gray-400 dark:bg-gray-500'
+              }`}
+            />
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               <Clock className="w-3 h-3" />
               {new Date(entry.timestamp).toLocaleString()}
@@ -96,11 +108,13 @@ const RecordTimeline = ({ fetchHistory, isOpen }: RecordTimelineProps) => {
                 {entry.username}
               </span>
               <span className={`text-xs font-semibold ${actionColor[entry.action] || 'text-gray-600'}`}>
-                {actionLabel[entry.action] || entry.action}
+                {promotion ? 'Pending → Real DO' : (actionLabel[entry.action] || entry.action)}
               </span>
             </div>
             {entry.details && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.details}</p>
+              <p className={`text-xs mt-0.5 ${promotion ? 'text-amber-800 dark:text-amber-300' : 'text-gray-500 dark:text-gray-400'}`}>
+                {entry.details}
+              </p>
             )}
             {diffs.length > 0 && (
               <div className="mt-1 space-y-0.5">
