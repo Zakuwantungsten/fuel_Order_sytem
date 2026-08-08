@@ -393,13 +393,60 @@ async function emitFuelRecordUpdates(ids: Iterable<string>): Promise<void> {
 }
 
 /**
+ * Drop cancelled journeys that were left stuck as journeyStatus=queued
+ * (legacy cancel path). Safe to call opportunistically for a truck.
+ */
+export async function healCancelledQueuedJourneys(
+  truckNo: string,
+  session?: ClientSession | null
+): Promise<number> {
+  if (!truckNo) return 0;
+  const result = await FuelRecord.updateMany(
+    {
+      truckNo,
+      isDeleted: false,
+      isCancelled: true,
+      journeyStatus: 'queued',
+    },
+    {
+      $set: { journeyStatus: 'cancelled' },
+      $unset: { queueOrder: 1 },
+    },
+    session ? { session } : undefined
+  );
+  const n = result.modifiedCount || 0;
+  if (n > 0) {
+    logger.info(`Healed ${n} cancelled-but-still-queued journey(s) for truck ${truckNo}`);
+    await renumberQueuedJourneys(truckNo, session);
+  }
+  return n;
+}
+
+/**
  * Re-number live queued journeys for a truck to contiguous 1..n.
- * Returns ids whose queueOrder was rewritten.
+ * First heals cancelled rows that were left stuck as journeyStatus=queued
+ * (legacy cancel path), so they no longer occupy queue slots or confuse UI.
+ * Returns ids whose queueOrder was rewritten (not including healed cancelled ids).
  */
 async function renumberQueuedJourneys(
   truckNo: string,
   session?: ClientSession | null
 ): Promise<string[]> {
+  // Drop cancelled journeys out of the queue (status + order)
+  await FuelRecord.updateMany(
+    {
+      truckNo,
+      isDeleted: false,
+      isCancelled: true,
+      journeyStatus: 'queued',
+    },
+    {
+      $set: { journeyStatus: 'cancelled' },
+      $unset: { queueOrder: 1 },
+    },
+    session ? { session } : undefined
+  );
+
   const remainingQueued = await FuelRecord.find(queuedJourneyFilter(truckNo))
     .sort({ queueOrder: 1, createdAt: 1 })
     .session(session || null);
@@ -486,9 +533,14 @@ export async function afterJourneyCancelled(
       }
 
       if (options.wasQueued) {
+        // Leave the queue entirely — do not keep journeyStatus=queued / queueOrder
+        record.journeyStatus = 'cancelled';
+        record.queueOrder = undefined;
+        await record.save({ session: s });
+
         for (const id of await renumberQueuedJourneys(truckNo, s)) affectedIds.add(id);
         logger.info(
-          `Cancelled queued journey ${record.goingDo} (truck ${truckNo}); queue renumbered by ${username}`
+          `Cancelled queued journey ${record.goingDo} (truck ${truckNo}); removed from queue and renumbered by ${username}`
         );
       }
     };

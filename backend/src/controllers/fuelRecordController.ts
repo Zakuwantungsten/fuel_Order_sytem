@@ -11,7 +11,7 @@ import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
-import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled, healCancelledQueuedJourneys } from '../services/journeyService';
 import type { JourneyStatus } from '../types';
 import { isYardStation, isDarYardStation, isTangaYardStation, YARD_STATION } from '../utils/yardStations';
 
@@ -1796,6 +1796,15 @@ export const getFuelRecordDetails = async (req: AuthRequest, res: Response): Pro
 
     // Sibling journeys for this truck: active + queued (Q1, Q2, …)
     // so inspectors can see what else is lined up for the same truck.
+    // Heal legacy cancelled rows still stuck as journeyStatus=queued.
+    try {
+      await healCancelledQueuedJourneys(fuelRecord.truckNo);
+    } catch (healErr: any) {
+      logger.warn(
+        `healCancelledQueuedJourneys failed for ${fuelRecord.truckNo}: ${healErr?.message || healErr}`
+      );
+    }
+
     const currentIdStr = String(fuelRecord._id);
     const siblingRecords = await FuelRecord.find({
       truckNo: fuelRecord.truckNo,
