@@ -11,7 +11,7 @@ import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
-import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled } from '../services/journeyService';
 import type { JourneyStatus } from '../types';
 import { isYardStation, isDarYardStation, isTangaYardStation, YARD_STATION } from '../utils/yardStations';
 
@@ -408,25 +408,43 @@ export const getFuelRecordById = async (req: AuthRequest, res: Response): Promis
 
 /**
  * Fuel records for LPO form truck lookup — date window enforced server-side from journey config.
+ * Truck match is separator-tolerant (same as general fuel search) so "T123 ABC" finds "T123ABC".
+ * Window uses indexed monthKey, not string date $gte (mixed ISO / Excel-style dates).
+ *
+ * Query `mode=yard`: no month window — return active/queued (and locked pending) only.
+ * Dar/Tanga yard in LPO Detail relies on journeyStatus gates, not calendar range.
  */
 export const getFuelRecordsForLpoTruckLookup = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { truckNo } = req.params;
+    const mode = String(req.query.mode || '').toLowerCase();
+    const yardMode = mode === 'yard';
 
-    const sanitizedTruckNo = sanitizeRegexInput(truckNo);
-    if (!sanitizedTruckNo) {
+    const fuzzyTruck = buildFuzzyRegex(truckNo);
+    if (!fuzzyTruck) {
       throw new ApiError(400, 'Invalid truck number format');
     }
 
     const lookupMonths = await getLpoTruckLookupMonths();
     const dateFrom = computeLpoTruckLookupDateFrom(lookupMonths);
+    const monthKeys = computeLpoTruckLookupMonthKeys(lookupMonths);
 
     const filter: any = {
-      truckNo: { $regex: sanitizedTruckNo, $options: 'i' },
+      truckNo: { $regex: fuzzyTruck, $options: 'i' },
       isDeleted: false,
       isCancelled: { $ne: true },
-      date: { $gte: dateFrom },
     };
+
+    if (yardMode) {
+      // Active / queued / locked-pending only — no calendar window
+      filter.$or = [
+        { journeyStatus: { $in: ['active', 'queued'] } },
+        { isLocked: true },
+        { isPendingGoing: true },
+      ];
+    } else {
+      filter.monthKey = { $in: monthKeys };
+    }
 
     if (req.user?.role === 'driver') {
       filter.truckNo = req.user.username;
@@ -446,7 +464,13 @@ export const getFuelRecordsForLpoTruckLookup = async (req: AuthRequest, res: Res
       success: true,
       message: 'Fuel records retrieved successfully',
       data: transformedRecords,
-      meta: { lookupMonths, dateFrom },
+      meta: {
+        lookupMonths,
+        dateFrom,
+        monthKeys,
+        mode: yardMode ? 'yard' : 'lpo',
+        dateWindowApplied: !yardMode,
+      },
     });
   } catch (error: any) {
     throw error;
@@ -2193,6 +2217,45 @@ export const getPendingDoList = async (req: AuthRequest, res: Response): Promise
       data: rows,
     });
   } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Manually merge a pending going fuel record with a same-truck real-DO fuel record.
+ * Body: { pendingFuelRecordId, sourceFuelRecordId }
+ */
+export const mergePendingGoingDo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const pendingFuelRecordId = String(req.body?.pendingFuelRecordId || '').trim();
+    const sourceFuelRecordId = String(req.body?.sourceFuelRecordId || '').trim();
+    if (!pendingFuelRecordId || !sourceFuelRecordId) {
+      throw new ApiError(400, 'pendingFuelRecordId and sourceFuelRecordId are required');
+    }
+
+    const { mergePendingGoingWithSourceFuelRecord } = await import('../services/pendingDoService');
+    const result = await mergePendingGoingWithSourceFuelRecord({
+      pendingFuelRecordId,
+      sourceFuelRecordId,
+      username,
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+    });
+
+    emitDataChange('fuel_records', 'update');
+    emitDataChange('delivery_orders', 'update');
+    emitDataChange('lpo_summaries', 'update');
+
+    res.status(200).json({
+      success: true,
+      message: `Merged ${result.previousPendingDo} → ${result.realDoNumber}`,
+      data: result,
+    });
+  } catch (error: any) {
+    if (error?.statusCode) throw new ApiError(error.statusCode, error.message);
     throw error;
   }
 };

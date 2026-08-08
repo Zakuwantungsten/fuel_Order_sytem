@@ -1325,8 +1325,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         new Date(b.date).getTime() - new Date(a.date).getTime()
       );
 
-      // Search for active fuel record month-by-month (most recent months first)
-      let activeRecord: FuelRecord | null = null;
+      // Prefer explicit journeyStatus among server-windowed rows; month parse is fallback only.
+      let activeRecord: FuelRecord | null =
+        sortedRecords.find((r: FuelRecord) => r.journeyStatus === 'active') || null;
       let queuedRecord: FuelRecord | null = null;
       let searchMonth = 'current';
 
@@ -1346,20 +1347,26 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
       const isQueuedRecord = (r: FuelRecord): boolean => r.journeyStatus === 'queued';
 
-      for (let i = 0; i < monthStarts.length && !activeRecord; i++) {
-        searchMonth = monthLabel(i);
-        activeRecord = sortedRecords.find((r: FuelRecord) =>
-          isInMonth(r.date, monthStarts[i]) && isActiveRecord(r)
-        ) || null;
+      if (!activeRecord) {
+        for (let i = 0; i < monthStarts.length && !activeRecord; i++) {
+          searchMonth = monthLabel(i);
+          activeRecord = sortedRecords.find((r: FuelRecord) =>
+            isInMonth(r.date, monthStarts[i]) && isActiveRecord(r)
+          ) || null;
+        }
       }
 
       if (!activeRecord) {
         console.log('[LPO Truck Lookup] No active journey found, searching for queued journeys...');
-        for (let i = 0; i < monthStarts.length && !queuedRecord; i++) {
-          searchMonth = monthLabel(i);
-          queuedRecord = sortedRecords.find((r: FuelRecord) =>
-            isInMonth(r.date, monthStarts[i]) && isQueuedRecord(r)
-          ) || null;
+        queuedRecord =
+          sortedRecords.find((r: FuelRecord) => isQueuedRecord(r)) || null;
+        if (!queuedRecord) {
+          for (let i = 0; i < monthStarts.length && !queuedRecord; i++) {
+            searchMonth = monthLabel(i);
+            queuedRecord = sortedRecords.find((r: FuelRecord) =>
+              isInMonth(r.date, monthStarts[i]) && isQueuedRecord(r)
+            ) || null;
+          }
         }
       }
 

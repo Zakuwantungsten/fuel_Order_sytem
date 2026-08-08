@@ -819,8 +819,10 @@ function LpoTruckLookupCard() {
       </div>
       <div className="px-4 py-3">
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          When a truck number is entered in the LPO form, search this many months back in fuel records for an
-          active or queued journey to auto-fill DO, balance, and destination. Increase for slow or long journeys.
+          When a truck number is entered on a <strong>regular</strong> LPO station, search this many
+          months back in fuel records for an active or queued journey. Does{' '}
+          <strong>not</strong> apply to Dar/Tanga yard in LPO Detail — those use active/queued status
+          only (no calendar window). Increase for slow or long journeys.
         </p>
         {loading ? (
           <div className="h-10 rounded-lg bg-gray-100 dark:bg-gray-700/50 animate-pulse" />

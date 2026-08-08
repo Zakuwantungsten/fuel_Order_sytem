@@ -1418,16 +1418,39 @@ export const fuelRecordsAPI = {
     }
   },
   
-  getForLpoTruckLookup: async (truckNo: string): Promise<{
+  getForLpoTruckLookup: async (
+    truckNo: string,
+    opts?: { mode?: 'lpo' | 'yard' }
+  ): Promise<{
     data: FuelRecord[];
-    meta: { lookupMonths: number; dateFrom: string };
+    meta: {
+      lookupMonths: number;
+      dateFrom: string;
+      monthKeys?: string[];
+      mode?: string;
+      dateWindowApplied?: boolean;
+    };
   }> => {
     const encoded = encodeURIComponent(truckNo.trim());
-    const response = await apiClient.get(`/fuel-records/lpo-truck-lookup/${encoded}`);
+    const response = await apiClient.get(`/fuel-records/lpo-truck-lookup/${encoded}`, {
+      params: opts?.mode ? { mode: opts.mode } : undefined,
+    });
     return {
       data: response.data.data || [],
       meta: response.data.meta || { lookupMonths: 4, dateFrom: '' },
     };
+  },
+
+  /**
+   * Manually merge a pending going fuel record (PG####) with a real-DO fuel record
+   * for the same truck. Keeps the pending row (liters/orders) and rewrites PG refs everywhere.
+   */
+  mergePendingGoingWithSource: async (data: {
+    pendingFuelRecordId: string;
+    sourceFuelRecordId: string;
+  }) => {
+    const response = await apiClient.post('/fuel-records/pending-dos/merge', data);
+    return response.data.data;
   },
 
   create: async (data: Partial<FuelRecord>): Promise<FuelRecord> => {

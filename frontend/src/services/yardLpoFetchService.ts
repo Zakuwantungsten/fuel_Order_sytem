@@ -1,4 +1,4 @@
-import { configAPI, fuelRecordsAPI } from './api';
+import { fuelRecordsAPI } from './api';
 import type { YardFuelTimeLimitConfig } from './api';
 import type { FuelRecord } from '../types';
 
@@ -7,6 +7,10 @@ export type YardKey = 'darYard' | 'tangaYard';
 /** Max fuel-record candidates surfaced for yard LPO form fetch / link. */
 export const YARD_FETCH_CANDIDATE_CAP = 3;
 
+/**
+ * Day-window helper for yard fuel sheet auto-link / legacy callers.
+ * Truck journey lookup in LPO Detail / dedicated yard forms no longer uses this.
+ */
 export function computeYardAfterDate(
   cfg: YardFuelTimeLimitConfig | null | undefined,
   yard: YardKey
@@ -55,7 +59,7 @@ export async function fetchYardRecordByDo(doNumber: string): Promise<{
   }
 
   const matches = (result.matches || [])
-    .map(m => m.fuelRecord)
+    .map((m) => m.fuelRecord)
     .filter(Boolean) as FuelRecord[];
 
   return {
@@ -66,40 +70,44 @@ export async function fetchYardRecordByDo(doNumber: string): Promise<{
 }
 
 /**
- * Truck-only fuel-record candidates within the Journey Config yard time window
- * (same policy as sheet auto-link). Newest first, capped at 3.
+ * Truck-only fuel-record candidates for dedicated Dar/Tanga yard forms.
+ * No calendar day window — prefer active/queued journeys (same gate as LPO Detail yard).
+ * Newest first, capped at YARD_FETCH_CANDIDATE_CAP.
  */
 export async function fetchYardTruckCandidates(
   truckNo: string,
-  yard: YardKey
+  _yard: YardKey
 ): Promise<{ candidates: FuelRecord[]; dateFrom?: string; windowDays?: number }> {
   const trimmed = truckNo.trim();
   if (trimmed.length < 3) return { candidates: [] };
 
-  const cfg = await configAPI.getYardFuelTimeLimit().catch(() => null as YardFuelTimeLimitConfig | null);
-  const dateFrom = computeYardAfterDate(cfg, yard);
-  const yardCfg = cfg?.perYard?.[yard];
-  const windowDays =
-    cfg?.enabled && yardCfg?.enabled && yardCfg.timeLimitDays != null
-      ? Number(yardCfg.timeLimitDays)
-      : undefined;
+  let active: FuelRecord[] = [];
+  try {
+    const { data } = await fuelRecordsAPI.getForLpoTruckLookup(trimmed, { mode: 'yard' });
+    active = (data || []).filter((r) => !r.isCancelled);
+  } catch {
+    const response = await fuelRecordsAPI.getAll({
+      truckNo: trimmed,
+      excludeCancelled: 'true',
+      limit: 50,
+    });
+    active = (response.data || []).filter((r) => !r.isCancelled);
+  }
 
-  const response = await fuelRecordsAPI.getAll({
-    truckNo: trimmed,
-    ...(dateFrom ? { dateFrom } : {}),
-    excludeCancelled: 'true',
-    limit: 50,
-  });
+  const preferred = active.filter(
+    (r) =>
+      r.journeyStatus === 'active' ||
+      r.journeyStatus === 'queued' ||
+      !!(r as any).isLocked ||
+      !!(r as any).isPendingGoing
+  );
+  const pool = preferred.length > 0 ? preferred : active;
 
-  const active = (response.data || []).filter(r => !r.isCancelled);
-
-  const sorted = [...active].sort(
+  const sorted = [...pool].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
   return {
     candidates: sorted.slice(0, YARD_FETCH_CANDIDATE_CAP),
-    dateFrom,
-    windowDays,
   };
 }

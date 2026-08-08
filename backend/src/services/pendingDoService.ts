@@ -19,6 +19,7 @@ import {
 } from '../utils/pendingDoNumber';
 import logger from '../utils/logger';
 import { AuditService } from '../utils/auditService';
+import { buildFuzzyRegex, formatTruckNumber, isTruckNoMatch } from '../utils';
 import type { DeliveryOrderLike } from '../utils/fuelRecordCalculator';
 import { buildImportFuelRecord, buildReturnUpdate } from '../utils/fuelRecordCalculator';
 
@@ -140,11 +141,13 @@ export interface CreatePendingGoingInput {
 export async function createPendingGoingFuelRecord(
   input: CreatePendingGoingInput
 ): Promise<{ fuelRecord: any; pendingDo: string }> {
-  const truckNo = input.truckNo.trim().toUpperCase();
+  // Canonical storage form ("T123 ABC"); lookup is fuzzy so legacy "T123ABC" still counts as active.
+  const truckNo = formatTruckNumber(input.truckNo) || input.truckNo.trim().toUpperCase();
   const session = input.session;
+  const fuzzyTruck = buildFuzzyRegex(truckNo) || `^${truckNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
 
   const activeQuery = FuelRecord.findOne({
-    truckNo,
+    truckNo: { $regex: fuzzyTruck, $options: 'i' },
     journeyStatus: 'active',
     isDeleted: false,
     isCancelled: { $ne: true },
@@ -214,7 +217,7 @@ export async function createPendingGoingFuelRecord(
 
   if (active) {
     const queuedCountQuery = FuelRecord.countDocuments({
-      truckNo,
+      truckNo: { $regex: fuzzyTruck, $options: 'i' },
       journeyStatus: 'queued',
       isDeleted: false,
       isCancelled: { $ne: true },
@@ -748,26 +751,40 @@ async function writePromotionAudits(opts: {
   username: string;
   userId?: string;
   ipAddress?: string;
+  /** auto = DO create promote; manual_merge = user linked pending ↔ real DO */
+  mode?: 'auto' | 'manual_merge';
+  sourceFuelRecordId?: string;
 }): Promise<void> {
   const kindLabel = opts.kind === 'going' ? 'going' : 'return';
   const pendingAtStr = new Date(opts.pendingAssignedAt).toLocaleString();
-  const details =
-    `Before real ${opts.kind === 'going' ? 'IMPORT' : 'EXPORT'} DO ${opts.realDoNumber} was created, ` +
-    `truck ${opts.truckNo} had pending ${kindLabel} ID ${opts.previousPendingDo} at ${pendingAtStr}. ` +
-    `Promoted to ${opts.realDoNumber}.`;
+  const isMerge = opts.mode === 'manual_merge';
+  const details = isMerge
+    ? `Merged pending ${kindLabel} ID ${opts.previousPendingDo} (assigned ${pendingAtStr}) ` +
+      `with real DO ${opts.realDoNumber} for truck ${opts.truckNo}` +
+      (opts.sourceFuelRecordId ? ` (source fuel record ${opts.sourceFuelRecordId}).` : '.') +
+      ` Pending liters/orders kept; PG/PR references updated on LPOs and yards.`
+    : `Before real ${opts.kind === 'going' ? 'IMPORT' : 'EXPORT'} DO ${opts.realDoNumber} was created, ` +
+      `truck ${opts.truckNo} had pending ${kindLabel} ID ${opts.previousPendingDo} at ${pendingAtStr}. ` +
+      `Promoted to ${opts.realDoNumber}.`;
 
   const previousValue = {
     pendingDo: opts.previousPendingDo,
     truckNo: opts.truckNo,
     kind: opts.kind,
     pendingAt: opts.pendingAssignedAt,
+    ...(opts.sourceFuelRecordId ? { sourceFuelRecordId: opts.sourceFuelRecordId } : {}),
   };
   const newValue = {
     realDo: opts.realDoNumber,
     truckNo: opts.truckNo,
     kind: opts.kind,
     promotedAt: opts.promotedAt,
+    ...(isMerge ? { merge: true } : {}),
   };
+
+  const tags = isMerge
+    ? ['pending_do', 'merge', 'promotion', opts.kind]
+    : ['pending_do', 'promotion', opts.kind];
 
   await AuditService.log({
     userId: opts.userId,
@@ -780,7 +797,7 @@ async function writePromotionAudits(opts: {
     details,
     ipAddress: opts.ipAddress,
     severity: 'medium',
-    tags: ['pending_do', 'promotion', opts.kind],
+    tags,
   });
 
   if (opts.deliveryOrderId) {
@@ -795,7 +812,34 @@ async function writePromotionAudits(opts: {
       details,
       ipAddress: opts.ipAddress,
       severity: 'medium',
-      tags: ['pending_do', 'promotion', opts.kind],
+      tags,
+    });
+  }
+
+  if (isMerge && opts.sourceFuelRecordId && opts.sourceFuelRecordId !== opts.fuelRecordId) {
+    await AuditService.log({
+      userId: opts.userId,
+      username: opts.username,
+      action: 'UPDATE',
+      resourceType: 'FuelRecord',
+      resourceId: opts.sourceFuelRecordId,
+      previousValue: {
+        goingDo: opts.realDoNumber,
+        truckNo: opts.truckNo,
+        role: 'merge_source',
+      },
+      newValue: {
+        mergedIntoFuelRecordId: opts.fuelRecordId,
+        pendingDo: opts.previousPendingDo,
+        realDo: opts.realDoNumber,
+        cancelled: true,
+      },
+      details:
+        `Absorbed into pending merge: source DO ${opts.realDoNumber} merged into fuel record ` +
+        `${opts.fuelRecordId} (was pending ${opts.previousPendingDo}) for truck ${opts.truckNo}.`,
+      ipAddress: opts.ipAddress,
+      severity: 'medium',
+      tags: ['pending_do', 'merge', 'merge_source', opts.kind],
     });
   }
 }
@@ -813,6 +857,234 @@ function recalculateBalancePreservingCheckpoints(
   ];
   const used = fields.reduce((sum, f) => sum + Math.abs(existing[f] || 0), 0);
   return totalLts + (extra || 0) - used;
+}
+
+/**
+ * Manual merge: keep the pending fuel row (liters / LPO / yard amounts already on it),
+ * copy real DO + route/totals from a same-truck source fuel record, rewrite PG refs
+ * everywhere, cancel/absorb the source duplicate, and write merge audits.
+ */
+export async function mergePendingGoingWithSourceFuelRecord(input: {
+  pendingFuelRecordId: string;
+  sourceFuelRecordId: string;
+  username: string;
+  userId?: string;
+  ipAddress?: string;
+  session?: ClientSession;
+}): Promise<{
+  fuelRecord: any;
+  previousPendingDo: string;
+  realDoNumber: string;
+  cancelledSourceId: string | null;
+  refsUpdated: { lpo: number; dar: number; tanga: number };
+}> {
+  const session = input.session;
+
+  const pendingQuery = FuelRecord.findOne({
+    _id: input.pendingFuelRecordId,
+    isDeleted: false,
+    isCancelled: { $ne: true },
+  });
+  if (session) pendingQuery.session(session);
+  const pending = await pendingQuery;
+  if (!pending) {
+    throw Object.assign(new Error('Pending fuel record not found'), { statusCode: 404 });
+  }
+
+  const pendingDo = String(pending.goingDo || '');
+  if (!(pending.isPendingGoing || isPendingGoingDo(pendingDo))) {
+    throw Object.assign(
+      new Error(`Fuel record ${input.pendingFuelRecordId} is not a pending going DO`),
+      { statusCode: 400 }
+    );
+  }
+
+  const sourceQuery = FuelRecord.findOne({
+    _id: input.sourceFuelRecordId,
+    isDeleted: false,
+    isCancelled: { $ne: true },
+  });
+  if (session) sourceQuery.session(session);
+  const source = await sourceQuery;
+  if (!source) {
+    throw Object.assign(new Error('Source fuel record not found'), { statusCode: 404 });
+  }
+
+  if (String(pending._id) === String(source._id)) {
+    throw Object.assign(new Error('Pending and source fuel records must be different'), {
+      statusCode: 400,
+    });
+  }
+
+  if (!isTruckNoMatch(String(pending.truckNo || ''), String(source.truckNo || ''))) {
+    throw Object.assign(
+      new Error(
+        `Truck mismatch: pending is ${pending.truckNo}, source is ${source.truckNo}`
+      ),
+      { statusCode: 400 }
+    );
+  }
+
+  const realDoNumber = String(source.goingDo || '').trim().toUpperCase();
+  if (!realDoNumber || isPendingGoingDo(realDoNumber)) {
+    throw Object.assign(
+      new Error('Source fuel record must have a real (non-pending) going DO'),
+      { statusCode: 400 }
+    );
+  }
+
+  const pendingAssignedAt = pending.pendingGoingAt || pending.createdAt || new Date();
+  const promotedAt = new Date();
+  const truckNo = formatTruckNumber(pending.truckNo) || pending.truckNo;
+
+  const totalLts =
+    source.totalLts != null && source.totalLts !== undefined ? source.totalLts : pending.totalLts;
+  const extra = source.extra != null && source.extra !== undefined ? source.extra : pending.extra;
+  const hasTotals = totalLts != null && totalLts !== undefined;
+
+  // If source was the active journey and pending was queued, pending takes over as active
+  let nextJourneyStatus = pending.journeyStatus || 'active';
+  let clearQueueOrder = false;
+  if (source.journeyStatus === 'active' && pending.journeyStatus === 'queued') {
+    nextJourneyStatus = 'active';
+    clearQueueOrder = true;
+  } else if (!pending.journeyStatus || pending.journeyStatus === 'cancelled') {
+    nextJourneyStatus = 'active';
+  }
+
+  const update: Record<string, any> = {
+    goingDo: realDoNumber,
+    date: source.date || pending.date,
+    month: source.month || pending.month,
+    start: source.start && source.start !== TBA ? source.start : pending.start,
+    from: source.from && source.from !== TBA ? source.from : pending.from,
+    to: source.to && source.to !== TBA ? source.to : pending.to,
+    totalLts: hasTotals ? totalLts : pending.totalLts,
+    extra: extra ?? pending.extra,
+    isLocked: hasTotals ? false : true,
+    pendingConfigReason: hasTotals ? null : pending.pendingConfigReason || 'both',
+    isPendingGoing: false,
+    previousPendingGoingDo: pendingDo,
+    previousPendingGoingAt: pendingAssignedAt,
+    previousPendingGoingPromotedAt: promotedAt,
+    balance: hasTotals
+      ? recalculateBalancePreservingCheckpoints(pending.toObject?.() || pending, totalLts, extra ?? 0)
+      : pending.balance,
+    journeyStatus: nextJourneyStatus,
+    truckNo,
+  };
+  if (nextJourneyStatus === 'active' && !pending.activatedAt) {
+    update.activatedAt = promotedAt;
+  }
+
+  const mongoUpdate: Record<string, any> = { $set: update };
+  if (clearQueueOrder) {
+    mongoUpdate.$unset = { queueOrder: 1 };
+  }
+
+  await FuelRecord.updateOne({ _id: pending._id }, mongoUpdate, session ? { session } : {});
+
+  const refsUpdated = await replacePendingDoReferences({
+    previousDo: pendingDo,
+    newDo: realDoNumber,
+    newDest: String(update.to || source.to || ''),
+    truckNo: String(pending.truckNo || truckNo),
+    session,
+  });
+
+  // Also rewrite refs that used formatted truck on entries
+  if (truckNo && truckNo !== pending.truckNo) {
+    const extraRefs = await replacePendingDoReferences({
+      previousDo: pendingDo,
+      newDo: realDoNumber,
+      newDest: String(update.to || source.to || ''),
+      truckNo,
+      session,
+    });
+    refsUpdated.lpo += extraRefs.lpo;
+    refsUpdated.dar += extraRefs.dar;
+    refsUpdated.tanga += extraRefs.tanga;
+  }
+
+  let deliveryOrderId: string | undefined;
+  const doDoc = await DeliveryOrder.findOne({
+    doNumber: realDoNumber,
+    isDeleted: false,
+  })
+    .select('_id')
+    .lean();
+  if (doDoc) {
+    deliveryOrderId = String(doDoc._id);
+    await DeliveryOrder.updateOne(
+      { _id: doDoc._id },
+      {
+        $set: {
+          promotedFromPendingDo: pendingDo,
+          promotedFromPendingAt: promotedAt,
+          pendingAssignedAt: pendingAssignedAt,
+        },
+      },
+      session ? { session } : {}
+    );
+  }
+
+  await markPendingDoAssigned({
+    kind: 'going',
+    pendingDo,
+    fuelRecordId: String(pending._id),
+    truckNo: String(pending.truckNo || truckNo),
+    realDoNumber,
+    deliveryOrderId,
+    pendingAt: pendingAssignedAt,
+    promotedAt,
+    promotedBy: input.username,
+    session,
+  });
+
+  // Absorb source duplicate without advancing queue (pending already owns the journey)
+  source.isCancelled = true;
+  source.cancelledAt = promotedAt;
+  source.cancelledBy = input.username;
+  (source as any).cancellationReason = `Merged into pending fuel record ${pending._id} (${pendingDo} → ${realDoNumber})`;
+  source.journeyStatus = 'cancelled';
+  source.queueOrder = undefined;
+  if (session) {
+    await source.save({ session });
+  } else {
+    await source.save();
+  }
+
+  await writePromotionAudits({
+    kind: 'going',
+    previousPendingDo: pendingDo,
+    realDoNumber,
+    truckNo: String(pending.truckNo || truckNo),
+    fuelRecordId: String(pending._id),
+    deliveryOrderId,
+    pendingAssignedAt,
+    promotedAt,
+    username: input.username,
+    userId: input.userId,
+    ipAddress: input.ipAddress,
+    mode: 'manual_merge',
+    sourceFuelRecordId: String(source._id),
+  });
+
+  const refreshed = session
+    ? await FuelRecord.findById(pending._id).session(session)
+    : await FuelRecord.findById(pending._id);
+
+  logger.info(
+    `Manual merge: pending ${pendingDo} → ${realDoNumber} on ${pending._id}; absorbed source ${source._id}`
+  );
+
+  return {
+    fuelRecord: refreshed,
+    previousPendingDo: pendingDo,
+    realDoNumber,
+    cancelledSourceId: String(source._id),
+    refsUpdated,
+  };
 }
 
 /**

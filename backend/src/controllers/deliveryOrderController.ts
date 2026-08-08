@@ -2368,15 +2368,21 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     logger.info(`Delivery order updated: ${deliveryOrder.doNumber} by ${username}. Changes: ${JSON.stringify(changes)}`);
 
-    // Log audit trail
+    // Log audit trail — store old/new maps so DO detail history can render real values
     if (changes.length > 0) {
+      const previousFields: Record<string, any> = { doNumber: originalDO.doNumber };
+      const newFields: Record<string, any> = { doNumber: deliveryOrder.doNumber };
+      for (const c of changes) {
+        previousFields[c.field] = c.oldValue;
+        newFields[c.field] = c.newValue;
+      }
       await AuditService.logUpdate(
         req.user?.userId || 'system',
         username,
         'DeliveryOrder',
         deliveryOrder._id.toString(),
-        { doNumber: originalDO.doNumber, changes: changes.map(c => c.field) },
-        { doNumber: deliveryOrder.doNumber, changes },
+        previousFields,
+        { ...newFields, changes },
         req.ip
       );
     }

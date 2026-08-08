@@ -55,6 +55,11 @@ router.put(
   validate,
   asyncHandler(fuelRecordController.updatePendingDo)
 );
+router.post(
+  '/pending-dos/merge',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss'),
+  asyncHandler(fuelRecordController.mergePendingGoingDo)
+);
 
 // Update route
 router.put(

@@ -154,6 +154,22 @@ export function computeLpoTruckLookupDateFrom(months: number): string {
   return toLocalDateString(start);
 }
 
+/**
+ * Canonical monthKey list ("YYYY-MM") for the LPO truck lookup window.
+ * Prefer this over string `date >= dateFrom` — FuelRecord.date mixes ISO and
+ * Excel-style strings, so lexicographic $gte drops valid journeys.
+ */
+export function computeLpoTruckLookupMonthKeys(months: number): string[] {
+  const safeMonths = Number.isFinite(months) && months > 0 ? Math.floor(months) : 4;
+  const now = new Date();
+  const keys: string[] = [];
+  for (let i = 0; i < safeMonths; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return keys;
+}
+
 /** Date floor N calendar months before today (dashboard DO/LPO search). */
 export function dashboardMonthFloorDate(months: number): string {
   const safeMonths = Number.isFinite(months) && months > 0 ? Math.floor(months) : 1;

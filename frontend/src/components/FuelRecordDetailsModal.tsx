@@ -12,11 +12,16 @@ import {
   ArrowRight,
   MessageSquare,
   ListOrdered,
+  Link2,
+  Loader2,
 } from 'lucide-react';
 import { FuelRecordDetails, fuelRecordsAPI } from '../services/api';
 import type { AdditionalYardDispensation, TruckQueueJourney } from '../services/api';
+import type { FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import RecordTimeline from './RecordTimeline';
+import { isPendingGoingDo } from '../utils/pendingDo';
+import { toast } from 'react-toastify';
 
 interface FuelRecordDetailsModalProps {
   isOpen: boolean;
@@ -93,10 +98,18 @@ export default function FuelRecordDetailsModal({
   const [details, setDetails] = useState<FuelRecordDetails | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('lpos');
   const [contextNote, setContextNote] = useState<LpoContextNote | null>(null);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeCandidates, setMergeCandidates] = useState<FuelRecord[]>([]);
+  const [mergeLoading, setMergeLoading] = useState(false);
+  const [mergeSaving, setMergeSaving] = useState(false);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && recordId) {
       setContextNote(null);
+      setMergeOpen(false);
+      setMergeCandidates([]);
+      setSelectedSourceId(null);
       fetchDetails();
     }
   }, [isOpen, recordId]);
@@ -160,6 +173,64 @@ export default function FuelRecordDetailsModal({
   const queueActive = details?.truckQueue?.active ?? null;
   const queueQueued: TruckQueueJourney[] = details?.truckQueue?.queued ?? [];
   const queueCount = queueQueued.length + (queueActive ? 1 : 0);
+
+  const isPendingGoing =
+    !!record &&
+    !record.isCancelled &&
+    (record.isPendingGoing === true || isPendingGoingDo(record.goingDo));
+
+  const openMergePanel = async () => {
+    if (!record?.truckNo || !recordId) return;
+    setMergeOpen(true);
+    setMergeLoading(true);
+    setSelectedSourceId(null);
+    try {
+      const response = await fuelRecordsAPI.getAll({
+        truckNo: record.truckNo,
+        excludeCancelled: 'true',
+        limit: 50,
+      });
+      const pendingId = String(recordId);
+      const candidates = (response.data || []).filter((r) => {
+        const id = String(r._id ?? r.id ?? '');
+        if (!id || id === pendingId) return false;
+        if (r.isCancelled) return false;
+        const going = (r.goingDo || '').trim();
+        if (!going || isPendingGoingDo(going)) return false;
+        return true;
+      });
+      setMergeCandidates(candidates);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to load merge candidates');
+      setMergeCandidates([]);
+    } finally {
+      setMergeLoading(false);
+    }
+  };
+
+  const confirmMerge = async () => {
+    if (!recordId || !selectedSourceId) return;
+    setMergeSaving(true);
+    try {
+      const result = await fuelRecordsAPI.mergePendingGoingWithSource({
+        pendingFuelRecordId: String(recordId),
+        sourceFuelRecordId: selectedSourceId,
+      });
+      toast.success(
+        `Merged ${result.previousPendingDo} → ${result.realDoNumber}` +
+          (result.refsUpdated
+            ? ` (LPO ${result.refsUpdated.lpo}, Dar ${result.refsUpdated.dar}, Tanga ${result.refsUpdated.tanga})`
+            : '')
+      );
+      setMergeOpen(false);
+      setActiveTab('history');
+      await fetchDetails();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Merge failed');
+    } finally {
+      setMergeSaving(false);
+    }
+  };
 
   const tabs = [
     { id: 'lpos' as const, label: 'LPO Entries', count: details?.lpoEntries.length, icon: FileText },
@@ -766,7 +837,19 @@ export default function FuelRecordDetailsModal({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+          <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+            <div className="flex items-center gap-2">
+              {isPendingGoing && (
+                <button
+                  type="button"
+                  onClick={() => (mergeOpen ? setMergeOpen(false) : openMergePanel())}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  {mergeOpen ? 'Hide merge' : 'Merge with DO…'}
+                </button>
+              )}
+            </div>
             <button
               onClick={onClose}
               className="px-4 py-1.5 text-sm bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
@@ -774,6 +857,75 @@ export default function FuelRecordDetailsModal({
               Close
             </button>
           </div>
+
+          {mergeOpen && isPendingGoing && (
+            <div className="px-5 pb-4 border-t border-violet-200 dark:border-violet-900/40 bg-violet-50/80 dark:bg-violet-950/20">
+              <p className="pt-3 text-xs text-violet-900 dark:text-violet-200 mb-2">
+                Keep this pending row (liters / yard / LPO amounts) and link a real going DO for truck{' '}
+                <span className="font-semibold">{record?.truckNo}</span>. The chosen source record is cancelled after merge; audit history will show the merge.
+              </p>
+              {mergeLoading ? (
+                <div className="flex items-center gap-2 text-sm text-violet-700 dark:text-violet-300 py-3">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading candidates…
+                </div>
+              ) : mergeCandidates.length === 0 ? (
+                <p className="text-sm text-violet-800 dark:text-violet-300 py-2">
+                  No other real-DO fuel records found for this truck. Create or import the DO first, then merge.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {mergeCandidates.map((c) => {
+                    const id = String(c._id ?? c.id ?? '');
+                    const selected = selectedSourceId === id;
+                    return (
+                      <label
+                        key={id}
+                        className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer text-sm ${
+                          selected
+                            ? 'border-violet-500 bg-white dark:bg-slate-900'
+                            : 'border-violet-200 dark:border-violet-800 bg-white/60 dark:bg-slate-900/40'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="merge-source"
+                          className="mt-1"
+                          checked={selected}
+                          onChange={() => setSelectedSourceId(id)}
+                        />
+                        <span className="min-w-0">
+                          <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+                            {c.goingDo}
+                          </span>
+                          <span className="text-slate-500 dark:text-slate-400">
+                            {' '}· {c.from || '—'} → {c.to || '—'} · {c.journeyStatus || '—'} · {c.date}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => setMergeOpen(false)}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedSourceId || mergeSaving}
+                  onClick={confirmMerge}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-violet-700 hover:bg-violet-800 disabled:opacity-50 text-white font-medium"
+                >
+                  {mergeSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                  Confirm merge
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,8 +1,8 @@
 /**
  * Yard-station journey lookup for LPODetailForm.
- * Same fuel-record source as regular stations (getForLpoTruckLookup),
- * but selection priority is Queued-first, then Active — because yard
- * dispense is what starts/completes a journey and promotes the next queued.
+ * Uses unbounded active/queued lookup (mode=yard) — no calendar date window.
+ * Selection priority is Queued-first, then Active — because yard dispense is
+ * what starts/completes a journey and promotes the next queued.
  */
 import { fuelRecordsAPI } from '../services/api';
 import type { FuelRecord } from '../types';
@@ -40,12 +40,6 @@ function isQueuedRecord(r: FuelRecord): boolean {
   return r.journeyStatus === 'queued';
 }
 
-function isInMonth(dateStr: string, monthStart: Date): boolean {
-  const date = new Date(dateStr);
-  const nextMonthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
-  return date >= monthStart && date < nextMonthStart;
-}
-
 /**
  * Look up journeys for a truck and apply yard priority:
  * 1. If any queued → default Q1 (lowest queueOrder)
@@ -67,15 +61,15 @@ export async function fetchYardJourneysForTruck(truckNo: string): Promise<YardJo
     };
   }
 
-  const { data: fuelRecords, meta } = await fuelRecordsAPI.getForLpoTruckLookup(trimmed);
-  const lookupMonths = meta.lookupMonths ?? 4;
+  // Yard mode: no month/date window — only active / queued / locked pending
+  const { data: fuelRecords } = await fuelRecordsAPI.getForLpoTruckLookup(trimmed, { mode: 'yard' });
   const records = (fuelRecords || []).filter((r: FuelRecord) => !r.isCancelled);
 
   if (records.length === 0) {
     return {
       success: false,
       warningType: 'not_found',
-      message: 'No fuel record found — create a pending going DO or enter manually.',
+      message: 'No active or queued fuel record found — create a pending going DO or enter manually.',
       active: null,
       queued: [],
       selectedType: null,
@@ -99,28 +93,19 @@ export async function fetchYardJourneysForTruck(truckNo: string): Promise<YardJo
     };
   }
 
-  const now = new Date();
-  const monthStarts: Date[] = [];
-  for (let i = 0; i < lookupMonths; i++) {
-    monthStarts.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
-  }
-
   const sorted = [...records].sort(
     (a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
   );
 
-  let active: FuelRecord | null = null;
-  for (let i = 0; i < monthStarts.length && !active; i++) {
-    active =
-      sorted.find((r) => isInMonth(r.date, monthStarts[i]) && isActiveRecord(r)) || null;
-  }
+  const active: FuelRecord | null =
+    sorted.find((r) => r.journeyStatus === 'active') ||
+    sorted.find((r) => isActiveRecord(r)) ||
+    null;
 
-  // All queued for this truck (FIFO), not limited to one month
   const queued = records
     .filter((r) => isQueuedRecord(r))
     .sort((a: any, b: any) => (a.queueOrder || 0) - (b.queueOrder || 0));
 
-  // If no active found in window but we have queued, still OK
   if (!active && queued.length === 0) {
     const mostRecent = sorted[0];
     if (mostRecent && isJourneyComplete(mostRecent)) {
@@ -138,7 +123,7 @@ export async function fetchYardJourneysForTruck(truckNo: string): Promise<YardJo
     return {
       success: false,
       warningType: 'no_active_record',
-      message: `No active or queued journey in last ${lookupMonths} months. Create a pending going DO.`,
+      message: 'No active or queued journey for this truck. Create a pending going DO.',
       active: null,
       queued: [],
       selectedType: null,
@@ -161,7 +146,6 @@ export async function fetchYardJourneysForTruck(truckNo: string): Promise<YardJo
     };
   }
 
-  // Active only
   return {
     success: true,
     warningType: null,
@@ -236,7 +220,6 @@ export async function fetchYardJourneyByDo(
   const status = chosen.journeyStatus;
   const isQueued = status === 'queued';
 
-  // Represent the chosen record in chips without reordering priority.
   return {
     success: true,
     warningType: null,
