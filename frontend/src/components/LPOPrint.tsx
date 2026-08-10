@@ -216,30 +216,19 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           lineHeight: '1.4'
         }}>
           {isAmended && entry.originalLiters != null && (
-            // Manual mid-line strike — html2canvas often misplaces CSS text-decoration
+            // Gradient strike mid-glyph — html2canvas mishandles text-decoration / absolute overlays
             <span style={{
-              position: 'relative',
-              display: 'inline-block',
-              color: '#888',
+              display: 'inline',
+              color: '#cc0000',
               marginRight: '6px',
               fontSize: '11px',
-              lineHeight: '1.2',
+              fontWeight: 500,
+              backgroundImage: 'linear-gradient(to bottom, transparent 0%, transparent 46%, #cc0000 46%, #cc0000 56%, transparent 56%)',
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: '100% 100%',
               padding: '0 1px',
             }}>
               {entry.originalLiters.toLocaleString()}
-              <span
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: '50%',
-                  height: '1.5px',
-                  backgroundColor: '#666',
-                  transform: 'translateY(-50%)',
-                  pointerEvents: 'none',
-                }}
-              />
             </span>
           )}
           {entry.liters.toLocaleString()}
