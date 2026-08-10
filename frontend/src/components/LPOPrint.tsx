@@ -163,11 +163,11 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
       : entry.doNo;
     const displayDest = isDriverAccount ? 'NIL' : isRefer ? (entry.dest || 'REFER') : entry.dest;
     
-    // Cancelled > Amended (blue) > Refer > Driver Account > zebra
+    // Cancelled > Amended (orange) > Refer > Driver Account > zebra
     const rowBgColor = isCancelled 
       ? '#ffe6e6'
       : isAmended
-        ? '#e8f1fb'
+        ? '#ffd4a3'
       : isRefer
         ? '#fff7ed'
       : isDriverAccount 
@@ -216,8 +216,30 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           lineHeight: '1.4'
         }}>
           {isAmended && entry.originalLiters != null && (
-            <span style={{ textDecoration: 'line-through', color: '#999', marginRight: '4px', fontSize: '11px' }}>
+            // Manual mid-line strike — html2canvas often misplaces CSS text-decoration
+            <span style={{
+              position: 'relative',
+              display: 'inline-block',
+              color: '#888',
+              marginRight: '6px',
+              fontSize: '11px',
+              lineHeight: '1.2',
+              padding: '0 1px',
+            }}>
               {entry.originalLiters.toLocaleString()}
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: '50%',
+                  height: '1.5px',
+                  backgroundColor: '#666',
+                  transform: 'translateY(-50%)',
+                  pointerEvents: 'none',
+                }}
+              />
             </span>
           )}
           {entry.liters.toLocaleString()}
