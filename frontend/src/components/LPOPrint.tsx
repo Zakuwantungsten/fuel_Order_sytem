@@ -18,6 +18,7 @@ interface LPOEntry {
   isDriverAccount?: boolean;
   isRefer?: boolean;
   referenceDoNo?: string;
+  originalLiters?: number | null;
 }
 
 /** Rows per page for LPO image/print templates — keep in sync with PDF continuation pages. */
@@ -152,14 +153,21 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
     const isCancelled = entry.isCancelled || false;
     const isDriverAccount = entry.isDriverAccount || false;
     const isRefer = entry.isRefer || false;
+    const isAmended =
+      !isCancelled &&
+      entry.originalLiters != null &&
+      entry.originalLiters !== entry.liters;
     const displayDoNo = isCancelled ? 'CANCELLED'
       : isRefer ? 'REF'
       : isDriverAccount ? (entry.referenceDoNo ? `DA(NIL)-${entry.referenceDoNo}` : 'DA(NIL)')
       : entry.doNo;
     const displayDest = isDriverAccount ? 'NIL' : isRefer ? (entry.dest || 'REFER') : entry.dest;
     
+    // Cancelled > Amended (blue) > Refer > Driver Account > zebra
     const rowBgColor = isCancelled 
       ? '#ffe6e6'
+      : isAmended
+        ? '#e8f1fb'
       : isRefer
         ? '#fff7ed'
       : isDriverAccount 
@@ -204,9 +212,14 @@ const LPOPrint = forwardRef<HTMLDivElement, LPOPrintProps>(({ data, preparedBy, 
           verticalAlign: 'middle',
           color: textColor,
           fontWeight: '500',
-          textDecoration,
+          textDecoration: isCancelled ? 'line-through' : 'none',
           lineHeight: '1.4'
         }}>
+          {isAmended && entry.originalLiters != null && (
+            <span style={{ textDecoration: 'line-through', color: '#999', marginRight: '4px', fontSize: '11px' }}>
+              {entry.originalLiters.toLocaleString()}
+            </span>
+          )}
           {entry.liters.toLocaleString()}
         </td>
         <td style={{ 
