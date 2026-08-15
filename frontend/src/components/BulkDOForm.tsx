@@ -5,7 +5,7 @@ import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
-import { formatTruckNumber } from '../utils/dataCleanup';
+import { formatTruckNumber, parseTonnage, formatTonnage } from '../utils/dataCleanup';
 import { toast } from 'react-toastify';
 import BulkDOEntryGrid, {
   BulkGridRow,
@@ -65,8 +65,8 @@ const getTemplateHeaders = (rateType: 'per_ton' | 'fixed_total') =>
 
 const getTemplateExampleRow = (rateType: 'per_ton' | 'fixed_total') =>
   rateType === 'per_ton'
-    ? ['T844 EKS', 'T629 ELE', 'John Doe', '30', '1850']
-    : ['T844 EKS', 'T629 ELE', 'John Doe', '30', '55500'];
+    ? ['T844 EKS', 'T629 ELE', 'John Doe', '30.001', '1850']
+    : ['T844 EKS', 'T629 ELE', 'John Doe', '30.001', '55500'];
 
 const gridRowToBulkRow = (
   row: BulkGridRow,
@@ -75,7 +75,7 @@ const gridRowToBulkRow = (
   if (isGridRowEmpty(row)) return null;
   if (!row.truckNo.trim()) return null;
 
-  const tonnage = parseFloat(row.tonnages.replace(/,/g, '')) || 0;
+  const tonnage = parseTonnage(row.tonnages);
   const amountOrRate = parseFloat(row.amountOrRate.replace(/,/g, '')) || 0;
 
   if (rateType === 'per_ton') {
@@ -472,6 +472,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         ['Notes'],
         ['- Truck and trailer numbers will be normalized by the system.'],
         ['- Driver names are stored in uppercase.'],
+        ['- Tonnage accepts up to three decimal places (e.g. 30.001) and is never rounded.'],
         ['- Shared DO fields (client, date, loading point, destination, etc.) are set in the form, not in this file.'],
       ];
       const wsInfo = XLSX.utils.aoa_to_sheet(instructions);
@@ -1178,7 +1179,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                           <td className="px-3 py-1.5 whitespace-nowrap">{order.truckNo}</td>
                           <td className="px-3 py-1.5 whitespace-nowrap">{order.trailerNo || '—'}</td>
                           <td className="px-3 py-1.5">{order.driverName || '—'}</td>
-                          <td className="px-3 py-1.5 tabular-nums">{order.tonnages}</td>
+                          <td className="px-3 py-1.5 tabular-nums">{formatTonnage(order.tonnages)}</td>
                           <td className="px-3 py-1.5 tabular-nums">
                             {order.ratePerTon.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                           </td>

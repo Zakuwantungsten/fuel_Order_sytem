@@ -38,6 +38,32 @@ export {
 
 // Export fleet tracking models
 export { Checkpoint, ICheckpoint } from './Checkpoint';
+export {
+  VisaOverstayCase,
+  IVisaOverstayCase,
+  VisaOverstayCaseStatus,
+  VisaOverstayPayoutRule,
+} from './VisaOverstayCase';
+export {
+  VisaOverstayPayment,
+  IVisaOverstayPayment,
+  VisaOverstayPaymentType,
+  VisaOverstayPaymentStatus,
+} from './VisaOverstayPayment';
+export {
+  VisaOverstayConfig,
+  IVisaOverstayConfig,
+} from './VisaOverstayConfig';
+export {
+  VisaOverstayBuildItem,
+  IVisaOverstayBuildItem,
+  VisaOverstayBuildSource,
+  VisaOverstayBuildStatus,
+} from './VisaOverstayBuildItem';
+export {
+  VisaOverstayBuildRun,
+  IVisaOverstayBuildRun,
+} from './VisaOverstayBuildRun';
 export { FleetSnapshot, IFleetSnapshot, IFleetGroup, ITruckPositionInSnapshot } from './FleetSnapshot';
 export { TruckPosition, ITruckPosition } from './TruckPosition';
 

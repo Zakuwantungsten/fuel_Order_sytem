@@ -22,6 +22,7 @@ import archivalRoutes from './archivalRoutes';
 import systemConfigRoutes from './systemConfigRoutes';
 import driverCredentialRoutes from './driverCredentialRoutes';
 import checkpointRoutes from './checkpointRoutes';
+import visaOverstayRoutes from './visaOverstayRoutes';
 import fleetTrackingRoutes from './fleetTrackingRoutes';
 import importRoutes from './importRoutes';
 import announcementRoutes from './announcementRoutes';
@@ -98,6 +99,7 @@ router.use('/system-admin/config', systemConfigRoutes); // Super admin only syst
 router.use('/archival', archivalRoutes);
 router.use('/driver-credentials', driverCredentialRoutes); // Driver credential management
 router.use('/checkpoints', checkpointRoutes); // Checkpoint management for fleet tracking
+router.use('/visa-overstays', visaOverstayRoutes); // Clerk passport / visa / overstay workspace
 router.use('/fleet-tracking', fleetTrackingRoutes); // Fleet position tracking and visualization
 router.use('/import', importRoutes); // Excel data import (admin only)
 router.use('/announcements', announcementRoutes); // System announcements (banners)

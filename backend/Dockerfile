@@ -20,6 +20,21 @@ WORKDIR /app
 # Create non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
+# Chromium for PNG exports (Puppeteer). Alpine uses musl Chromium.
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto \
+  && rm -rf /var/cache/apk/*
+
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV CHROME_PATH=/usr/bin/chromium-browser
+
 # Install production deps only
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

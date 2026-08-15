@@ -5,7 +5,7 @@ import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import axios from 'axios';
-import { cleanDeliveryOrder, isCorruptedDriverName, formatTruckNumber } from '../utils/dataCleanup';
+import { cleanDeliveryOrder, isCorruptedDriverName, formatTruckNumber, isTonnageInput, parseTonnage, quantityToInputValue, formatTonnage } from '../utils/dataCleanup';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
 
 interface DOFormProps {
@@ -100,6 +100,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   }, [defaultDoType, getCurrentDate, user]);
 
   const [formData, setFormData] = useState<Partial<DeliveryOrder>>(getDefaultFormData());
+  const [tonnageInput, setTonnageInput] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Whether a saved draft was restored on open (drives the "draft restored" banner)
@@ -152,6 +153,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
           // Ensure date is in correct format for input
           date: order.date ? order.date.split('T')[0] : getCurrentDate(),
         });
+        setTonnageInput(quantityToInputValue(order.tonnages));
       } else {
         // Create mode - restore a saved draft if the user has one, else reset to
         // defaults. The doNumber is (re)fetched by the effect below so a restored
@@ -159,11 +161,13 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
         const draft = loadDODraft();
         if (draft && hasMeaningfulDO(draft.formData)) {
           setFormData({ ...draft.formData, doType: draft.formData.doType || defaultDoType });
+          setTonnageInput(quantityToInputValue(draft.formData.tonnages));
           setHasDraft(true);
         } else {
           const defaults = getDefaultFormData();
           defaults.doType = defaultDoType; // Ensure we use the passed default
           setFormData(defaults);
+          setTonnageInput('');
           setHasDraft(false);
         }
       }
@@ -189,6 +193,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     const defaults = getDefaultFormData();
     defaults.doType = defaultDoType;
     setFormData(defaults);
+    setTonnageInput('');
     setHasDraft(false);
     const nextDONumber = await deliveryOrdersAPI.getNextNumber(defaultDoType);
     setFormData(prev => ({ ...prev, doNumber: nextDONumber }));
@@ -213,10 +218,20 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
+
+    if (name === 'tonnages') {
+      if (!isTonnageInput(value)) return;
+      setTonnageInput(value);
+      setFormData((prev) => ({
+        ...prev,
+        tonnages: parseTonnage(value),
+      }));
+      return;
+    }
     
     // Auto-uppercase text fields for consistency; truck plates → T{digits} {letters}
     const uppercaseFields = ['trailerNo', 'destination', 'loadingPoint', 'clientName', 'haulier', 'containerNo', 'driverName', 'invoiceNos', 'borderEntryDRC'];
-    const finalValue = ['tonnages', 'ratePerTon'].includes(name)
+    const finalValue = name === 'ratePerTon'
       ? parseFloat(value) || 0
       : name === 'truckNo'
         ? formatTruckNumber(value)
@@ -792,16 +807,14 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                       Tonnage *
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       name="tonnages"
-                      value={formData.tonnages || ''}
+                      value={tonnageInput}
                       onChange={handleChange}
-                      onWheel={preventNumberInputScroll}
                       required
-                      min="0"
-                      step="0.1"
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Enter tonnage"
+                      placeholder="e.g. 30.001"
                     />
                   </div>
 
@@ -838,16 +851,14 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                       Tonnage *
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       name="tonnages"
-                      value={formData.tonnages || ''}
+                      value={tonnageInput}
                       onChange={handleChange}
-                      onWheel={preventNumberInputScroll}
                       required
-                      min="0"
-                      step="0.1"
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Enter tonnage"
+                      placeholder="e.g. 30.001"
                     />
                   </div>
                   <div>
@@ -870,7 +881,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   <div className="md:col-span-2">
                     <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3 rounded-md">
                       <div className="text-sm text-gray-700 dark:text-gray-300">
-                        <strong>Total Amount:</strong> ${(formData.ratePerTon || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Fixed) &middot; <strong>Tonnage:</strong> {formData.tonnages || 0} tons
+                        <strong>Total Amount:</strong> ${(formData.ratePerTon || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Fixed) &middot; <strong>Tonnage:</strong> {formatTonnage(formData.tonnages)} tons
                       </div>
                     </div>
                   </div>

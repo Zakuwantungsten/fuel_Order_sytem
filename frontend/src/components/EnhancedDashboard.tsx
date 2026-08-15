@@ -62,6 +62,7 @@ const AdminDashboard = lazyWithRetry(() => import('./AdminDashboard'));
 const ManagerView = lazyWithRetry(() => import('./ManagerView'));
 const DriverCredentialsManager = lazyWithRetry(() => import('../pages/Admin/DriverCredentialsManager'));
 const OfficerPortal = lazyWithRetry(() => import('./OfficerPortal'));
+const ClerkPortal = lazyWithRetry(() => import('./ClerkPortal'));
 const PendingYardFuel = lazyWithRetry(() => import('./PendingYardFuel'));
 const NotificationsPage = lazyWithRetry(() => import('./NotificationsPage'));
 const ChangePasswordModal = lazyWithRetry(() => import('./ChangePasswordModal'));
@@ -159,6 +160,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   // Check if user is a driver or officer
   const isDriver = user.role === 'driver';
   const isOfficer = user.role === 'import_officer' || user.role === 'export_officer';
+  const isClerk = user.role === 'clerk';
   const isManager = user.role === 'manager' || user.role === 'super_manager' || user.role === 'station_manager';
   
   // For drivers, default to driver_portal, no overview
@@ -604,6 +606,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   // For import/export officers, show simplified officer portal without sidebar
   if (isOfficer) {
     return <Suspense fallback={<TabFallback />}><OfficerPortal user={user} /></Suspense>;
+  }
+
+  // Clerk passport / visa / overstay portal
+  if (isClerk) {
+    return <Suspense fallback={<TabFallback />}><ClerkPortal user={user} /></Suspense>;
   }
 
   // For drivers, render DriverPortal directly without wrapper

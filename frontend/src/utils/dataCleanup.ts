@@ -59,6 +59,33 @@ export const cleanDriverName = (driverName: string | undefined | null): string =
   return cleanName;
 };
 
+/** Empty, whole numbers, or up to three decimal places while typing (e.g. "", "30", "30.", "30.01", "30.001"). */
+export const isTonnageInput = (raw: string): boolean =>
+  raw === '' || /^\d*\.?\d{0,3}$/.test(raw);
+
+/** Parse tonnage exactly — never round. */
+export const parseTonnage = (value: string | number | undefined | null): number => {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) return 0;
+    return value;
+  }
+  if (value == null || value === '') return 0;
+  const n = parseFloat(String(value).replace(/,/g, ''));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n;
+};
+
+/** Show up to 3 decimals without padding (30, 30.01, 30.001 — never 30.000 or 30.010). */
+export const formatTonnage = (n: number | undefined | null): string => {
+  if (n == null || !Number.isFinite(n)) return '0';
+  return n.toFixed(3).replace(/\.?0+$/, '') || '0';
+};
+
+export const quantityToInputValue = (n: number | undefined | null): string => {
+  if (n == null || n === 0) return '';
+  return formatTonnage(n);
+};
+
 /**
  * Clean and validate a delivery order object
  */
@@ -75,12 +102,9 @@ export const cleanDeliveryOrder = (order: Partial<DeliveryOrder>): Partial<Deliv
     cleaned.driverName = cleanDriverName(cleaned.driverName);
   }
   
-  // Validate tonnages is a number
-  if (cleaned.tonnages && typeof cleaned.tonnages === 'string') {
-    const tonnageNum = parseFloat(cleaned.tonnages);
-    if (!isNaN(tonnageNum)) {
-      cleaned.tonnages = tonnageNum;
-    }
+  // Keep tonnage exact (up to three decimal places, never rounded)
+  if (cleaned.tonnages != null) {
+    cleaned.tonnages = parseTonnage(cleaned.tonnages);
   }
   
   // Validate rate per ton is a number

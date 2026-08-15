@@ -3252,4 +3252,177 @@ export const darLPOAPI = {
   },
 };
 
+// ── Visa / Overstay / Passport (Clerk) API ────────────────────────────────────
+
+export const visaOverstayAPI = {
+  listDays: async (params?: Record<string, unknown>) => {
+    const response = await apiClient.get('/visa-overstays/days', { params });
+    return response.data.data;
+  },
+  listEntries: async (params?: Record<string, unknown>) => {
+    const response = await apiClient.get('/visa-overstays/entries', { params });
+    return response.data.data;
+  },
+  getSheet: async (date: string) => {
+    const response = await apiClient.get('/visa-overstays/sheet', { params: { date } });
+    return response.data.data;
+  },
+  listCases: async (params?: Record<string, unknown>) => {
+    const response = await apiClient.get('/visa-overstays/cases', { params });
+    return response.data;
+  },
+  createCase: async (data: Record<string, unknown>) => {
+    const response = await apiClient.post('/visa-overstays/cases', data);
+    return response.data.data;
+  },
+  createCasesBulk: async (data: {
+    destination?: 'raw' | 'waiting' | 'build' | 'crossed';
+    buildDate?: string;
+    items: Array<{
+      truckNo: string;
+      driverName?: string;
+      passportDueDate: string;
+      dateSubmitted?: string;
+      position?: string;
+      destination?: 'raw' | 'waiting' | 'build' | 'crossed';
+    }>;
+  }) => {
+    const response = await apiClient.post('/visa-overstays/cases/bulk', data);
+    return response.data.data;
+  },
+  updateCase: async (id: string, data: Record<string, unknown>) => {
+    const response = await apiClient.put(`/visa-overstays/cases/${id}`, data);
+    return response.data.data;
+  },
+  getTruckHistory: async (params: {
+    truckNo: string;
+    passportDueDate?: string;
+    caseId?: string;
+  }) => {
+    const response = await apiClient.get('/visa-overstays/history', { params });
+    return response.data.data;
+  },
+  markWaitingDue: async (id: string, data?: Record<string, unknown>) => {
+    const response = await apiClient.post(`/visa-overstays/cases/${id}/wait`, data || {});
+    return response.data.data;
+  },
+  markRawInput: async (id: string, data?: Record<string, unknown>) => {
+    const response = await apiClient.post(`/visa-overstays/cases/${id}/to-raw`, data || {});
+    return response.data.data;
+  },
+  addCaseToDay: async (
+    id: string,
+    data: { date: string; includeVisa?: boolean; amount?: number; position?: string }
+  ) => {
+    const response = await apiClient.post(`/visa-overstays/cases/${id}/add-to-day`, data);
+    return response.data.data;
+  },
+  markCrossed: async (id: string, data?: Record<string, unknown>) => {
+    const response = await apiClient.post(`/visa-overstays/cases/${id}/cross`, data || {});
+    return response.data.data;
+  },
+  listDue: async (date: string) => {
+    const response = await apiClient.get('/visa-overstays/due', { params: { date } });
+    return response.data.data;
+  },
+  listCrossed: async (params?: Record<string, unknown>) => {
+    const response = await apiClient.get('/visa-overstays/crossed', { params });
+    return response.data.data;
+  },
+  listPayments: async (date: string) => {
+    const response = await apiClient.get('/visa-overstays/payments', { params: { date } });
+    return response.data.data;
+  },
+  createPayments: async (payload: Record<string, unknown> | { items: Record<string, unknown>[] }) => {
+    const response = await apiClient.post('/visa-overstays/payments', payload);
+    return response.data.data;
+  },
+  buildDay: async (data: { date: string; includeVisa?: boolean; rebuild?: boolean }) => {
+    const response = await apiClient.post('/visa-overstays/payments/build-day', data);
+    return response.data.data;
+  },
+  getConfig: async () => {
+    const response = await apiClient.get('/visa-overstays/config');
+    return response.data.data;
+  },
+  updateConfig: async (data: Record<string, unknown>) => {
+    const response = await apiClient.put('/visa-overstays/config', data);
+    return response.data.data;
+  },
+  checkIntakeDuplicates: async (items: Array<{ key?: string; truckNo?: string; driverName?: string }>) => {
+    const response = await apiClient.post('/visa-overstays/intake-checks', { items });
+    return response.data.data;
+  },
+  listBuild: async (date: string, status?: string) => {
+    const response = await apiClient.get('/visa-overstays/build', {
+      params: { date, status: status || 'pending' },
+    });
+    return response.data.data;
+  },
+  updateBuildItem: async (id: string, data: Record<string, unknown>) => {
+    const response = await apiClient.put(`/visa-overstays/build/${id}`, data);
+    return response.data.data;
+  },
+  resolveBuildItem: async (
+    id: string,
+    data: {
+      action: string;
+      truckNo?: string;
+      driverName?: string;
+      position?: string;
+      includeOverstay?: boolean;
+      includeVisa?: boolean;
+      crossedAt?: string;
+    }
+  ) => {
+    const response = await apiClient.post(`/visa-overstays/build/${id}/resolve`, data);
+    return response.data.data;
+  },
+  confirmBuildBatch: async (ids: string[]) => {
+    const response = await apiClient.post('/visa-overstays/build/confirm-batch', { ids });
+    return response.data.data;
+  },
+  resolveBuildBatch: async (data: {
+    ids: string[];
+    action: 'confirm' | 'waiting' | 'crossed' | 'dismiss';
+    crossedAt?: string;
+    position?: string;
+  }) => {
+    const response = await apiClient.post('/visa-overstays/build/resolve-batch', data);
+    return response.data.data;
+  },
+  confirmPayment: async (id: string) => {
+    const response = await apiClient.post(`/visa-overstays/payments/${id}/confirm`);
+    return response.data.data;
+  },
+  confirmBatch: async (ids: string[]) => {
+    const response = await apiClient.post('/visa-overstays/payments/confirm-batch', { ids });
+    return response.data.data;
+  },
+  confirmRow: async (payload: {
+    overstayPaymentId?: string | null;
+    visaPaymentId?: string | null;
+    passportPaymentId?: string | null;
+  }) => {
+    const response = await apiClient.post('/visa-overstays/rows/confirm', payload);
+    return response.data.data;
+  },
+  removeRow: async (payload: { caseId: string; date: string; reason?: string }) => {
+    const response = await apiClient.post('/visa-overstays/rows/remove', payload);
+    return response.data.data;
+  },
+  assignVisa: async (payload: { caseId: string; date: string; amount?: number; position?: string }) => {
+    const response = await apiClient.post('/visa-overstays/rows/assign-visa', payload);
+    return response.data.data;
+  },
+  amendPayment: async (id: string, data: Record<string, unknown>) => {
+    const response = await apiClient.put(`/visa-overstays/payments/${id}`, data);
+    return response.data.data;
+  },
+  cancelPayment: async (id: string, reason?: string) => {
+    const response = await apiClient.post(`/visa-overstays/payments/${id}/cancel`, { reason });
+    return response.data.data;
+  },
+};
+
 export default apiClient;

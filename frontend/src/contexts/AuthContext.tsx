@@ -696,5 +696,3 @@ export function useAuth(): AuthContextType {
   }
   return context;
 }
-
-export default AuthContext;

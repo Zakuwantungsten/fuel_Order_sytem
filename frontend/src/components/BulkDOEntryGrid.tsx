@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react';
 import type { ClipboardEvent } from 'react';
+import { isTonnageInput, parseTonnage, formatTonnage } from '../utils/dataCleanup';
 
 export interface BulkGridRow {
   truckNo: string;
@@ -38,11 +39,20 @@ export const isGridRowEmpty = (row: BulkGridRow): boolean =>
 export const countFilledGridRows = (rows: BulkGridRow[]): number =>
   rows.filter((row) => !isGridRowEmpty(row)).length;
 
+const sanitizeTonnageCell = (value: string): string => {
+  const trimmed = value.trim().replace(/,/g, '');
+  if (trimmed === '') return '';
+  if (isTonnageInput(trimmed)) return trimmed;
+  const match = trimmed.match(/^(\d+)\.(\d+)$/);
+  if (match) return `${match[1]}.${match[2].slice(0, 3)}`;
+  const n = parseTonnage(trimmed);
+  return n > 0 ? formatTonnage(n) : '';
+};
+
 const cellToString = (value: unknown): string => {
   if (value === null || value === undefined) return '';
   if (typeof value === 'number') {
-    // Avoid scientific notation / float noise for spreadsheet numbers
-    return Number.isInteger(value) ? String(value) : String(value);
+    return String(value);
   }
   return String(value).trim();
 };
@@ -113,7 +123,7 @@ export const matrixToGridRows = (matrix: unknown[][]): BulkGridRow[] => {
       truckNo: cellToString(raw[columnMap.truckNo ?? 0]),
       trailerNo: cellToString(raw[columnMap.trailerNo ?? 1]),
       driverName: cellToString(raw[columnMap.driverName ?? 2]),
-      tonnages: cellToString(raw[columnMap.tonnages ?? 3]),
+      tonnages: sanitizeTonnageCell(cellToString(raw[columnMap.tonnages ?? 3])),
       amountOrRate: cellToString(raw[columnMap.amountOrRate ?? 4]),
     };
     if (!isGridRowEmpty(row)) rows.push(row);
@@ -163,7 +173,7 @@ export const parseTabTextToGridRows = (text: string): BulkGridRow[] => {
       truckNo: parts[0] || '',
       trailerNo: parts[1] || '',
       driverName: parts[2] || '',
-      tonnages: parts[3] || '',
+      tonnages: sanitizeTonnageCell(parts[3] || ''),
       amountOrRate: parts[4] || '',
     };
   });
@@ -183,6 +193,7 @@ const BulkDOEntryGrid = ({ rateType, rows, onChange, disabled }: BulkDOEntryGrid
   const amountHeader = rateType === 'per_ton' ? 'Rate Per Ton' : 'Total Amount';
 
   const updateCell = (rowIndex: number, field: BulkGridField, value: string) => {
+    if (field === 'tonnages' && !isTonnageInput(value)) return;
     const next = rows.map((row, i) => (i === rowIndex ? { ...row, [field]: value } : row));
     onChange(next);
   };
@@ -242,7 +253,10 @@ const BulkDOEntryGrid = ({ rateType, rows, onChange, disabled }: BulkDOEntryGrid
         const fieldIdx = startCol + cOffset;
         if (fieldIdx < 0 || fieldIdx >= EDITABLE_FIELDS.length) return;
         const field = EDITABLE_FIELDS[fieldIdx];
-        next[rowIdx] = { ...next[rowIdx], [field]: value };
+        next[rowIdx] = {
+          ...next[rowIdx],
+          [field]: field === 'tonnages' ? sanitizeTonnageCell(value) : value,
+        };
       });
     });
 
@@ -310,6 +324,7 @@ const BulkDOEntryGrid = ({ rateType, rows, onChange, disabled }: BulkDOEntryGrid
                     >
                       <input
                         type="text"
+                        inputMode={field === 'tonnages' ? 'decimal' : undefined}
                         value={row[field]}
                         disabled={disabled}
                         onChange={(e) => updateCell(rowIndex, field, e.target.value)}
@@ -323,7 +338,7 @@ const BulkDOEntryGrid = ({ rateType, rows, onChange, disabled }: BulkDOEntryGrid
                             : field === 'driverName'
                             ? 'John Doe'
                             : field === 'tonnages'
-                            ? '30'
+                            ? '30.001'
                             : rateType === 'per_ton'
                             ? '1850'
                             : '55500'
