@@ -843,7 +843,6 @@ export default function ClerkDailyWorkspace() {
       if (action === 'waiting' || action === 'dismiss' || action === 'confirm') {
         loadQueues({ silent: true });
       }
-      if (action === 'crossed') loadCrossed({ silent: true });
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Action failed');
     } finally {

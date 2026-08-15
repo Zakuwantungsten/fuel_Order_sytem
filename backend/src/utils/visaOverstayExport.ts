@@ -1284,20 +1284,21 @@ async function rasterizePdfPageToPng(
         <canvas id="c"></canvas>
         <script>pdfjsLib.GlobalWorkerOptions.workerSrc='${cdn}/pdf.worker.min.js';</script>
       </body></html>`,
-      { waitUntil: 'networkidle0', timeout: 60000 }
+      { waitUntil: 'load', timeout: 60000 }
     );
 
     const dataUrl = (await page.evaluate(
       async (b64, renderScale) => {
-        const lib = (window as any).pdfjsLib;
+        const g = globalThis as any;
+        const lib = g.pdfjsLib;
         if (!lib) throw new Error('PDF.js failed to load');
-        const raw = atob(b64);
+        const raw = g.atob(b64);
         const bytes = new Uint8Array(raw.length);
         for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
         const pdf = await lib.getDocument({ data: bytes }).promise;
         const pg = await pdf.getPage(1);
         const viewport = pg.getViewport({ scale: renderScale });
-        const canvas = document.getElementById('c') as HTMLCanvasElement;
+        const canvas = g.document.getElementById('c');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const ctx = canvas.getContext('2d');
