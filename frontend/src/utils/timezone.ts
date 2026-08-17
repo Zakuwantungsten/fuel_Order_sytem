@@ -151,3 +151,85 @@ export const formatTableDate = (date: Date | string | number): string => {
     minute: '2-digit',
   });
 };
+
+const SHORT_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'] as const;
+
+const MONTH_NAME_INDEX: Record<string, number> = {
+  jan: 0, january: 0,
+  feb: 1, february: 1,
+  mar: 2, march: 2,
+  apr: 3, april: 3,
+  may: 4,
+  jun: 5, june: 5,
+  jul: 6, july: 6,
+  aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9,
+  nov: 10, november: 10,
+  dec: 11, december: 11,
+};
+
+/**
+ * Parse a stored record date as a local calendar day (no UTC day-shift).
+ * Canonical format is YYYY-MM-DD. Also accepts Date, ISO datetime,
+ * D-Mon-YYYY, and legacy DD-MMM / DD-MM (year from fallbackYear).
+ */
+export const parseStoredRecordDate = (
+  value: Date | string | number | null | undefined,
+  fallbackYear?: number
+): Date | null => {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === 'number') {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const dateStr = String(value).trim();
+
+  const iso = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const dmy = dateStr.match(/^(\d{1,2})[-\/\s]([A-Za-z]+)[-\/\s](\d{4})$/);
+  if (dmy) {
+    const month = MONTH_NAME_INDEX[dmy[2].toLowerCase()];
+    if (month !== undefined) {
+      return new Date(Number(dmy[3]), month, Number(dmy[1]));
+    }
+  }
+
+  const parts = dateStr.split('-');
+  if (parts.length === 2) {
+    const day = parseInt(parts[0], 10);
+    if (day >= 1 && day <= 31) {
+      let month: number | undefined;
+      if (/^\d{1,2}$/.test(parts[1])) {
+        month = parseInt(parts[1], 10) - 1;
+      } else {
+        month = MONTH_NAME_INDEX[parts[1].toLowerCase()];
+      }
+      if (month !== undefined && month >= 0 && month <= 11) {
+        const year = fallbackYear ?? new Date().getFullYear();
+        return new Date(year, month, day);
+      }
+    }
+  }
+
+  const fallback = new Date(dateStr);
+  return isNaN(fallback.getTime()) ? null : fallback;
+};
+
+/** Search-card label: "17 aug 2026" */
+export const formatSearchCardDate = (
+  value: Date | string | number | null | undefined,
+  fallbackYear?: number
+): string => {
+  const d = parseStoredRecordDate(value, fallbackYear);
+  if (!d) return 'Unknown Date';
+  return `${d.getDate()} ${SHORT_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+};

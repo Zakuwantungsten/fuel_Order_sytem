@@ -755,7 +755,11 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
                     <button
                       onClick={() => {
                         navigateToTab(item.id);
-                        setSidebarOpen(false);
+                        // Keep the desktop sidebar open; only dismiss the mobile drawer
+                        // so the page is visible. Collapse/expand is the menu icon's job.
+                        if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+                          setSidebarOpen(false);
+                        }
                         if (isSearching) setSaNavSearch('');
                       }}
                       title={!sidebarOpen ? item.label : undefined}

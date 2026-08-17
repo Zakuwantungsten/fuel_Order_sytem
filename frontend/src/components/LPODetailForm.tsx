@@ -26,6 +26,12 @@ import { evaluateFormula } from '../utils/evaluateFormula';
 
 // STATIONS array removed - now using dynamic stations from database
 // CASH and CUSTOM are always available in the dropdown
+const SPECIAL_STATION_OPTIONS: { value: string; label: string }[] = [
+  { value: 'CASH', label: 'CASH purchase' },
+  { value: 'CUSTOM', label: 'CUSTOM station' },
+  { value: YARD_STATION.TANGA, label: 'Tanga Yard' },
+  { value: YARD_STATION.DAR, label: 'Dar Yard' },
+];
 
 interface TruckFetchResult {
   fuelRecord: FuelRecord | null;
@@ -207,12 +213,13 @@ const LPO_RD_STYLES = `
 .dark .lpo-rd .fld{background:#0f172a;border-color:#334155;color:#e2e8f0;}
 .lpo-rd .fld-ro{background:#f3f5f9;color:#475569;}
 .dark .lpo-rd .fld-ro{background:#0b1220;border-color:#1e293b;color:#94a3b8;}
-/* Station dropdown trigger — chevron overlaid so it never steals text space */
-.lpo-rd .fld-station{position:relative;display:flex;align-items:center;padding:0 22px 0 8px;overflow:hidden;text-align:left;}
-.lpo-rd .fld-station-label{display:block;width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;line-height:40px;height:40px;font-weight:600;}
+/* Station combobox — chevron overlaid so it never steals text space */
+.lpo-rd .fld-station{padding:0 28px 0 13px;}
 .lpo-rd .fld-station-chevron{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;pointer-events:none;color:#94a3b8;line-height:0;}
 .lpo-rd .fld-station-chevron.is-open{transform:translateY(-50%) rotate(180deg);}
 .lpo-rd .fld-station-chevron svg{width:12px;height:12px;display:block;}
+.lpo-rd .fld-station-option.is-hi{background:#eef2ff;}
+.dark .lpo-rd .fld-station-option.is-hi{background:#1e293b;}
 /* Table cell input */
 .lpo-rd .cell-input{width:100%;box-sizing:border-box;height:34px;padding:0 10px;border:1px solid #e6eaf1;border-radius:8px;background:#fff;color:#0f1729;font-size:13px;font-weight:500;outline:none;transition:border-color .12s,box-shadow .12s;}
 .lpo-rd .cell-input:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.12);}
@@ -603,11 +610,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   // Dropdown state for custom button-based dropdowns (mobile-friendly)
   const [showStationDropdown, setShowStationDropdown] = useState(false);
+  const [stationQuery, setStationQuery] = useState(() => {
+    if (!initialData) {
+      const stored = loadFormFromStorage();
+      const station = stored?.formData?.station ?? '';
+      return station === 'CUSTOM' ? (stored?.customStationName ?? '') : station;
+    }
+    return initialData.station || '';
+  });
+  const [highlightedStationIdx, setHighlightedStationIdx] = useState(0);
   const [showGoingCheckpointDropdown, setShowGoingCheckpointDropdown] = useState(false);
   const [showReturningCheckpointDropdown, setShowReturningCheckpointDropdown] = useState(false);
   
   // Refs for dropdown positioning
   const stationDropdownRef = React.useRef<HTMLDivElement>(null);
+  const stationInputRef = React.useRef<HTMLInputElement>(null);
+  const commitStationQueryRef = React.useRef<() => void>(() => {});
   const goingCheckpointRef = React.useRef<HTMLDivElement>(null);
   const returningCheckpointRef = React.useRef<HTMLDivElement>(null);
   
@@ -642,6 +660,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
         setShowStationDropdown(false);
+        commitStationQueryRef.current();
       }
       if (goingCheckpointRef.current && !goingCheckpointRef.current.contains(event.target as Node)) {
         setShowGoingCheckpointDropdown(false);
@@ -743,6 +762,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setCustomReturnCheckpoint('');
     setNoStationRate(0);
     setNoStationDefaultLiters(0);
+    setStationQuery('');
+    setShowStationDropdown(false);
     setHasDraft(false);
     setIsForwardingMode(false);
     setForwardedFromInfo(null);
@@ -779,6 +800,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setCustomCountry(stored.customCountry ?? 'Zambia');
     setNoStationRate(stored.noStationRate ?? 0);
     setNoStationDefaultLiters(stored.noStationDefaultLiters ?? 0);
+    setStationQuery(
+      stored.formData.station === 'CUSTOM'
+        ? (stored.customStationName ?? '')
+        : (stored.formData.station ?? '')
+    );
     setHasDraft(true);
   };
 
@@ -1128,6 +1154,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   useEffect(() => {
     if (initialData) {
       setFormData(initialData);
+      setStationQuery(initialData.station === 'CUSTOM' ? '' : (initialData.station || ''));
 
       // Re-derive each row's mode so saved DA/REF/NIL/NORM entries reopen in the right mode
       const derived: Record<number, EntryAutoFillData> = {};
@@ -1710,6 +1737,231 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         setStationLitersModal({ open: true, stationName: value });
       }
     }
+  };
+
+  const applyStationSelection = (value: string) => {
+    void handleHeaderChange({
+      target: { name: 'station', value },
+    } as React.ChangeEvent<HTMLInputElement | HTMLSelectElement>);
+  };
+
+  const committedStationLabel = formData.station === 'CUSTOM' ? customStationName : (formData.station || '');
+
+  const normalizeStationSearch = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  const stationMenuItems = useMemo(() => {
+    const q = normalizeStationSearch(stationQuery);
+    const listed = (q
+      ? availableStations.filter(s => normalizeStationSearch(s.stationName).includes(q))
+      : availableStations
+    ).map(station => ({ type: 'listed' as const, value: station.stationName, station }));
+    const specials = (q
+      ? SPECIAL_STATION_OPTIONS.filter(s =>
+          normalizeStationSearch(s.value).includes(q) || normalizeStationSearch(s.label).includes(q)
+        )
+      : SPECIAL_STATION_OPTIONS
+    ).map(s => ({ type: 'special' as const, value: s.value, label: s.label }));
+    const showClear = !q;
+    const clear = showClear
+      ? [{ type: 'clear' as const, value: '', label: 'Select station' }]
+      : [];
+    return { clear, listed, specials, flat: [...clear, ...listed, ...specials] };
+  }, [stationQuery, availableStations]);
+
+  const selectStationFromMenu = (value: string) => {
+    applyStationSelection(value);
+    if (value === 'CUSTOM') {
+      setStationQuery(customStationName);
+    } else {
+      setStationQuery(value);
+    }
+    setShowStationDropdown(false);
+    if (value === 'CUSTOM') {
+      requestAnimationFrame(() => stationInputRef.current?.focus());
+    }
+  };
+
+  const commitStationQuery = () => {
+    const q = stationQuery.trim();
+    if (!q) {
+      if (formData.station) applyStationSelection('');
+      setStationQuery('');
+      return;
+    }
+    const qNorm = normalizeStationSearch(q);
+    const listed = availableStations.find(s => normalizeStationSearch(s.stationName) === qNorm);
+    if (listed) {
+      if (formData.station !== listed.stationName) applyStationSelection(listed.stationName);
+      setStationQuery(listed.stationName);
+      return;
+    }
+    const special = SPECIAL_STATION_OPTIONS.find(
+      s => normalizeStationSearch(s.value) === qNorm || normalizeStationSearch(s.label) === qNorm
+    );
+    if (special) {
+      if (formData.station !== special.value) applyStationSelection(special.value);
+      setStationQuery(special.value === 'CUSTOM' ? customStationName : special.value);
+      return;
+    }
+    if (formData.station !== 'CUSTOM') applyStationSelection('CUSTOM');
+    setCustomStationName(q);
+    setStationQuery(q);
+  };
+  commitStationQueryRef.current = commitStationQuery;
+
+  const handleStationInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const typed = e.target.value;
+    const nativeInput = e.nativeEvent as InputEvent;
+    const isDeleteAction = (nativeInput?.inputType || '').toLowerCase().includes('delete');
+    setStationQuery(typed);
+    setShowStationDropdown(true);
+    setHighlightedStationIdx(0);
+
+    const q = typed.trim();
+    if (!q) {
+      if (formData.station) applyStationSelection('');
+      setCustomStationName('');
+      return;
+    }
+
+    const qNorm = normalizeStationSearch(q);
+    const listedPrefix = availableStations.filter(s => normalizeStationSearch(s.stationName).startsWith(qNorm));
+    const specialPrefix = SPECIAL_STATION_OPTIONS.filter(
+      s => normalizeStationSearch(s.value).startsWith(qNorm) || normalizeStationSearch(s.label).startsWith(qNorm)
+    );
+    const listedContains = availableStations.filter(s => normalizeStationSearch(s.stationName).includes(qNorm));
+    const specialContains = SPECIAL_STATION_OPTIONS.filter(
+      s => normalizeStationSearch(s.value).includes(qNorm) || normalizeStationSearch(s.label).includes(qNorm)
+    );
+
+    const uniqueListedPrefix = listedPrefix.length === 1 && specialPrefix.length === 0 ? listedPrefix[0] : null;
+    const uniqueSpecialPrefix = specialPrefix.length === 1 && listedPrefix.length === 0 ? specialPrefix[0] : null;
+    const uniqueListedContains = listedContains.length === 1 && specialContains.length === 0 ? listedContains[0] : null;
+    const uniqueSpecialContains = specialContains.length === 1 && listedContains.length === 0 ? specialContains[0] : null;
+    const allowImmediateFill = q.length >= 2 && formData.station !== 'CUSTOM' && !isDeleteAction;
+
+    const applyInlinePreview = (full: string) => {
+      const fullNorm = normalizeStationSearch(full);
+      const starts = fullNorm.startsWith(qNorm);
+      const idx = fullNorm.indexOf(qNorm);
+      if (full.length > typed.length && idx >= 0) {
+        setStationQuery(full);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            // Prefix match: keep typed prefix and preview the tail.
+            // Mid-word match (e.g. "kap" -> "Lake Kapiri"): keep the leading
+            // words fixed and only preview the unmatched tail after what was typed.
+            if (starts) {
+              stationInputRef.current?.setSelectionRange(typed.length, full.length);
+            } else {
+              const tailStart = Math.max(idx + typed.length, 0);
+              stationInputRef.current?.setSelectionRange(tailStart, full.length);
+            }
+          });
+        });
+      }
+    };
+
+    if (allowImmediateFill && uniqueListedPrefix) {
+      const full = uniqueListedPrefix.stationName;
+      applyInlinePreview(full);
+      if (formData.station !== full) applyStationSelection(full);
+      return;
+    }
+
+    if (allowImmediateFill && uniqueSpecialPrefix) {
+      const full = uniqueSpecialPrefix.value;
+      applyInlinePreview(full);
+      if (formData.station !== full) applyStationSelection(full);
+      return;
+    }
+
+    if (allowImmediateFill && uniqueListedContains) {
+      const full = uniqueListedContains.stationName;
+      applyInlinePreview(full);
+      if (formData.station !== full) applyStationSelection(full);
+      return;
+    }
+
+    if (allowImmediateFill && uniqueSpecialContains) {
+      const full = uniqueSpecialContains.value;
+      applyInlinePreview(full);
+      if (formData.station !== full) applyStationSelection(full);
+      return;
+    }
+
+    const exactListed = availableStations.find(s => normalizeStationSearch(s.stationName) === qNorm);
+    if (exactListed) {
+      if (formData.station !== exactListed.stationName) applyStationSelection(exactListed.stationName);
+      return;
+    }
+
+    const exactSpecial = SPECIAL_STATION_OPTIONS.find(
+      s => normalizeStationSearch(s.value) === qNorm || normalizeStationSearch(s.label) === qNorm
+    );
+    if (exactSpecial) {
+      if (formData.station !== exactSpecial.value) applyStationSelection(exactSpecial.value);
+      return;
+    }
+
+    if (formData.station === 'CUSTOM') {
+      setCustomStationName(typed);
+    }
+  };
+
+  const handleStationKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!showStationDropdown) {
+        setShowStationDropdown(true);
+        return;
+      }
+      setHighlightedStationIdx(i => Math.min(i + 1, Math.max(stationMenuItems.flat.length - 1, 0)));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedStationIdx(i => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const item = stationMenuItems.flat[highlightedStationIdx];
+      if (showStationDropdown && item) {
+        selectStationFromMenu(item.value);
+      } else {
+        commitStationQuery();
+        setShowStationDropdown(false);
+      }
+      return;
+    }
+    if (e.key === 'Tab') {
+      if (showStationDropdown) {
+        const item = stationMenuItems.flat[highlightedStationIdx];
+        if (item) {
+          selectStationFromMenu(item.value);
+        } else {
+          commitStationQuery();
+          setShowStationDropdown(false);
+        }
+      } else {
+        commitStationQuery();
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowStationDropdown(false);
+      setStationQuery(committedStationLabel);
+    }
+  };
+
+  const handleStationBlur = () => {
+    requestAnimationFrame(() => {
+      if (stationDropdownRef.current?.contains(document.activeElement)) return;
+      setShowStationDropdown(false);
+      commitStationQueryRef.current();
+    });
   };
 
   const handleAddEntry = () => {
@@ -3682,47 +3934,79 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               <div>
                 <label className="lbl">Station</label>
                 <div className="relative" ref={stationDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => !loadingStations && setShowStationDropdown(!showStationDropdown)}
+                  <div className="relative">
+                  <input
+                    ref={stationInputRef}
+                    type="text"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={showStationDropdown}
+                    aria-controls="station-combobox-list"
+                    name="station"
+                    value={stationQuery}
+                    onChange={handleStationInputChange}
+                    onKeyDown={handleStationKeyDown}
+                    onFocus={() => {
+                      if (!loadingStations) setShowStationDropdown(true);
+                    }}
+                    onBlur={handleStationBlur}
                     disabled={loadingStations}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={loadingStations ? 'Loading...' : 'Select or type station'}
                     className="fld fld-station disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ color: formData.station ? undefined : '#94a3b8' }}
-                    title={formData.station || undefined}
-                  >
-                    <span className="fld-station-label">
-                      {loadingStations ? 'Loading...' : (formData.station || 'Select station')}
-                    </span>
-                    <span className={`fld-station-chevron${showStationDropdown ? ' is-open' : ''}`} aria-hidden>
-                      <ChevronDown />
-                    </span>
-                  </button>
+                    title={committedStationLabel || undefined}
+                  />
+                  <span className={`fld-station-chevron${showStationDropdown ? ' is-open' : ''}`} aria-hidden>
+                    <ChevronDown />
+                  </span>
+                  </div>
 
                   {showStationDropdown && !loadingStations && (
-                    <div className="menu absolute z-40 left-0 top-[46px] p-1.5 max-h-[280px] overflow-y-auto w-[calc(200%+1rem)] min-w-full max-w-[min(100vw-1.5rem,22rem)] lg:w-full lg:max-w-none">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleHeaderChange({ target: { name: 'station', value: '' } } as any);
-                          setShowStationDropdown(false);
-                        }}
-                        className={`menu-item w-full flex items-center justify-between gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-semibold ${!formData.station ? 'text-[#4f46e5] dark:text-indigo-400' : 'text-[#0f1729] dark:text-gray-100'}`}
-                      >
-                        <span>Select station</span>
-                        {!formData.station && <Check className="w-4 h-4" />}
-                      </button>
-                      {availableStations.map(station => {
+                    <div
+                      id="station-combobox-list"
+                      role="listbox"
+                      className="menu absolute z-40 left-0 top-[46px] p-1.5 max-h-[280px] overflow-y-auto w-[calc(200%+1rem)] min-w-full max-w-[min(100vw-1.5rem,22rem)] lg:w-full lg:max-w-none"
+                    >
+                      {stationMenuItems.flat.length === 0 && (
+                        <p className="px-[11px] py-2 text-[12px] text-[#9aa6b6] font-medium">
+                          No match — keep typing to use as a custom station
+                        </p>
+                      )}
+                      {stationMenuItems.clear.map((item, i) => {
+                        const idx = i;
+                        const active = !formData.station;
+                        return (
+                          <button
+                            key="clear-station"
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onMouseEnter={() => setHighlightedStationIdx(idx)}
+                            onClick={() => selectStationFromMenu(item.value)}
+                            className={`menu-item fld-station-option w-full flex items-center justify-between gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-semibold ${active ? 'text-[#4f46e5] dark:text-indigo-400' : 'text-[#0f1729] dark:text-gray-100'}${highlightedStationIdx === idx ? ' is-hi' : ''}`}
+                          >
+                            <span>{item.label}</span>
+                            {active && <Check className="w-4 h-4" />}
+                          </button>
+                        );
+                      })}
+                      {stationMenuItems.listed.map((item, i) => {
+                        const idx = stationMenuItems.clear.length + i;
+                        const station = item.station;
                         const cur = station.currency ?? (station.defaultRate < 10 ? 'USD' : 'TZS');
                         const active = formData.station === station.stationName;
                         return (
                           <button
-                            key={station._id}
+                            key={station._id || station.stationName}
                             type="button"
-                            onClick={() => {
-                              handleHeaderChange({ target: { name: 'station', value: station.stationName } } as any);
-                              setShowStationDropdown(false);
-                            }}
-                            className="menu-item w-full flex items-center justify-between gap-2.5 px-[11px] py-2 rounded-lg text-left"
+                            role="option"
+                            aria-selected={active}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onMouseEnter={() => setHighlightedStationIdx(idx)}
+                            onClick={() => selectStationFromMenu(station.stationName)}
+                            className={`menu-item fld-station-option w-full flex items-center justify-between gap-2.5 px-[11px] py-2 rounded-lg text-left${highlightedStationIdx === idx ? ' is-hi' : ''}`}
                           >
                             <span className="flex flex-col gap-0.5 min-w-0">
                               <span
@@ -3741,52 +4025,44 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           </button>
                         );
                       })}
-                      <div className="h-px bg-[#eef1f6] dark:bg-[#1e293b] my-1.5 mx-1" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleHeaderChange({ target: { name: 'station', value: 'CASH' } } as any);
-                          setShowStationDropdown(false);
-                        }}
-                        className="menu-item w-full flex items-center gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-bold text-[#c2410c]"
-                      >
-                        <Banknote className="w-4 h-4" />CASH purchase
-                        {formData.station === 'CASH' && <Check className="w-4 h-4 ml-auto" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleHeaderChange({ target: { name: 'station', value: 'CUSTOM' } } as any);
-                          setShowStationDropdown(false);
-                        }}
-                        className="menu-item w-full flex items-center gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-bold text-[#6d28d9] dark:text-violet-400"
-                      >
-                        <PlusCircle className="w-4 h-4" />CUSTOM station
-                        {formData.station === 'CUSTOM' && <Check className="w-4 h-4 ml-auto" />}
-                      </button>
-                      <div className="h-px bg-[#eef1f6] dark:bg-[#1e293b] my-1.5 mx-1" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleHeaderChange({ target: { name: 'station', value: YARD_STATION.TANGA } } as any);
-                          setShowStationDropdown(false);
-                        }}
-                        className="menu-item w-full flex items-center gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-bold text-[#1d6fc9]"
-                      >
-                        <Fuel className="w-4 h-4" />Tanga Yard
-                        {formData.station === YARD_STATION.TANGA && <Check className="w-4 h-4 ml-auto" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleHeaderChange({ target: { name: 'station', value: YARD_STATION.DAR } } as any);
-                          setShowStationDropdown(false);
-                        }}
-                        className="menu-item w-full flex items-center gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-bold text-[#16a34a]"
-                      >
-                        <Fuel className="w-4 h-4" />Dar Yard
-                        {formData.station === YARD_STATION.DAR && <Check className="w-4 h-4 ml-auto" />}
-                      </button>
+                      {stationMenuItems.listed.length > 0 && stationMenuItems.specials.length > 0 && (
+                        <div className="h-px bg-[#eef1f6] dark:bg-[#1e293b] my-1.5 mx-1" />
+                      )}
+                      {stationMenuItems.specials.map((item, i) => {
+                        const idx = stationMenuItems.clear.length + stationMenuItems.listed.length + i;
+                        const active = formData.station === item.value;
+                        const isYard = item.value === YARD_STATION.TANGA || item.value === YARD_STATION.DAR;
+                        const prev = stationMenuItems.specials[i - 1];
+                        const prevIsYard = prev && (prev.value === YARD_STATION.TANGA || prev.value === YARD_STATION.DAR);
+                        const showYardDivider = isYard && !prevIsYard && i > 0;
+                        const colorClass =
+                          item.value === 'CASH' ? 'text-[#c2410c]'
+                          : item.value === 'CUSTOM' ? 'text-[#6d28d9] dark:text-violet-400'
+                          : item.value === YARD_STATION.TANGA ? 'text-[#1d6fc9]'
+                          : 'text-[#16a34a]';
+                        return (
+                          <React.Fragment key={item.value}>
+                            {showYardDivider && (
+                              <div className="h-px bg-[#eef1f6] dark:bg-[#1e293b] my-1.5 mx-1" />
+                            )}
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={active}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onMouseEnter={() => setHighlightedStationIdx(idx)}
+                              onClick={() => selectStationFromMenu(item.value)}
+                              className={`menu-item fld-station-option w-full flex items-center gap-2.5 px-[11px] py-2 rounded-lg text-left text-[13px] font-bold ${colorClass}${highlightedStationIdx === idx ? ' is-hi' : ''}`}
+                            >
+                              {item.value === 'CASH' && <Banknote className="w-4 h-4" />}
+                              {item.value === 'CUSTOM' && <PlusCircle className="w-4 h-4" />}
+                              {isYard && <Fuel className="w-4 h-4" />}
+                              {item.label}
+                              {active && <Check className="w-4 h-4 ml-auto" />}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
                     </div>
                   )}
                   {formData.station && (() => {
@@ -4182,7 +4458,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     <input
                       type="text"
                       value={customStationName}
-                      onChange={(e) => setCustomStationName(e.target.value)}
+                      onChange={(e) => {
+                        setCustomStationName(e.target.value);
+                        setStationQuery(e.target.value);
+                      }}
                       placeholder="e.g. Lake Near Kapiri"
                       required
                       className="w-full h-9 px-2.5 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"

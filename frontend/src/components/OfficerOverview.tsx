@@ -35,6 +35,7 @@ import { dashboardAPI, deliveryOrdersAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { readOfficerConfig } from '../hooks/useOfficerConfig';
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
+import { formatSearchCardDate, parseStoredRecordDate } from '../utils/timezone';
 
 interface OfficerOverviewProps {
   user: any;
@@ -201,8 +202,11 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
   };
 
   const handleResultClick = (result: DOResult) => {
-    const d = new Date(result.date);
-    onNavigateToDO(`highlight=${result.doNumber}&year=${d.getFullYear()}&month=${d.getMonth() + 1}&truck=${result.truckNo}`);
+    const d = parseStoredRecordDate(result.date);
+    const year = d?.getFullYear();
+    const month = d ? d.getMonth() + 1 : undefined;
+    const dateParams = year && month ? `&year=${year}&month=${month}` : '';
+    onNavigateToDO(`highlight=${result.doNumber}${dateParams}&truck=${result.truckNo}`);
   };
 
   const clearSearch = () => {
@@ -404,7 +408,7 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
                       <div className="flex items-center gap-1 mb-0.5">
                         <Calendar className="w-2.5 h-2.5 flex-shrink-0" style={{ color: accentColor }} />
                         <p className="text-[10px] font-semibold truncate" style={{ color: accentColor }}>
-                          {new Date(result.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                          {formatSearchCardDate(result.date)}
                         </p>
                       </div>
                       <p className="text-xs font-medium truncate" style={{ color: isDark ? '#E2E8F0' : '#0F172A' }}>

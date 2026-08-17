@@ -33,6 +33,7 @@ import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { useAuth } from '../contexts/AuthContext';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import QueryErrorState from '../components/QueryErrorState';
+import { formatSearchCardDate, parseStoredRecordDate } from '../utils/timezone';
 
 // Colors for charts — aligned with design system palette
 const CHART_COLORS = ['#2563EB', '#16A34A', '#F97316', '#8B5CF6', '#0891B2', '#EC4899'];
@@ -261,7 +262,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           return {
             id: `do-${DO._id || DO.id || index}`,
             type: 'do' as const,
-            month: new Date(DO.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+            month: formatSearchCardDate(DO.date),
             primaryText: `${DO.doNumber} - ${DO.to || DO.destination || 'N/A'}`,
             secondaryText: `${importExportLabel} | ${DO.truckNo} | ${DO.tonnages} tons | ${DO.haulier}`,
             isCancelled: DO.isCancelled === true,
@@ -269,68 +270,20 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           };
         });
 
-      // Process LPO results - Backend filtered by actualDate (actual LPO date)
-      // Display the actualDate if available, otherwise parse date field + createdAt year
+      // Process LPO results. Prefer the stored YYYY-MM-DD `date` field — actualDate
+      // can be wrong when the backend hook treated year-month-day as day-month.
       const lposResults: SearchResult[] = lposData
         .map((lpo: any, index: number) => {
-          let displayDate = 'Unknown Date';
-          
-          // Prefer actualDate if available
-          if (lpo.actualDate) {
-            const lpoDate = new Date(lpo.actualDate);
-            displayDate = lpoDate.toLocaleDateString('en-US', { 
-              day: 'numeric',
-              month: 'long', 
-              year: 'numeric' 
-            });
-          } else if (lpo.date && lpo.createdAt) {
-            // Fallback: Parse the 'date' field (e.g., "14-Dec") and combine with year from createdAt
-            try {
-              const createdYear = new Date(lpo.createdAt).getFullYear();
-              const dateParts = lpo.date.split('-');
-              if (dateParts.length >= 2) {
-                const day = dateParts[0];
-                let monthName = dateParts[1];
-                
-                // If month is a number, convert to name
-                if (!isNaN(parseInt(monthName))) {
-                  const monthNum = parseInt(monthName, 10);
-                  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                                    'July', 'August', 'September', 'October', 'November', 'December'];
-                  monthName = monthNames[monthNum - 1] || monthName;
-                }
-                
-                displayDate = `${day} ${monthName} ${createdYear}`;
-              }
-            } catch (e) {
-              // Fallback to createdAt if parsing fails
-              const lpoDate = new Date(lpo.createdAt);
-              displayDate = lpoDate.toLocaleDateString('en-US', { 
-                day: 'numeric',
-                month: 'long', 
-                year: 'numeric' 
-              });
-            }
-          } else if (lpo.createdAt) {
-            // Final fallback to createdAt
-            const lpoDate = new Date(lpo.createdAt);
-            displayDate = lpoDate.toLocaleDateString('en-US', { 
-              day: 'numeric',
-              month: 'long', 
-              year: 'numeric' 
-            });
-          }
-          
-          const _parsedDate = lpo.actualDate
-            ? new Date(lpo.actualDate)
-            : lpo.createdAt
-              ? new Date(lpo.createdAt)
-              : null;
+          const createdYear = lpo.createdAt ? new Date(lpo.createdAt).getFullYear() : undefined;
+          const _parsedDate =
+            parseStoredRecordDate(lpo.date, createdYear) ||
+            parseStoredRecordDate(lpo.actualDate) ||
+            parseStoredRecordDate(lpo.createdAt);
 
           return {
             id: `lpo-${lpo._id || lpo.id || index}`,
             type: 'lpo' as const,
-            month: displayDate,
+            month: formatSearchCardDate(_parsedDate),
             primaryText: `${lpo.lpoNo} - ${lpo.dieselAt}`,
             secondaryText: `${lpo.truckNo} | ${lpo.ltrs}L | ${lpo.doSdo}`,
             isCancelled: lpo.isCancelled === true,
@@ -343,7 +296,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         .map((fuel: FuelRecord, index: number) => ({
           id: `fuel-${fuel._id || fuel.id || index}`,
           type: 'fuel' as const,
-          month: new Date(fuel.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          month: formatSearchCardDate(fuel.date),
           primaryText: `${fuel.truckNo} | ${fuel.goingDo} → ${fuel.to || 'N/A'}`,
           secondaryText: `${fuel.totalLts}L | Status: ${fuel.journeyStatus}`,
           isCancelled: (fuel as any).isCancelled === true,
@@ -413,13 +366,16 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
       // Use tab-based navigation for EnhancedDashboard
       if (result.type === 'do') {
         // For DOs, pass DO number, year, and month
-        const doDate = new Date(result.metadata.date);
-        const year = doDate.getFullYear();
-        const month = doDate.getMonth() + 1; // 1-indexed
-        onNavigate('do', `highlight=${result.metadata.doNumber}&year=${year}&month=${month}`);
+        const doDate = parseStoredRecordDate(result.metadata.date);
+        const year = doDate?.getFullYear();
+        const month = doDate ? doDate.getMonth() + 1 : undefined;
+        const dateParams = year && month ? `&year=${year}&month=${month}` : '';
+        onNavigate('do', `highlight=${result.metadata.doNumber}${dateParams}`);
       } else if (result.type === 'lpo') {
         // For LPOs, use the parsed timestamp from metadata
-        const lpoDate = result.metadata._parsedDate;
+        const lpoDate = result.metadata._parsedDate instanceof Date
+          ? result.metadata._parsedDate
+          : parseStoredRecordDate(result.metadata._parsedDate || result.metadata.date);
         const truckNo = result.metadata.truckNo || '';
         if (lpoDate) {
           const year = lpoDate.getFullYear();
@@ -432,22 +388,26 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         // For fuel records, highlight by the unique record id — a truck can have
         // many fuel records (different DOs) in a month, so highlighting by truckNo
         // would land on the wrong row (e.g. an active DO instead of the searched one).
-        const fuelDate = new Date(result.metadata.date);
-        const year = fuelDate.getFullYear();
-        const month = fuelDate.getMonth() + 1; // 1-indexed
+        const fuelDate = parseStoredRecordDate(result.metadata.date);
+        const year = fuelDate?.getFullYear();
+        const month = fuelDate ? fuelDate.getMonth() + 1 : undefined;
         const recordId = result.metadata._id || result.metadata.id;
-        onNavigate('fuel_records', `highlight=${recordId}&year=${year}&month=${month}`);
+        const dateParams = year && month ? `&year=${year}&month=${month}` : '';
+        onNavigate('fuel_records', `highlight=${recordId}${dateParams}`);
       }
     } else {
       // Fallback to route-based navigation
       if (result.type === 'do') {
-        const doDate = new Date(result.metadata.date);
-        const year = doDate.getFullYear();
-        const month = doDate.getMonth() + 1;
-        navigate(`/do?highlight=${result.metadata.doNumber}&year=${year}&month=${month}`);
+        const doDate = parseStoredRecordDate(result.metadata.date);
+        const year = doDate?.getFullYear();
+        const month = doDate ? doDate.getMonth() + 1 : undefined;
+        const dateParams = year && month ? `&year=${year}&month=${month}` : '';
+        navigate(`/do?highlight=${result.metadata.doNumber}${dateParams}`);
       } else if (result.type === 'lpo') {
         // Use the parsed timestamp from metadata
-        const lpoDate = result.metadata._parsedDate;
+        const lpoDate = result.metadata._parsedDate instanceof Date
+          ? result.metadata._parsedDate
+          : parseStoredRecordDate(result.metadata._parsedDate || result.metadata.date);
         const truckNo = result.metadata.truckNo || '';
         if (lpoDate) {
           const year = lpoDate.getFullYear();
@@ -457,11 +417,12 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           navigate(`/lpo?highlight=${result.metadata.lpoNo}&truck=${truckNo}`);
         }
       } else if (result.type === 'fuel') {
-        const fuelDate = new Date(result.metadata.date);
-        const year = fuelDate.getFullYear();
-        const month = fuelDate.getMonth() + 1;
+        const fuelDate = parseStoredRecordDate(result.metadata.date);
+        const year = fuelDate?.getFullYear();
+        const month = fuelDate ? fuelDate.getMonth() + 1 : undefined;
         const recordId = result.metadata._id || result.metadata.id;
-        navigate(`/fuel-records?highlight=${recordId}&year=${year}&month=${month}`);
+        const dateParams = year && month ? `&year=${year}&month=${month}` : '';
+        navigate(`/fuel-records?highlight=${recordId}${dateParams}`);
       }
     }
   };
