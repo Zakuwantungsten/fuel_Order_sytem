@@ -12,7 +12,7 @@ interface AuditEntry {
   severity?: string;
 }
 
-interface FieldDiff {
+export interface FieldDiff {
   field: string;
   from: any;
   to: any;
@@ -23,22 +23,79 @@ interface RecordTimelineProps {
   isOpen: boolean;
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  truckNo: 'Truck',
+  goingDo: 'Going DO',
+  returnDo: 'Return DO',
+  start: 'Start',
+  from: 'From',
+  to: 'To / destination',
+  originalGoingFrom: 'Going from (stored)',
+  originalGoingTo: 'Going destination (stored)',
+  totalLts: 'Total liters',
+  extra: 'Extra',
+  outboundLiters: 'Outbound liters',
+  balance: 'Balance',
+  isLocked: 'Locked',
+  pendingConfigReason: 'Pending config',
+  mmsaYard: 'MMSA Yard',
+  tangaYard: 'Tanga Yard',
+  darYard: 'Dar Yard',
+  tangaGoing: 'Tanga Going',
+  darGoing: 'Dar Going',
+  moroGoing: 'Morogoro Going',
+  mbeyaGoing: 'Mbeya Going',
+  tdmGoing: 'Tunduma Going',
+  zambiaGoing: 'Zambia Going',
+  congoFuel: 'Congo',
+  zambiaReturn: 'Zambia Return',
+  tundumaReturn: 'Tunduma Return',
+  mbeyaReturn: 'Mbeya Return',
+  moroReturn: 'Morogoro Return',
+  darReturn: 'Dar Return',
+  tangaReturn: 'Tanga Return',
+  date: 'Date',
+  month: 'Month',
+  lpoNo: 'LPO No',
+  journeyStatus: 'Journey status',
+  queueOrder: 'Queue order',
+  isCancelled: 'Cancelled',
+  cancelledBy: 'Cancelled by',
+  loadingPoint: 'Loading point',
+  destination: 'Destination',
+};
+
+const LITER_FIELDS = new Set([
+  'totalLts', 'extra', 'outboundLiters', 'balance',
+  'mmsaYard', 'tangaYard', 'darYard',
+  'tangaGoing', 'darGoing', 'moroGoing', 'mbeyaGoing', 'tdmGoing', 'zambiaGoing', 'congoFuel',
+  'zambiaReturn', 'tundumaReturn', 'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn',
+]);
+
+const SKIP_DIFF_KEYS = new Set(['source', 'changes', 'merge']);
+
+export function fieldLabel(field: string): string {
+  return FIELD_LABELS[field] ?? field.replace(/([A-Z])/g, ' $1').trim();
+}
+
 /** Human-readable audit value (avoids "[object Object]"). */
-function formatAuditValue(value: unknown): string {
+export function formatAuditValue(value: unknown, field?: string): string {
   if (value === null || value === undefined || value === '') return '—';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (field && LITER_FIELDS.has(field) && (typeof value === 'number' || (typeof value === 'string' && value !== ''))) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return `${n}L`;
   }
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
   if (value instanceof Date) return value.toLocaleString();
   if (Array.isArray(value)) {
     if (value.length === 0) return '—';
-    return value.map((v) => formatAuditValue(v)).join(', ');
+    return value.map((v) => formatAuditValue(v, field)).join(', ');
   }
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
-    // Common nested shapes
     if ('oldValue' in obj || 'newValue' in obj) {
-      return formatAuditValue(obj.newValue ?? obj.oldValue);
+      return formatAuditValue(obj.newValue ?? obj.oldValue, field);
     }
     if ('doNumber' in obj && Object.keys(obj).length <= 3) {
       return String(obj.doNumber);
@@ -67,7 +124,7 @@ function isChangeObject(item: unknown): item is { field: string; oldValue?: any;
  *   newValue.changes      = [{ field, oldValue, newValue }, ...]
  * Fall back to top-level key diffs for fuel-record / generic audits.
  */
-function extractDiffs(prev?: Record<string, any>, next?: Record<string, any>): FieldDiff[] {
+export function extractDiffs(prev?: Record<string, any>, next?: Record<string, any>): FieldDiff[] {
   const changeLists = [next?.changes, prev?.changes].filter(Array.isArray) as any[][];
   const objectChanges = changeLists.flat().filter(isChangeObject);
 
@@ -85,7 +142,6 @@ function extractDiffs(prev?: Record<string, any>, next?: Record<string, any>): F
 
   // Legacy DO shape: previous.changes = field name strings only, new.changes missing objects
   if (Array.isArray(prev?.changes) && prev.changes.every((c: unknown) => typeof c === 'string')) {
-    // Nothing useful beyond field names — still list them as "changed" without values
     if (!Array.isArray(next?.changes) || next.changes.length === 0) {
       return (prev.changes as string[]).map((field) => ({
         field,
@@ -95,13 +151,24 @@ function extractDiffs(prev?: Record<string, any>, next?: Record<string, any>): F
     }
   }
 
+  if (!prev && next) {
+    return Object.keys(next)
+      .filter((k) => !SKIP_DIFF_KEYS.has(k))
+      .filter((k) => {
+        const v = next[k];
+        if (v === null || v === undefined || v === '') return false;
+        if (LITER_FIELDS.has(k) && Number(v || 0) === 0) return false;
+        return true;
+      })
+      .map((field) => ({ field, from: '—', to: next[field] }));
+  }
+
   if (!prev || !next) return [];
 
   const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
   const diffs: FieldDiff[] = [];
   keys.forEach((k) => {
-    // Skip the changes bag when we already tried above; avoid raw array dumps
-    if (k === 'changes') return;
+    if (SKIP_DIFF_KEYS.has(k)) return;
     if (JSON.stringify(prev[k]) !== JSON.stringify(next[k])) {
       diffs.push({ field: k, from: prev[k], to: next[k] });
     }
@@ -165,7 +232,7 @@ const RecordTimeline = ({ fetchHistory, isOpen }: RecordTimelineProps) => {
     /merge_source/i.test(String((entry.previousValue as any)?.role || ''));
 
   return (
-    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+    <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
       {entries.map((entry) => {
         const diffs = extractDiffs(entry.previousValue, entry.newValue);
         const promotion = isPendingPromotion(entry);
@@ -226,17 +293,14 @@ const RecordTimeline = ({ fetchHistory, isOpen }: RecordTimelineProps) => {
             )}
             {diffs.length > 0 && (
               <div className="mt-1 space-y-0.5">
-                {diffs.slice(0, 8).map((d) => (
+                {diffs.map((d) => (
                   <div key={d.field} className="flex items-center gap-1 text-xs flex-wrap">
-                    <span className="font-medium text-gray-600 dark:text-gray-400">{d.field}:</span>
-                    <span className="text-red-500 line-through">{formatAuditValue(d.from)}</span>
+                    <span className="font-medium text-gray-600 dark:text-gray-400">{fieldLabel(d.field)}:</span>
+                    <span className="text-red-500 line-through">{formatAuditValue(d.from, d.field)}</span>
                     <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />
-                    <span className="text-green-600 dark:text-green-400">{formatAuditValue(d.to)}</span>
+                    <span className="text-green-600 dark:text-green-400">{formatAuditValue(d.to, d.field)}</span>
                   </div>
                 ))}
-                {diffs.length > 8 && (
-                  <span className="text-xs text-gray-400">+{diffs.length - 8} more fields</span>
-                )}
               </div>
             )}
           </div>

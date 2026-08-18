@@ -89,6 +89,22 @@ router.post(
   asyncHandler(fuelRecordController.uncancelFuelRecord)
 );
 
+// Manual complete / undo complete — same roles as cancel
+router.post(
+  '/:id/complete',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'boss'),
+  validate,
+  asyncHandler(fuelRecordController.completeFuelRecord)
+);
+router.post(
+  '/:id/uncomplete',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'boss'),
+  validate,
+  asyncHandler(fuelRecordController.uncompleteFuelRecord)
+);
+
 // Edit lock routes (same roles as update)
 const fuelLock = createEditLockHandlers(FuelRecord, 'fuel_records');
 router.post('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'driver', 'fuel_order_maker', 'boss', 'yard_personnel', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(fuelLock.acquireEditLock));

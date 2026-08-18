@@ -19,6 +19,7 @@ import {
 } from '../utils/yardJourneyLookup';
 import type { YardKey } from '../services/yardLpoFetchService';
 import type { FuelRecord } from '../types';
+import { shouldOfferPendingGoingCreate } from '../utils/pendingDo';
 
 // ── Types exposed to the parent (LPODetailForm) ─────────────────────────────
 
@@ -63,6 +64,8 @@ interface DraftEntry {
   /** Required when billed liters differ from dispense. */
   context: string | null;
 }
+
+export type YardDraftEntry = DraftEntry;
 
 interface RowState {
   autoFetching: boolean;
@@ -114,12 +117,23 @@ interface Props {
   yard: YardKey;
   date: string;
   disabled?: boolean;
+  initialEntries?: YardDraftEntry[];
   onSummaryChange?: (summary: { count: number; total: number; totalLiters: number }) => void;
+  onEntriesChange?: (entries: YardDraftEntry[]) => void;
 }
 
-const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date, disabled, onSummaryChange }, ref) => {
-  const [entries, setEntries] = useState<DraftEntry[]>([makeEmptyEntry()]);
-  const [rows, setRows] = useState<RowState[]>([makeEmptyRow()]);
+const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
+  yard, date, disabled, initialEntries, onSummaryChange, onEntriesChange,
+}, ref) => {
+  const [entries, setEntries] = useState<DraftEntry[]>(() =>
+    initialEntries && initialEntries.length > 0
+      ? initialEntries.map((e) => ({ ...makeEmptyEntry(), ...e }))
+      : [makeEmptyEntry()]
+  );
+  const [rows, setRows] = useState<RowState[]>(() => {
+    const n = initialEntries && initialEntries.length > 0 ? initialEntries.length : 1;
+    return Array.from({ length: n }, () => makeEmptyRow());
+  });
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
   const [inspectModal, setInspectModal] = useState<{ isOpen: boolean; fuelRecordId: string | number; truckNumber?: string }>({
@@ -325,6 +339,16 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
     }
   }, [applySelectedJourney]);
 
+  const restoredFetchDone = useRef(false);
+  useEffect(() => {
+    if (restoredFetchDone.current) return;
+    restoredFetchDone.current = true;
+    entries.forEach((e, i) => {
+      if ((e.truckNo || '').trim().length >= 3) fetchTruck(i, e.truckNo);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchTruck]);
+
   const handleJourneySelect = (idx: number, type: 'active' | 'queued', qIdx = 0) => {
     const row = rows[idx];
     if (!row) return;
@@ -513,6 +537,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
       total: valid.reduce((s, e) => s + (e.amount || 0), 0),
       totalLiters: valid.reduce((s, e) => s + (Number(e.liters) || 0), 0),
     });
+    onEntriesChange?.(entries);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries]);
 
@@ -584,14 +609,16 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({ yard, date
           </button>
         ))}
         <span className={`text-[10px] font-semibold truncate ${toneClass}`} title={st.text}>{st.text}</span>
-        {(row.warningType === 'not_found' ||
-          row.warningType === 'no_active_record' ||
-          row.warningType === 'journey_completed') && (
+        {shouldOfferPendingGoingCreate({
+          warningType: row.warningType,
+          active: row.allJourneys.active,
+          queued: row.allJourneys.queued,
+        }) && (entries[idx]?.truckNo || '').trim().length >= 4 && (
           <button
             type="button"
             onClick={() => handleCreatePendingDo(idx)}
             disabled={disabled || row.creatingPendingDo}
-            title="Create temporary PG#### going DO"
+            title="Create temporary PG#### going DO (queued if this truck already has an active journey)"
             className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
           >
             {row.creatingPendingDo ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}

@@ -21,8 +21,8 @@ function resourceTypeAliases(resourceType: string): string[] {
 export const getResourceHistory = (resourceType: string) => {
   return async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-      const { id } = req.params;
-      const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const { id } = req.params;
+    const limit = Math.min(Number(req.query.limit) || 200, 500);
       const types = resourceTypeAliases(resourceType);
 
       const logs = await AuditLog.find({

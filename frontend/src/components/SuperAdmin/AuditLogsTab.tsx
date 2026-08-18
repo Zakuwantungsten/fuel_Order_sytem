@@ -7,6 +7,7 @@ import {
 import UnifiedTabLoader from './common/UnifiedTabLoader';
 import { systemAdminAPI } from '../../services/api';
 import Pagination from '../Pagination';
+import { extractDiffs, fieldLabel, formatAuditValue } from '../RecordTimeline';
 
 interface AuditLogsTabProps {
   onMessage: (type: 'success' | 'error', message: string) => void;
@@ -47,6 +48,15 @@ const ACTION_TYPES = [
   { value: 'DISABLE_MAINTENANCE',  label: 'Disable Maintenance'  },
   // Audit integrity
   { value: 'VERIFY_INTEGRITY',     label: 'Integrity Verify'     },
+];
+
+const RESOURCE_TYPES = [
+  { value: '', label: 'All Resources' },
+  { value: 'FuelRecord', label: 'Fuel Record' },
+  { value: 'DeliveryOrder', label: 'Delivery Order' },
+  { value: 'LPOSummary', label: 'LPO' },
+  { value: 'User', label: 'User' },
+  { value: 'YardFuelDispense', label: 'Yard Fuel' },
 ];
 
 const SEVERITY_TYPES = [
@@ -199,6 +209,26 @@ function LogDetailModal({ log, onClose }: { log: any; onClose: () => void }) {
               <p className="text-sm text-gray-800 dark:text-gray-200">{log.details}</p>
             </div>
           )}
+
+          {(() => {
+            const diffs = extractDiffs(log.previousValue, log.newValue);
+            if (diffs.length === 0) return null;
+            return (
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Changes</p>
+                <div className="space-y-1 bg-gray-50 dark:bg-gray-700/40 rounded p-2">
+                  {diffs.map((d) => (
+                    <div key={d.field} className="flex items-center gap-1 text-xs flex-wrap">
+                      <span className="font-medium text-gray-600 dark:text-gray-300">{fieldLabel(d.field)}:</span>
+                      <span className="text-red-500 line-through">{formatAuditValue(d.from, d.field)}</span>
+                      <span className="text-gray-400">→</span>
+                      <span className="text-green-600 dark:text-green-400">{formatAuditValue(d.to, d.field)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Before / After diff */}
           {(log.previousValue || log.newValue) && (
@@ -357,9 +387,9 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
   const [exporting, setExporting] = useState(false);
   const [stats, setStats] = useState<any>(null);
 
-  const [filters, setFilters] = usePersistedState('audit:filters:v2', {
+  const [filters, setFilters] = usePersistedState('audit:filters:v3', {
     action: '', severity: '', outcome: '',
-    username: '', resourceType: '',
+    username: '', resourceType: '', search: '',
     startDate: '', endDate: '',
   });
 
@@ -485,10 +515,11 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 shadow-sm">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
           <FilterDropdown label="Action"   value={filters.action}   options={ACTION_TYPES}   onChange={v => updateFilter('action',   v)} />
           <FilterDropdown label="Severity" value={filters.severity} options={SEVERITY_TYPES} onChange={v => updateFilter('severity', v)} />
           <FilterDropdown label="Outcome"  value={filters.outcome}  options={OUTCOME_TYPES}  onChange={v => updateFilter('outcome',  v)} />
+          <FilterDropdown label="Resource" value={filters.resourceType || ''} options={RESOURCE_TYPES} onChange={v => updateFilter('resourceType', v)} />
 
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Username</label>
@@ -496,6 +527,15 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
               type="text" value={filters.username}
               onChange={e => updateFilter('username', e.target.value)}
               placeholder="Filter by user..."
+              className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Truck / DO / details</label>
+            <input
+              type="text" value={filters.search || ''}
+              onChange={e => updateFilter('search', e.target.value)}
+              placeholder="e.g. T103 DVL or 12345"
               className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             />
           </div>
@@ -518,7 +558,7 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
           <div className="flex items-end">
             <button
               onClick={() => {
-                setFilters({ action: '', severity: '', outcome: '', username: '', resourceType: '', startDate: '', endDate: '' });
+                setFilters({ action: '', severity: '', outcome: '', username: '', resourceType: '', search: '', startDate: '', endDate: '' });
                 setPagination(prev => ({ ...prev, page: 1 }));
               }}
               className="w-full px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"
@@ -567,6 +607,11 @@ export default function AuditLogsTab({ onMessage }: AuditLogsTabProps) {
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-gray-900 dark:text-gray-100">{log.resourceType}</p>
+                    {(log.newValue?.truckNo || log.previousValue?.truckNo) && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {log.newValue?.truckNo || log.previousValue?.truckNo}
+                      </p>
+                    )}
                     {log.resourceId && (
                       <p className="font-mono text-xs text-gray-400">{String(log.resourceId).slice(0, 10)}...</p>
                     )}

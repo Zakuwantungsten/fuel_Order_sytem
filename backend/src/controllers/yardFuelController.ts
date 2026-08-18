@@ -6,6 +6,7 @@ import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber } from '../utils';
 import { AuditService } from '../utils/auditService';
 import { emitDataChange } from '../services/websocket';
+import { checkAndPromoteStartedJourney } from '../services/journeyService';
 
 /**
  * Get yard fuel time limit config and build a date filter if enabled for this yard
@@ -218,10 +219,21 @@ export const createYardFuelDispense = async (req: AuthRequest, res: Response): P
           // Recalculate balance: Balance = (Total + Extra) - (All Checkpoints)
           const newBalance = fuelRecord.balance - yardFuelDispense.liters;
           
-          await FuelRecord.findByIdAndUpdate(fuelRecord._id, {
-            [updateField]: newCheckpointValue,
-            balance: newBalance,
-          });
+          const updatedFuel = await FuelRecord.findByIdAndUpdate(
+            fuelRecord._id,
+            {
+              [updateField]: newCheckpointValue,
+              balance: newBalance,
+            },
+            { new: true }
+          );
+
+          if (updatedFuel) {
+            await checkAndPromoteStartedJourney(
+              updatedFuel,
+              req.user?.username || 'system'
+            );
+          }
 
           // Update yard fuel dispense status
           await YardFuelDispense.findByIdAndUpdate(yardFuelDispense._id, {

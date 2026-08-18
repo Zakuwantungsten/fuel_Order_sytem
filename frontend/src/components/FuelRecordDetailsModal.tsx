@@ -14,10 +14,12 @@ import {
   ListOrdered,
   Link2,
   Loader2,
+  Edit,
 } from 'lucide-react';
 import { FuelRecordDetails, fuelRecordsAPI } from '../services/api';
 import type { AdditionalYardDispensation, TruckQueueJourney } from '../services/api';
 import type { FuelRecord } from '../types';
+import JourneyStatusBadge from './JourneyStatusBadge';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import RecordTimeline from './RecordTimeline';
 import { isPendingGoingDo } from '../utils/pendingDo';
@@ -27,6 +29,7 @@ interface FuelRecordDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   recordId: string | number | null;
+  onEdit?: (record: FuelRecord) => void;
 }
 
 type ActiveTab = 'lpos' | 'yard' | 'queue' | 'history';
@@ -92,6 +95,7 @@ export default function FuelRecordDetailsModal({
   isOpen,
   onClose,
   recordId,
+  onEdit,
 }: FuelRecordDetailsModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -268,6 +272,13 @@ export default function FuelRecordDetailsModal({
                     {record.goingDo}{record.returnDo ? ` / ${record.returnDo}` : ''}
                   </span>
                 )}
+                {record && !record.isCancelled && (
+                  <JourneyStatusBadge
+                    status={record.journeyStatus}
+                    queueOrder={record.queueOrder}
+                    size="sm"
+                  />
+                )}
                 {record?.isCancelled && (
                   <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-xs font-semibold rounded-full tracking-wide">
                     CANCELLED
@@ -275,12 +286,27 @@ export default function FuelRecordDetailsModal({
                 )}
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="ml-4 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors shrink-0"
-            >
-              <X className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-            </button>
+            <div className="ml-4 flex items-center gap-1 shrink-0">
+              {onEdit && record && !record.isCancelled && (
+                <button
+                  type="button"
+                  onClick={() => onEdit(record)}
+                  className="p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                  title="Edit"
+                  aria-label="Edit fuel record"
+                >
+                  <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                title="Close"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+              </button>
+            </div>
           </div>
 
           {/* Body */}

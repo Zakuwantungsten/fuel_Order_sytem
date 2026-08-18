@@ -3,7 +3,7 @@ import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTria
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI, tangaLPOAPI, darLPOAPI } from '../services/api';
 import YardEntriesTable from './YardEntriesTable';
-import type { YardEntriesTableHandle } from './YardEntriesTable';
+import type { YardEntriesTableHandle, YardDraftEntry } from './YardEntriesTable';
 import { isYardStation, isDarYardStation, YARD_STATION, YARD_DEFAULT_ORDER_OF } from '../utils/yardStations';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { useEditLockSession } from '../hooks/useEditLockSession';
@@ -21,7 +21,7 @@ import { useGridNav } from '../hooks/useGridNav';
 import ForwardLPOModal from './ForwardLPOModal';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
 import { toast } from 'react-toastify';
-import { isReturnDoMissing, pendingDoStatusLabel, isPendingDo } from '../utils/pendingDo';
+import { isReturnDoMissing, pendingDoStatusLabel, isPendingDo, shouldOfferPendingGoingCreate } from '../utils/pendingDo';
 import { evaluateFormula } from '../utils/evaluateFormula';
 
 // STATIONS array removed - now using dynamic stations from database
@@ -143,6 +143,7 @@ interface StoredFormData {
   customCountry: string;
   noStationRate: number;
   noStationDefaultLiters: number;
+  yardEntries?: YardDraftEntry[];
   savedAt: string;
 }
 
@@ -333,6 +334,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const [yardSummary, setYardSummary] = useState<{ count: number; total: number; totalLiters: number }>({
     count: 0, total: 0, totalLiters: 0,
   });
+  const [yardDraftEntries, setYardDraftEntries] = useState<YardDraftEntry[]>([]);
+  const [yardDraftVersion, setYardDraftVersion] = useState(0);
 
   // Cash cancellation state - now supports both directions simultaneously
   const [goingEnabled, setGoingEnabled] = useState(() => {
@@ -767,6 +770,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setHasDraft(false);
     setIsForwardingMode(false);
     setForwardedFromInfo(null);
+    setYardDraftEntries([]);
+    setYardDraftVersion((v) => v + 1);
+    setYardSummary({ count: 0, total: 0, totalLiters: 0 });
     // Clear local storage if requested
     if (clearStorage) {
       clearFormStorage();
@@ -800,6 +806,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setCustomCountry(stored.customCountry ?? 'Zambia');
     setNoStationRate(stored.noStationRate ?? 0);
     setNoStationDefaultLiters(stored.noStationDefaultLiters ?? 0);
+    setYardDraftEntries(stored.yardEntries || []);
+    setYardDraftVersion((v) => v + 1);
     setStationQuery(
       stored.formData.station === 'CUSTOM'
         ? (stored.customStationName ?? '')
@@ -912,14 +920,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   useEffect(() => {
     if (isOpen && !initialData) {
       const stored = loadFormFromStorage();
-      if (stored && stored.formData.entries && stored.formData.entries.length > 0) {
-        // Found a draft with entries - restore it into state. We can't rely on the
-        // useState initializers here: the form stays mounted across open/close, so
-        // they only ran once on first mount. Push the draft back in explicitly.
+      const hasRegular = !!(stored?.formData.entries && stored.formData.entries.length > 0);
+      const hasYard = !!(stored?.yardEntries && stored.yardEntries.some((e) => (e.truckNo || '').trim()));
+      if (stored && (hasRegular || hasYard)) {
         applyStoredDraft(stored);
       } else {
-        // No draft or empty draft - reset and fetch new LPO number
-        resetForm(false); // Don't clear storage since there's nothing there
+        resetForm(false);
         fetchNextLpoNumber();
       }
     }
@@ -929,7 +935,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   useEffect(() => {
     // Don't save if editing existing LPO or if form is empty
     if (initialData) return;
-    if (!formData.entries || formData.entries.length === 0) return;
+    const hasRegular = !!(formData.entries && formData.entries.length > 0);
+    const hasYard = yardDraftEntries.some((e) => (e.truckNo || '').trim());
+    if (!hasRegular && !hasYard) return;
     
     const timeoutId = setTimeout(() => {
       saveFormToStorage({
@@ -953,6 +961,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         customCountry,
         noStationRate,
         noStationDefaultLiters,
+        yardEntries: yardDraftEntries,
         savedAt: new Date().toISOString(),
       });
       setHasDraft(true);
@@ -980,6 +989,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     customCountry,
     noStationRate,
     noStationDefaultLiters,
+    yardDraftEntries,
     initialData
   ]);
 
@@ -1250,35 +1260,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         };
       }
 
-      // Check if any active fuel record is locked (pending admin configuration)
-      const lockedRecord = activeFuelRecords.find((r: any) => r.isLocked);
-      if (lockedRecord) {
-        const reasonText = lockedRecord.pendingConfigReason === 'both' 
-          ? 'route total liters and truck batch assignment'
-          : lockedRecord.pendingConfigReason === 'missing_total_liters'
-          ? 'route total liters'
-          : 'truck batch assignment';
-        
-        console.log('[LPO Truck Lookup] Found locked record:', lockedRecord.goingDo);
-        return {
-          fuelRecord: lockedRecord,
-          goingDo: lockedRecord.goingDo || 'NIL',
-          returnDo: lockedRecord.returnDo || 'NIL',
-          destination: lockedRecord.to || 'NIL',
-          goingDestination: lockedRecord.originalGoingTo || lockedRecord.to || 'NIL',
-          balance: lockedRecord.balance || 0,
-          message: `🔒 LOCKED: Missing configuration (${reasonText}).\n\nDO: ${lockedRecord.goingDo} | Truck: ${lockedRecord.truckNo} | Destination: ${lockedRecord.to}\n\nYou can:\n• Enter fuel amounts manually in this LPO form\n• Contact admin to configure the missing ${reasonText}\n\nℹ️ Manual entry allowed - auto-calculated values will be available after admin configures settings.`,
-          success: true,
-          // No warningType - locked records are not warnings, they're just pending config
-          // This prevents the "⚠️ No record found" badge from showing
-          // Add journey info so UI shows proper status indicator
-          allJourneys: {
-            active: lockedRecord, // Locked record is the active journey (pending config)
-            queued: []
-          }
-        };
-      }
-
       // Month boundaries for journey search (server already filtered by dateFrom; month loop picks priority)
       const now = new Date();
       const monthStarts: Date[] = [];
@@ -1464,6 +1445,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         console.log('[LPO Truck Lookup] Using active journey:', selectedRecord.goingDo);
       } else if (selectedRecord.journeyStatus === 'completed') {
         statusMessage = `✓ COMPLETED Journey: DO ${selectedRecord.goingDo}`;
+      }
+      if ((selectedRecord as any).isLocked) {
+        statusMessage += ' | Locked (pending admin config — manual entry allowed)';
       }
       
       return {
@@ -2854,6 +2838,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     return Number(parts[1]) === now.getFullYear() && Number(parts[2]) === now.getMonth() + 1;
   };
 
+  const canOfferPendingGoing = (index: number) => {
+    const entry = formData.entries?.[index];
+    const autoFill = entryAutoFillData[index];
+    if ((autoFill?.entryType || 'regular') !== 'regular') return false;
+    if (!isPendingGoingCreateMonth()) return false;
+    if ((entry?.truckNo?.length || 0) < 4) return false;
+    return shouldOfferPendingGoingCreate({
+      warningType: autoFill?.warningType,
+      active: autoFill?.allJourneys?.active ?? null,
+      queued: autoFill?.allJourneys?.queued || [],
+    });
+  };
+
   /**
    * Create a pending going (PG####) or pending return (PR####) DO for this entry's truck,
    * then re-fetch so LPO detail form can dispense against the temporary fuel record.
@@ -2899,11 +2896,13 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         [index]: { ...prev[index], loading: true },
       }));
 
+      let createdPendingDo = '';
       if (kind === 'going') {
         const res = await fuelRecordsAPI.createPendingGoingDo({
           truckNo,
           date: formData.date || undefined,
         });
+        createdPendingDo = res?.data?.pendingDo || '';
         toast.success(res?.message || `Pending going DO created for ${truckNo}`);
       } else {
         const fuelRecordId = autoFill?.fuelRecordId
@@ -2918,10 +2917,26 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }
 
       const result = await fetchTruckData(truckNo);
+      const queued = result.allJourneys?.queued || [];
+      const pendingMatch = createdPendingDo
+        ? queued.find((q) => (q.goingDo || '').toUpperCase() === createdPendingDo.toUpperCase())
+        : undefined;
+      const selectedRecord =
+        (kind === 'going' ? (pendingMatch || queued[0]) : null) || result.fuelRecord;
+      const selectedType: 'active' | 'queued' =
+        selectedRecord?.journeyStatus === 'queued' ? 'queued' : 'active';
+      const selectedIndex =
+        selectedType === 'queued'
+          ? Math.max(0, queued.findIndex((q) => (q.id || q._id) === (selectedRecord?.id || selectedRecord?._id)))
+          : -1;
+
       const direction: 'going' | 'returning' = kind === 'return' ? 'returning' : (autoFill?.direction || 'going');
-      const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
-      const returnDoMissing = isReturnDoMissing(result.returnDo);
-      const destinationForAllocation = direction === 'going' ? result.goingDestination : result.destination;
+      const doNumber = direction === 'going'
+        ? (selectedRecord?.goingDo || result.goingDo)
+        : (selectedRecord?.returnDo || result.returnDo || selectedRecord?.goingDo || result.goingDo);
+      const returnDoMissing = isReturnDoMissing(selectedRecord?.returnDo || result.returnDo);
+      const goingDestination = selectedRecord?.originalGoingTo || selectedRecord?.to || result.goingDestination;
+      const destinationForAllocation = direction === 'going' ? goingDestination : (selectedRecord?.to || result.destination);
 
       setFormData(prev => {
         const newEntries = [...(prev.entries || [])];
@@ -2941,15 +2956,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           ...prev[index],
           direction,
           loading: false,
-          fetched: result.success,
-          fuelRecord: result.fuelRecord,
-          fuelRecordId: result.fuelRecord?.id || result.fuelRecord?._id,
-          goingDestination: result.goingDestination,
+          fetched: result.success || !!selectedRecord,
+          fuelRecord: selectedRecord,
+          fuelRecordId: selectedRecord?.id || selectedRecord?._id,
+          goingDestination,
           returnDoMissing,
-          warningType: result.success ? null : result.warningType || null,
+          warningType: (result.success || selectedRecord) ? null : result.warningType || null,
           warningMessage: result.message,
           allJourneys: result.allJourneys,
-          selectedJourneyType: result.fuelRecord?.journeyStatus === 'queued' ? 'queued' : 'active',
+          selectedJourneyType: selectedType,
+          selectedJourneyIndex: selectedIndex,
           entryType: prev[index]?.entryType || 'regular',
         },
       }));
@@ -4633,12 +4649,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 </span>
               </div>
               <YardEntriesTable
-                key={formData.station}
+                key={`${formData.station}-${yardDraftVersion}`}
                 ref={yardEntriesRef}
                 yard={isDarYardStation(formData.station) ? 'darYard' : 'tangaYard'}
                 date={formData.date || ''}
                 disabled={isSubmitting}
+                initialEntries={yardDraftEntries}
                 onSummaryChange={setYardSummary}
+                onEntriesChange={setYardDraftEntries}
               />
             </div>
           ) : (
@@ -4837,10 +4855,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               {autoFill.warningType === 'ambiguous_do' && '⚠️ DO on multiple trucks — pick one'}
                             </span>
                         )}
-                        {(autoFill.warningType === 'not_found' || autoFill.warningType === 'no_active_record') &&
-                          (autoFill.entryType || 'regular') === 'regular' &&
-                          isPendingGoingCreateMonth() &&
-                          (entry?.truckNo?.length || 0) >= 4 && (
+                        {canOfferPendingGoing(index) && (
                           <button
                             type="button"
                             onClick={() => handleCreatePendingDo(index, 'going')}
@@ -4876,6 +4891,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           <span className={`text-[10px] ${(autoFill.fuelRecord as any)?.isLocked ? 'text-amber-600 dark:text-amber-400' : autoFill.selectedJourneyType === 'queued' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
                             {(autoFill.fuelRecord as any)?.isLocked ? 'Locked' : autoFill.selectedJourneyType === 'queued' ? 'Queued' : 'Active'}
                           </span>
+                        )}
+                        {canOfferPendingGoing(index) && !hasNoRecordWarning && (
+                          <button
+                            type="button"
+                            onClick={() => handleCreatePendingDo(index, 'going')}
+                            disabled={autoFill.loading}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
+                            title="Queue a pending going DO behind the active journey"
+                          >
+                            <PlusCircle className="w-3 h-3" />
+                            Pending DO
+                          </button>
                         )}
                       </div>
                     )}
@@ -5265,9 +5292,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                     <span className="block text-[10px] text-gray-500 dark:text-gray-400">
                                       {autoFill.warningMessage?.includes('DUPLICATE') ? 'Remove duplicate or use different truck' : 'Manual entry allowed'}
                                     </span>
-                                    {(autoFill.warningType === 'not_found' || autoFill.warningType === 'no_active_record') &&
-                                      (autoFill.entryType || 'regular') === 'regular' &&
-                                      isPendingGoingCreateMonth() && (
+                                    {canOfferPendingGoing(index) && (
                                       <button
                                         type="button"
                                         onClick={() => handleCreatePendingDo(index, 'going')}
@@ -5298,7 +5323,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 )}
                                 {/* Journey selection indicator */}
                                 {autoFill.fetched && autoFill.allJourneys && (
-                                  <div className="text-[10px] text-gray-600 dark:text-gray-400">
+                                  <div className="flex items-center gap-1 flex-wrap text-[10px] text-gray-600 dark:text-gray-400">
                                     {autoFill.selectedJourneyType === 'active' && autoFill.allJourneys.active && (
                                       <span className={`font-medium ${(autoFill.fuelRecord as any)?.isLocked ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
                                         {(autoFill.fuelRecord as any)?.isLocked ? 'Locked (Manual entry)' : 'Active Journey'}
@@ -5308,6 +5333,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                       <span className="text-blue-600 dark:text-blue-400 font-medium">
                                         ⏳ Queued #{autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0]?.queueOrder || (autoFill.selectedJourneyIndex || 0) + 1}
                                       </span>
+                                    )}
+                                    {canOfferPendingGoing(index) && !hasNoRecordWarning && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCreatePendingDo(index, 'going')}
+                                        disabled={autoFill.loading}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
+                                        title="Queue a pending going DO behind the active journey"
+                                      >
+                                        <PlusCircle className="w-3 h-3" />
+                                        Create pending going DO
+                                      </button>
                                     )}
                                   </div>
                                 )}

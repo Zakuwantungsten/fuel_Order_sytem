@@ -532,6 +532,9 @@ export interface IFuelRecord {
   queueOrder?: number;
   activatedAt?: Date;
   completedAt?: Date;
+  completedBy?: string;
+  manuallyCompleted?: boolean;
+  promotedSuccessorId?: string;
   estimatedStartDate?: string;
   previousJourneyId?: string;
   // Lock status for pending configurations

@@ -14,6 +14,7 @@ import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { emitDataChange, BulkChangeMeta } from '../services/websocket';
 import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
 import { getFuelAutomationFlags, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled } from '../services/journeyService';
+import { logFuelRecordChange, snapshotFuelRecord } from '../utils/fuelRecordAudit';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import { addDoSummaryTabSheets, parseMonthYearLabel } from '../utils/summaryTabExport';
 import unifiedExportService from '../services/unifiedExportService';
@@ -171,6 +172,7 @@ const cascadeUpdateToFuelRecord = async (
   changes?: string[];
   routeNotificationCreated?: boolean;
   affectedFuelRecordIds?: string[];
+  fuelAudit?: { resourceId: string; previous: Record<string, any>; next: Record<string, any> };
 }> => {
   const changes: string[] = [];
   const opts = session ? { session } : {};
@@ -207,6 +209,7 @@ const cascadeUpdateToFuelRecord = async (
     }
 
     affectedFuelRecordIds.add(fuelRecord._id.toString());
+    const beforeSnap = snapshotFuelRecord(fuelRecord);
 
     const updates: any = {};
     const destChanged =
@@ -410,6 +413,8 @@ const cascadeUpdateToFuelRecord = async (
       await FuelRecord.findByIdAndUpdate(fuelRecord._id, updates, opts);
       logger.info(`Fuel record ${fuelRecord._id} updated due to DO changes: ${changes.join(', ')}`);
 
+      const afterDoc = await FuelRecord.findById(fuelRecord._id).session(session || null);
+
       if (needsRouteNotification) {
         const { createMissingConfigNotification } = await import('./notificationController');
         await createMissingConfigNotification(
@@ -436,17 +441,28 @@ const cascadeUpdateToFuelRecord = async (
         changes,
         routeNotificationCreated: !!needsRouteNotification,
         affectedFuelRecordIds: [...affectedFuelRecordIds],
+        fuelAudit: {
+          resourceId: fuelRecord._id.toString(),
+          previous: beforeSnap,
+          next: snapshotFuelRecord(afterDoc || { ...fuelRecord.toObject(), ...updates }),
+        },
       };
     }
 
     // Truck-only amend: reassignment already applied above
     if (changes.length > 0) {
       logger.info(`Fuel record ${fuelRecord._id} updated due to DO changes: ${changes.join(', ')}`);
+      const afterDoc = await FuelRecord.findById(fuelRecord._id).session(session || null);
       return {
         updated: true,
         fuelRecordId: fuelRecord._id.toString(),
         changes,
         affectedFuelRecordIds: [...affectedFuelRecordIds],
+        fuelAudit: {
+          resourceId: fuelRecord._id.toString(),
+          previous: beforeSnap,
+          next: snapshotFuelRecord(afterDoc || fuelRecord),
+        },
       };
     }
 
@@ -472,6 +488,7 @@ const cascadeCancelFuelRecord = async (
   fuelRecordId?: string;
   action?: string;
   affectedFuelRecordIds?: string[];
+  fuelAudit?: { resourceId: string; previous: Record<string, any>; next: Record<string, any> };
 }> => {
   const opts = session ? { session } : {};
   try {
@@ -501,6 +518,7 @@ const cascadeCancelFuelRecord = async (
       // The going DO is the primary journey, without it the fuel record has no purpose
       const wasActive = fuelRecord.journeyStatus === 'active';
       const wasQueued = fuelRecord.journeyStatus === 'queued';
+      const beforeSnap = snapshotFuelRecord(fuelRecord);
 
       await FuelRecord.findByIdAndUpdate(fuelRecord._id, {
         isCancelled: true,
@@ -516,12 +534,18 @@ const cascadeCancelFuelRecord = async (
       });
       
       logger.info(`Fuel record ${fuelRecord._id} fully cancelled due to going DO ${deliveryOrder.doNumber} cancellation. Reason: ${cancellationReason}`);
-      
+
+      const afterCancel = await FuelRecord.findById(fuelRecord._id).session(session || null);
       return {
         cancelled: true,
         fuelRecordId: fuelRecord._id.toString(),
         action: 'fully_cancelled',
         affectedFuelRecordIds: cancelSideEffects.affectedIds,
+        fuelAudit: {
+          resourceId: fuelRecord._id.toString(),
+          previous: beforeSnap,
+          next: snapshotFuelRecord(afterCancel || { ...fuelRecord.toObject(), isCancelled: true }),
+        },
       };
       
     } else if (deliveryOrder.importOrExport === 'EXPORT') {
@@ -602,10 +626,20 @@ const cascadeCancelFuelRecord = async (
       };
       
       await FuelRecord.findByIdAndUpdate(fuelRecord._id, updateData, opts);
-      
+
       logger.info(`Fuel record ${fuelRecord._id} return DO ${deliveryOrder.doNumber} removed and reverted to going-only journey. From: ${revertFrom}, To: ${revertTo}. TotalLts: ${originalTotalLts}L → ${newTotalLts}L (deducted ${exportRouteLiters}L from export route). Balance recalculated: ${newBalance}L. Reason: ${cancellationReason}`);
-      
-      return { cancelled: true, fuelRecordId: fuelRecord._id.toString(), action: 'return_do_removed' };
+
+      const afterExport = await FuelRecord.findById(fuelRecord._id).session(session || null);
+      return {
+        cancelled: true,
+        fuelRecordId: fuelRecord._id.toString(),
+        action: 'return_do_removed',
+        fuelAudit: {
+          resourceId: fuelRecord._id.toString(),
+          previous: snapshotFuelRecord(fuelRecord),
+          next: snapshotFuelRecord(afterExport || { ...fuelRecord.toObject(), ...updateData }),
+        },
+      };
     }
     
     return { cancelled: false };
@@ -2182,6 +2216,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       routeNotificationCreated?: boolean;
       lpoEntriesUpdated: number;
       affectedFuelRecordIds: string[];
+      fuelAudit?: { resourceId: string; previous: Record<string, any>; next: Record<string, any> };
       importExportFlip?: {
         from: string;
         to: string;
@@ -2344,6 +2379,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
             cascadeResults.fuelRecordId = fuelResult.fuelRecordId;
             cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
             mergeAffectedFuelRecordIds(fuelResult.affectedFuelRecordIds || []);
+            if (fuelResult.fuelAudit) cascadeResults.fuelAudit = fuelResult.fuelAudit;
             if (fuelResult.routeNotificationCreated) {
               cascadeResults.fuelRecordLocked = true;
             }
@@ -2370,8 +2406,8 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     // Log audit trail — store old/new maps so DO detail history can render real values
     if (changes.length > 0) {
-      const previousFields: Record<string, any> = { doNumber: originalDO.doNumber };
-      const newFields: Record<string, any> = { doNumber: deliveryOrder.doNumber };
+      const previousFields: Record<string, any> = { doNumber: originalDO.doNumber, truckNo: originalDO.truckNo };
+      const newFields: Record<string, any> = { doNumber: deliveryOrder.doNumber, truckNo: deliveryOrder.truckNo };
       for (const c of changes) {
         previousFields[c.field] = c.oldValue;
         newFields[c.field] = c.newValue;
@@ -2387,14 +2423,29 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       );
     }
 
+    if (cascadeResults.fuelAudit) {
+      await logFuelRecordChange({
+        action: 'UPDATE',
+        resourceId: cascadeResults.fuelAudit.resourceId,
+        username,
+        userId: req.user?.userId,
+        ipAddress: req.ip,
+        previous: cascadeResults.fuelAudit.previous,
+        next: cascadeResults.fuelAudit.next,
+        source: 'do_amend',
+        tags: ['do_amend'],
+        details: undefined,
+      });
+    }
+
     // Audit breadcrumb when automation suppressed the amendment cascade.
     if (amendCascadeSkipped) {
       await AuditService.log({
         userId: req.user?.userId,
         username,
         action: 'UPDATE',
-        resourceType: 'FuelRecord',
-        resourceId: deliveryOrder.doNumber,
+        resourceType: 'DeliveryOrder',
+        resourceId: deliveryOrder._id.toString(),
         details: `Fuel-record amendment cascade SKIPPED for DO ${deliveryOrder.doNumber} — automation 'doAmendCascade' is disabled. Manual fuel-record adjustment required.`,
         ipAddress: req.ip,
         severity: 'high',
@@ -2467,6 +2518,7 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       fuelRecordAction: string;
       lpoEntriesCancelled: number;
       affectedFuelRecordIds: string[];
+      fuelAudit?: { resourceId: string; previous: Record<string, any>; next: Record<string, any> };
     } = {
       fuelRecordCancelled: false,
       fuelRecordId: '',
@@ -2510,6 +2562,7 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           cascadeResults.fuelRecordId = fuelResult.fuelRecordId || '';
           cascadeResults.fuelRecordAction = fuelResult.action || '';
           cascadeResults.affectedFuelRecordIds = fuelResult.affectedFuelRecordIds || [];
+          if (fuelResult.fuelAudit) cascadeResults.fuelAudit = fuelResult.fuelAudit;
           fuelAction = fuelResult.action;
         } else {
           cancelCascadeSkipped = true;
@@ -2540,8 +2593,8 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         userId: req.user?.userId,
         username,
         action: 'UPDATE',
-        resourceType: 'FuelRecord',
-        resourceId: deliveryOrder.doNumber,
+        resourceType: 'DeliveryOrder',
+        resourceId: deliveryOrder._id.toString(),
         details: `Fuel-record cancellation cascade SKIPPED for DO ${deliveryOrder.doNumber} — automation 'doCancelCascade' is disabled. Manual fuel-record adjustment required.`,
         ipAddress: req.ip,
         severity: 'high',
@@ -2550,12 +2603,29 @@ export const cancelDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     logger.info(`Delivery order cancelled: ${deliveryOrder.doNumber} by ${username}. Reason: ${reason}. Fuel action: ${fuelAction}`);
 
+    if (cascadeResults.fuelAudit) {
+      await logFuelRecordChange({
+        action: 'UPDATE',
+        resourceId: cascadeResults.fuelAudit.resourceId,
+        username,
+        userId: req.user?.userId,
+        ipAddress: req.ip,
+        previous: cascadeResults.fuelAudit.previous,
+        next: cascadeResults.fuelAudit.next,
+        source: 'do_cancel',
+        tags: ['do_cancel'],
+        severity: 'high',
+      });
+    }
+
     await AuditService.log({
       userId: req.user?.userId,
       username: username,
       action: 'UPDATE',
       resourceType: 'DeliveryOrder',
       resourceId: deliveryOrder._id.toString(),
+      previousValue: { truckNo: originalDO.truckNo, doNumber: originalDO.doNumber, isCancelled: false },
+      newValue: { truckNo: deliveryOrder.truckNo, doNumber: deliveryOrder.doNumber, isCancelled: true },
       details: `DO ${deliveryOrder.doNumber} (truck: ${deliveryOrder.truckNo}) cancelled by ${username}. Reason: ${cancellationReason}`,
       ipAddress: req.ip,
       severity: 'high',

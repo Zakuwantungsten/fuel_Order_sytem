@@ -17,6 +17,32 @@ export function isPendingDo(doNumber: string | null | undefined): boolean {
   return isPendingGoingDo(doNumber) || isPendingReturnDo(doNumber);
 }
 
+export function isPendingGoingRecord(record: {
+  isPendingGoing?: boolean;
+  goingDo?: string;
+} | null | undefined): boolean {
+  if (!record) return false;
+  return record.isPendingGoing === true || isPendingGoingDo(record.goingDo);
+}
+
+/**
+ * Show "Create pending going DO" when lookup failed, journey is done, or the truck
+ * has only an active (non-pending) journey — so the next trip can be queued in-form.
+ */
+export function shouldOfferPendingGoingCreate(opts: {
+  warningType?: string | null;
+  active?: { isPendingGoing?: boolean; goingDo?: string } | null;
+  queued?: Array<{ isPendingGoing?: boolean; goingDo?: string }>;
+}): boolean {
+  const warning = opts.warningType;
+  if (warning === 'not_found' || warning === 'no_active_record' || warning === 'journey_completed') {
+    return true;
+  }
+  if ((opts.queued || []).length > 0) return false;
+  if (!opts.active) return false;
+  return !isPendingGoingRecord(opts.active);
+}
+
 /** Return DO is missing only when blank/NIL — PR#### pending return counts as present. */
 export function isReturnDoMissing(returnDo: string | null | undefined): boolean {
   const v = (returnDo || '').trim();

@@ -110,6 +110,20 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
       type: Date,
       required: false,
     },
+    completedBy: {
+      type: String,
+      trim: true,
+    },
+    /** True when completed via the Mark Complete action (undoable). */
+    manuallyCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    /** Journey promoted to active when this one was manually completed. */
+    promotedSuccessorId: {
+      type: String,
+      required: false,
+    },
     estimatedStartDate: {
       type: String,
       required: false,

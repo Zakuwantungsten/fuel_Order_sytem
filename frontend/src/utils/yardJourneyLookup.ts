@@ -78,21 +78,6 @@ export async function fetchYardJourneysForTruck(truckNo: string): Promise<YardJo
     };
   }
 
-  // Locked record: treat as selectable active (pending admin config)
-  const lockedRecord = records.find((r: any) => r.isLocked);
-  if (lockedRecord) {
-    return {
-      success: true,
-      warningType: null,
-      message: `Locked journey ${lockedRecord.goingDo || ''} — pending admin config`,
-      active: lockedRecord,
-      queued: [],
-      selectedType: 'active',
-      selectedIndex: -1,
-      selected: lockedRecord,
-    };
-  }
-
   const sorted = [...records].sort(
     (a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
   );

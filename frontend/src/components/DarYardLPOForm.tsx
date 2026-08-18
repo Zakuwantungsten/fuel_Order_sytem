@@ -2,11 +2,11 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
   X, Plus, Trash2, Loader2, Search, Eye,
-  CheckCircle, AlertTriangle, Save,
+  CheckCircle, AlertTriangle, Save, UserPlus,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useQueryClient } from '@tanstack/react-query';
-import { darLPOAPI, configAPI } from '../services/api';
+import { darLPOAPI, configAPI, fuelRecordsAPI } from '../services/api';
 import { darLPOKeys } from '../hooks/useDarLPOs';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
 import YardFuelChoiceModal from './YardFuelChoiceModal';
@@ -16,9 +16,11 @@ import {
   fuelRecordIdOf,
   recordDoDest,
   yardAlreadyDispensed,
+  journeysFromYardCandidates,
 } from '../services/yardLpoFetchService';
 import type { DarLPO, DarLPOEntry, FuelRecord } from '../types';
 import { useGridNav } from '../hooks/useGridNav';
+import { shouldOfferPendingGoingCreate } from '../utils/pendingDo';
 
 interface Props {
   mode: 'new' | 'add-entries';
@@ -39,6 +41,7 @@ interface RowState {
   warningType?: 'not_found' | 'needs_choice' | null;
   linked: boolean;
   candidates: FuelRecord[];
+  creatingPendingDo?: boolean;
 }
 
 const YARD: 'darYard' = 'darYard';
@@ -200,10 +203,9 @@ export default function DarYardLPOForm({
     });
   };
 
-  const fetchTruck = useCallback(async (idx: number, rawTruckNo: string, opts?: { openModalIfMany?: boolean }) => {
+  const fetchTruck = useCallback(async (idx: number, rawTruckNo: string, _opts?: { openModalIfMany?: boolean }) => {
     const truckNo = rawTruckNo.trim();
     if (truckNo.length < 3) return;
-    const openModalIfMany = opts?.openModalIfMany ?? true;
 
     updateRow(idx, {
       autoFetching: true, fetched: false, fuelRecord: null, fuelRecordId: undefined,
@@ -221,26 +223,7 @@ export default function DarYardLPOForm({
         return;
       }
 
-      if (candidates.length === 1) {
-        applyCandidate(idx, candidates[0], candidates);
-        return;
-      }
-
-      // Multiple matches: do not silent-pick. Bulk paste leaves rows pending;
-      // manual fetch opens the choice modal immediately.
-      updateRow(idx, {
-        autoFetching: false,
-        fetched: true,
-        fuelRecord: null,
-        fuelRecordId: undefined,
-        alreadyDispensed: 0,
-        warningType: 'needs_choice',
-        linked: false,
-        candidates,
-      });
-      if (openModalIfMany) {
-        setChoiceModal({ open: true, index: idx, truckNo, candidates });
-      }
+      applyCandidate(idx, candidates[0], candidates);
     } catch {
       updateRow(idx, {
         autoFetching: false, fetched: true, warningType: 'not_found',
@@ -248,6 +231,33 @@ export default function DarYardLPOForm({
       });
     }
   }, [applyCandidate]);
+
+  const handleCreatePendingDo = async (idx: number) => {
+    const truckNo = (entries[idx]?.truckNo || '').trim().toUpperCase();
+    if (!truckNo || truckNo.length < 4) {
+      toast.error('Enter a valid truck number first');
+      return;
+    }
+    updateRow(idx, { creatingPendingDo: true });
+    try {
+      const res = await fuelRecordsAPI.createPendingGoingDo({ truckNo, date: date || undefined });
+      toast.success(res?.message || `Pending going DO created for ${truckNo}`);
+      await fetchTruck(idx, truckNo);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to create pending DO');
+    } finally {
+      updateRow(idx, { creatingPendingDo: false });
+    }
+  };
+
+  const offerPendingDo = (row: RowState) => {
+    const j = journeysFromYardCandidates(row.candidates || []);
+    return shouldOfferPendingGoingCreate({
+      warningType: row.warningType === 'not_found' ? 'not_found' : null,
+      active: j.active || (row.fuelRecord && row.fuelRecord.journeyStatus !== 'queued' ? row.fuelRecord : null),
+      queued: j.queued,
+    });
+  };
 
   const handleTruckPaste = useCallback((idx: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData('text');
@@ -817,7 +827,7 @@ export default function DarYardLPOForm({
                                       color: active ? '#fff' : '#5c6358',
                                     }}
                                   >
-                                    {cIdx + 1}
+                                    {c.journeyStatus === 'queued' ? `Q${c.queueOrder || cIdx + 1}` : 'Active'}
                                   </button>
                                 );
                               })}
@@ -827,6 +837,18 @@ export default function DarYardLPOForm({
                             <input type="checkbox" checked={row.linked} onChange={e => handleLinkToggle(idx, e.target.checked)} style={{ width: 13, height: 13, accentColor: '#16794e', cursor: 'pointer' }} />
                             <span style={{ fontSize: '11px', color: '#7c8278', fontWeight: 500 }}>Link &amp; dispense</span>
                           </label>
+                          {offerPendingDo(row) && (
+                            <button
+                              type="button"
+                              onClick={() => handleCreatePendingDo(idx)}
+                              disabled={row.creatingPendingDo}
+                              title="Queue a pending going DO behind the active journey"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '6px', padding: '2px 7px', fontSize: '10px', fontWeight: 600, border: 'none', borderRadius: '4px', background: '#f59e0b', color: '#fff', cursor: 'pointer' }}
+                            >
+                              {row.creatingPendingDo ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                              Pending DO
+                            </button>
+                          )}
                         </div>
                       ) : row.warningType === 'needs_choice' ? (
                         <button
@@ -840,9 +862,22 @@ export default function DarYardLPOForm({
                           </span>
                         </button>
                       ) : row.warningType === 'not_found' ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#fdf4e3', border: '1px solid #f2e0b8', borderRadius: '6px', padding: '4px 7px' }}>
-                          <AlertTriangle className="w-3 h-3" style={{ color: '#b4690e', flexShrink: 0 }} />
-                          <span style={{ fontSize: '11px', color: '#b4690e', fontWeight: 500 }}>No record in window</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#fdf4e3', border: '1px solid #f2e0b8', borderRadius: '6px', padding: '4px 7px' }}>
+                            <AlertTriangle className="w-3 h-3" style={{ color: '#b4690e', flexShrink: 0 }} />
+                            <span style={{ fontSize: '11px', color: '#b4690e', fontWeight: 500 }}>No record in window</span>
+                          </div>
+                          {offerPendingDo(row) && (
+                            <button
+                              type="button"
+                              onClick={() => handleCreatePendingDo(idx)}
+                              disabled={row.creatingPendingDo}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 7px', fontSize: '10px', fontWeight: 600, border: 'none', borderRadius: '4px', background: '#f59e0b', color: '#fff', cursor: 'pointer', width: 'fit-content' }}
+                            >
+                              {row.creatingPendingDo ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                              Pending DO
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <span style={{ fontSize: '13px', color: '#d3d6cf' }}>—</span>
@@ -1080,7 +1115,7 @@ export default function DarYardLPOForm({
                                     : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
                                 }`}
                               >
-                                {cIdx + 1}
+                                {c.journeyStatus === 'queued' ? `Q${c.queueOrder || cIdx + 1}` : 'Active'}
                               </button>
                             );
                           })}
@@ -1097,6 +1132,17 @@ export default function DarYardLPOForm({
                           Link &amp; dispense
                         </span>
                       </label>
+                      {offerPendingDo(row) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCreatePendingDo(idx)}
+                          disabled={row.creatingPendingDo}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 w-fit"
+                        >
+                          {row.creatingPendingDo ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                          Pending DO
+                        </button>
+                      )}
                       {row.linked && (
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Dispense to journey</span>
@@ -1128,9 +1174,22 @@ export default function DarYardLPOForm({
                     </button>
                   )}
                   {row.fetched && row.warningType === 'not_found' && (
-                    <div className="flex items-center gap-1.5 mb-2 px-2.5 py-1.5 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                      <span className="text-[11px] text-amber-700 dark:text-amber-400">No record in window — manual entry allowed</span>
+                    <div className="flex flex-col gap-1.5 mb-2">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                        <span className="text-[11px] text-amber-700 dark:text-amber-400">No record in window — manual entry allowed</span>
+                      </div>
+                      {offerPendingDo(row) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCreatePendingDo(idx)}
+                          disabled={row.creatingPendingDo}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 w-fit"
+                        >
+                          {row.creatingPendingDo ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
+                          Pending DO
+                        </button>
+                      )}
                     </div>
                   )}
 

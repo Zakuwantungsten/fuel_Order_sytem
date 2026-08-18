@@ -11,7 +11,8 @@ import { enforceEditLock } from './editLockController';
 import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
-import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled, healCancelledQueuedJourneys } from '../services/journeyService';
+import { logFuelRecordChange, snapshotFuelRecord } from '../utils/fuelRecordAudit';
+import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled, healCancelledQueuedJourneys, completeJourneyManually, reopenManuallyCompletedJourney } from '../services/journeyService';
 import type { JourneyStatus } from '../types';
 import { isYardStation, isDarYardStation, isTangaYardStation, YARD_STATION } from '../utils/yardStations';
 
@@ -755,15 +756,18 @@ export const createFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`Fuel record created for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
 
-    // Log audit trail
-    await AuditService.logCreate(
-      req.user?.userId || 'system',
-      req.user?.username || 'system',
-      'FuelRecord',
-      fuelRecord._id.toString(),
-      { truckNo: fuelRecord.truckNo, goingDo: fuelRecord.goingDo, from: fuelRecord.from, to: fuelRecord.to },
-      req.ip
-    );
+    await logFuelRecordChange({
+      action: 'CREATE',
+      resourceId: fuelRecord._id.toString(),
+      username: req.user?.username || 'system',
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      next: snapshotFuelRecord(fuelRecord),
+      details: `Created fuel record for truck ${fuelRecord.truckNo} / DO ${fuelRecord.goingDo}` +
+        (fuelRecord.from || fuelRecord.to ? ` (${fuelRecord.from || '—'} → ${fuelRecord.to || '—'})` : ''),
+      source: 'manual',
+      tags: ['create'],
+    });
 
     // Check if configuration is missing and create notification
     if (fuelRecord.isLocked && fuelRecord.pendingConfigReason) {
@@ -977,35 +981,17 @@ export const updateFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`Fuel record updated for truck ${fuelRecord.truckNo} by ${req.user?.username}`);
 
-    // Log audit trail — capture every field that actually changed
-    const auditFields = [
-      'truckNo', 'goingDo', 'totalLts', 'extra', 'balance', 'isLocked',
-      'mmsaYard', 'tangaYard', 'darYard', 'tangaGoing', 'darGoing', 'moroGoing', 'mbeyaGoing',
-      'tdmGoing', 'zambiaGoing', 'congoFuel', 'zambiaReturn', 'tundumaReturn',
-      'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn',
-      'date', 'month', 'lpoNo', 'routeFrom', 'routeTo', 'journeyStatus', 'queueOrder',
-    ];
-    const previousSnapshot: Record<string, any> = {};
-    const newSnapshot: Record<string, any> = {};
-    for (const field of auditFields) {
-      const prev = (existingRecord as any)[field];
-      const next = (fuelRecord as any)[field];
-      const prevStr = JSON.stringify(prev);
-      const nextStr = JSON.stringify(next);
-      if (prevStr !== nextStr) {
-        previousSnapshot[field] = prev;
-        newSnapshot[field] = next;
-      }
-    }
-    await AuditService.logUpdate(
-      req.user?.userId || 'system',
-      req.user?.username || 'system',
-      'FuelRecord',
-      fuelRecord._id.toString(),
-      Object.keys(previousSnapshot).length > 0 ? previousSnapshot : { truckNo: existingRecord.truckNo, goingDo: existingRecord.goingDo },
-      Object.keys(newSnapshot).length > 0 ? newSnapshot : { truckNo: fuelRecord.truckNo, goingDo: fuelRecord.goingDo, isLocked: fuelRecord.isLocked },
-      req.ip
-    );
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: fuelRecord._id.toString(),
+      username: req.user?.username || 'system',
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existingRecord),
+      next: snapshotFuelRecord(fuelRecord),
+      source: 'manual',
+      tags: truckReassigned ? ['truck-change', 'manual'] : ['manual'],
+    });
 
     // Sync notifications with the record's new state. Runs whenever a locked
     // record is edited so partial fixes downgrade the alert to the remaining
@@ -1084,19 +1070,18 @@ export const cancelFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
 
-    await AuditService.logUpdate(
-      req.user?.userId || 'system',
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: fuelRecord._id.toString(),
       username,
-      'FuelRecord',
-      fuelRecord._id.toString(),
-      { isCancelled: false, journeyStatus: existingRecord.journeyStatus },
-      {
-        isCancelled: true,
-        cancelledBy: username,
-        journeyStatus: fuelRecord.journeyStatus,
-      },
-      req.ip
-    );
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existingRecord),
+      next: snapshotFuelRecord(fuelRecord),
+      source: 'manual',
+      tags: ['cancel'],
+      severity: 'medium',
+    });
 
     logger.info(`Fuel record ${id} cancelled by ${username}`);
 
@@ -1106,6 +1091,96 @@ export const cancelFuelRecord = async (req: AuthRequest, res: Response): Promise
       data: fuelRecord,
     });
     const emitIds = new Set<string>([fuelRecord._id.toString(), ...cancelAffectedIds]);
+    for (const emitId of emitIds) {
+      const fresh = emitId === fuelRecord._id.toString()
+        ? fuelRecord
+        : await FuelRecord.findById(emitId);
+      if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+    }
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+export const completeFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const existingRecord = await FuelRecord.findOne({ _id: id, isDeleted: false });
+    if (!existingRecord) throw new ApiError(404, 'Fuel record not found');
+
+    const { record: fuelRecord, affectedIds } = await completeJourneyManually(id, username);
+    if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
+
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: fuelRecord._id.toString(),
+      username,
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existingRecord),
+      next: snapshotFuelRecord(fuelRecord),
+      source: 'manual',
+      tags: ['complete-journey'],
+      severity: 'medium',
+    });
+
+    logger.info(`Fuel record ${id} marked complete by ${username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Journey marked complete successfully',
+      data: fuelRecord,
+    });
+
+    const emitIds = new Set<string>([fuelRecord._id.toString(), ...affectedIds]);
+    for (const emitId of emitIds) {
+      const fresh = emitId === fuelRecord._id.toString()
+        ? fuelRecord
+        : await FuelRecord.findById(emitId);
+      if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+    }
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+export const uncompleteFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const existingRecord = await FuelRecord.findOne({ _id: id, isDeleted: false });
+    if (!existingRecord) throw new ApiError(404, 'Fuel record not found');
+
+    const { record: fuelRecord, affectedIds } = await reopenManuallyCompletedJourney(id, username);
+    if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
+
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: fuelRecord._id.toString(),
+      username,
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existingRecord),
+      next: snapshotFuelRecord(fuelRecord),
+      source: 'manual',
+      tags: ['uncomplete-journey'],
+      severity: 'medium',
+    });
+
+    logger.info(`Fuel record ${id} complete undone by ${username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Journey complete undone successfully',
+      data: fuelRecord,
+    });
+
+    const emitIds = new Set<string>([fuelRecord._id.toString(), ...affectedIds]);
     for (const emitId of emitIds) {
       const fresh = emitId === fuelRecord._id.toString()
         ? fuelRecord
@@ -1143,15 +1218,18 @@ export const uncancelFuelRecord = async (req: AuthRequest, res: Response): Promi
 
     if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
 
-    await AuditService.logUpdate(
-      req.user?.userId || 'system',
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: fuelRecord._id.toString(),
       username,
-      'FuelRecord',
-      fuelRecord._id.toString(),
-      { isCancelled: true },
-      { isCancelled: false, uncancelledBy: username },
-      req.ip
-    );
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existingRecord),
+      next: snapshotFuelRecord(fuelRecord),
+      source: 'manual',
+      tags: ['uncancel'],
+      severity: 'medium',
+    });
 
     logger.info(`Fuel record ${id} uncancelled by ${username}`);
 
@@ -2161,6 +2239,8 @@ export const updatePendingDo = async (req: AuthRequest, res: Response): Promise<
     const { id } = req.params;
     if (!id) throw new ApiError(400, 'Fuel record id is required');
 
+    const existingPending = await FuelRecord.findOne({ _id: id, isDeleted: false }).lean();
+
     const { updatePendingDoFuelRecord } = await import('../services/pendingDoService');
     const { fuelRecord } = await updatePendingDoFuelRecord({
       fuelRecordId: id,
@@ -2173,15 +2253,16 @@ export const updatePendingDo = async (req: AuthRequest, res: Response): Promise<
       trailerNo: req.body?.trailerNo,
     });
 
-    await AuditService.log({
-      userId: req.user?.userId,
-      username,
+    await logFuelRecordChange({
       action: 'UPDATE',
-      resourceType: 'FuelRecord',
       resourceId: String(fuelRecord._id),
-      details: `Pending DO updated (truck=${fuelRecord.truckNo}, going=${fuelRecord.goingDo}, return=${fuelRecord.returnDo || ''})`,
+      username,
+      userId: req.user?.userId,
       ipAddress: req.ip,
-      severity: 'medium',
+      previous: snapshotFuelRecord(existingPending),
+      next: snapshotFuelRecord(fuelRecord),
+      source: 'pending_do',
+      tags: ['pending_do'],
     });
 
     emitDataChange('fuel_records', 'update');

@@ -6,6 +6,7 @@ import { FuelRecord } from '../models';
 import { emitDataChange } from './websocket';
 import { sanitizeRegexInput, normalizeTruckNo } from '../utils';
 import type { YardFuelField } from '../utils/yardStations';
+import { checkAndPromoteStartedJourney } from './journeyService';
 
 export function recalcYardBalance(fr: any): number {
   const total = (fr.totalLts ?? 0) + (fr.extra ?? 0);
@@ -72,12 +73,17 @@ export async function findFuelRecordsByTruck(truckNo: string, afterDate?: Date):
 export async function applyYardFieldDelta(
   fuelRecord: any,
   field: YardFuelField,
-  deltaLiters: number
+  deltaLiters: number,
+  username = 'yard-system'
 ): Promise<void> {
   fuelRecord[field] = Math.max(0, (fuelRecord[field] ?? 0) + deltaLiters);
   fuelRecord.balance = recalcYardBalance(fuelRecord);
   await fuelRecord.save();
   emitDataChange('fuel_records', 'update', fuelRecord.toObject());
+  // Filling a queued journey's yard column starts that trip — complete the prior active.
+  if (deltaLiters > 0) {
+    await checkAndPromoteStartedJourney(fuelRecord, username);
+  }
 }
 
 /**

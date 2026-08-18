@@ -360,7 +360,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     journeyConfig: {
       startColumns: {
         type: [String],
-        default: ['darYard', 'darGoing', 'moroGoing'],
+        default: ['tangaYard', 'darYard', 'darGoing', 'moroGoing'],
       },
       superManagerStations: {
         type: [String],

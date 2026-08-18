@@ -9,6 +9,8 @@
  *     darYard / darGoing / moroGoing) is filled on a queued journey. Filling those
  *     origin-leg columns means the truck has physically begun that new trip.
  *   - Cancelling an active journey completes it and promotes the next queued (FIFO).
+ *   - Manually marking an active journey complete (without cancelling) does the same
+ *     promote/renumber, and can be undone if it was a mistake.
  *   - Changing truckNo on a live journey re-places it on the target truck (append
  *     as last queued if that truck already has an active journey; otherwise active)
  *     and cleans up the old truck's queue.
@@ -21,9 +23,23 @@ import { FuelRecord } from '../models';
 import { SystemConfig, IFuelAutomationConfig, DEFAULT_FUEL_AUTOMATION } from '../models/SystemConfig';
 import { emitDataChange } from './websocket';
 import { logger, formatTruckNumber } from '../utils';
+import { ApiError } from '../middleware/errorHandler';
 
 /** Default start columns when no journey_config has been saved yet. */
-export const DEFAULT_START_COLUMNS = ['darYard', 'darGoing', 'moroGoing'];
+export const DEFAULT_START_COLUMNS = ['tangaYard', 'darYard', 'darGoing', 'moroGoing'];
+/** Pre-Tanga-Yard default — upgraded in place so existing installs promote on tangaYard fills. */
+const LEGACY_DEFAULT_START_COLUMNS = ['darYard', 'darGoing', 'moroGoing'];
+
+/** Treat the old 3-column default as the current default (adds tangaYard). Custom lists are unchanged. */
+export function normalizeJourneyStartColumns(cols?: string[] | null): string[] {
+  const list = Array.isArray(cols) ? cols.filter(Boolean) : [];
+  if (list.length === 0) return [...DEFAULT_START_COLUMNS];
+  const isLegacyDefault =
+    list.length === LEGACY_DEFAULT_START_COLUMNS.length &&
+    LEGACY_DEFAULT_START_COLUMNS.every((c) => list.includes(c)) &&
+    list.every((c) => (LEGACY_DEFAULT_START_COLUMNS as string[]).includes(c));
+  return isLegacyDefault ? [...DEFAULT_START_COLUMNS] : list;
+}
 
 /**
  * All fuel "going"/origin columns that may be selected as start columns in the
@@ -344,9 +360,7 @@ export async function getJourneyStartColumns(): Promise<string[]> {
 
   try {
     const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false });
-    const cols = cfg?.journeyConfig?.startColumns?.length
-      ? cfg.journeyConfig.startColumns
-      : DEFAULT_START_COLUMNS;
+    const cols = normalizeJourneyStartColumns(cfg?.journeyConfig?.startColumns);
     _startColumnsCache = cols;
     _cacheUpdatedAt = now;
     return cols;
@@ -687,6 +701,197 @@ export async function reassignJourneyOnTruckChange(
   }
 
   return { ...result, affectedIds: ids };
+}
+
+function isStandaloneTxnError(err: any): boolean {
+  const msg = String(err?.message || '');
+  return (
+    msg.includes('Transaction numbers are only allowed') ||
+    msg.includes('replica set member') ||
+    msg.includes('not supported')
+  );
+}
+
+async function runWithOptionalTransaction(
+  fn: (session: ClientSession | null) => Promise<void>
+): Promise<void> {
+  const session = await mongoose.startSession();
+  try {
+    try {
+      await session.withTransaction(async () => {
+        await fn(session);
+      });
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      if (err?.cause instanceof ApiError) throw err.cause;
+      if (isStandaloneTxnError(err)) {
+        await fn(null);
+        return;
+      }
+      throw err;
+    }
+  } finally {
+    await session.endSession();
+  }
+}
+
+function sessionQuery(session?: ClientSession | null) {
+  return session || null;
+}
+
+function sessionWrite(session?: ClientSession | null) {
+  return session ? { session } : undefined;
+}
+
+export interface CompleteJourneyResult {
+  record: any;
+  affectedIds: string[];
+  promotedId: string | null;
+}
+
+/**
+ * Manually complete an active journey (does not cancel the record) and promote
+ * the next queued journey for that truck. Stores enough state to undo later.
+ */
+export async function completeJourneyManually(
+  recordId: string,
+  username: string
+): Promise<CompleteJourneyResult> {
+  const affectedIds = new Set<string>([recordId]);
+  let promotedId: string | null = null;
+
+  await runWithOptionalTransaction(async (session) => {
+    const record = await FuelRecord.findById(recordId).session(sessionQuery(session));
+    if (!record || record.isDeleted) {
+      throw new ApiError(404, 'Fuel record not found');
+    }
+    if (record.isCancelled) {
+      throw new ApiError(409, 'Cannot complete a cancelled fuel record');
+    }
+    if (record.journeyStatus !== 'active') {
+      throw new ApiError(409, 'Only an active journey can be marked complete');
+    }
+
+    const truckNo = record.truckNo;
+    record.journeyStatus = 'completed';
+    record.completedAt = new Date();
+    record.completedBy = username;
+    record.manuallyCompleted = true;
+    record.queueOrder = undefined;
+    record.promotedSuccessorId = undefined;
+    await record.save(sessionWrite(session));
+
+    const stillActive = await FuelRecord.findOne(activeJourneyFilter(truckNo, recordId)).session(
+      sessionQuery(session)
+    );
+    if (!stillActive) {
+      promotedId = await promoteNextQueuedJourney(truckNo, username, session);
+      if (promotedId) {
+        affectedIds.add(promotedId);
+        record.promotedSuccessorId = promotedId;
+        await record.save(sessionWrite(session));
+      }
+    }
+
+    for (const id of await renumberQueuedJourneys(truckNo, session)) {
+      affectedIds.add(id);
+    }
+
+    logger.info(
+      `Journey ${record.goingDo} (truck ${truckNo}) manually completed by ${username}` +
+        (promotedId ? `; promoted successor ${promotedId}` : '')
+    );
+  });
+
+  const record = await FuelRecord.findById(recordId);
+  if (!record) throw new ApiError(404, 'Fuel record not found');
+
+  await emitFuelRecordUpdates(affectedIds);
+  return { record, affectedIds: [...affectedIds], promotedId };
+}
+
+/**
+ * Undo a mistaken manual complete: restore this journey to active and put the
+ * promoted successor back at the front of the queue (if it is still this truck's
+ * active journey).
+ */
+export async function reopenManuallyCompletedJourney(
+  recordId: string,
+  username: string
+): Promise<CompleteJourneyResult> {
+  const affectedIds = new Set<string>([recordId]);
+
+  await runWithOptionalTransaction(async (session) => {
+    const record = await FuelRecord.findById(recordId).session(sessionQuery(session));
+    if (!record || record.isDeleted) {
+      throw new ApiError(404, 'Fuel record not found');
+    }
+    if (record.isCancelled) {
+      throw new ApiError(409, 'Cannot undo complete on a cancelled fuel record');
+    }
+    if (record.journeyStatus !== 'completed') {
+      throw new ApiError(409, 'This journey is not completed');
+    }
+    if (!record.manuallyCompleted) {
+      throw new ApiError(
+        409,
+        'This journey was completed automatically and cannot be undone from here'
+      );
+    }
+
+    const truckNo = record.truckNo;
+    const successorId = record.promotedSuccessorId ? String(record.promotedSuccessorId) : null;
+    const currentActive = await FuelRecord.findOne(activeJourneyFilter(truckNo, recordId)).session(
+      sessionQuery(session)
+    );
+
+    if (currentActive) {
+      if (!successorId || currentActive._id.toString() !== successorId) {
+        throw new ApiError(409, 'Cannot undo — another journey is now active for this truck');
+      }
+
+      currentActive.journeyStatus = 'queued';
+      currentActive.queueOrder = 0;
+      await currentActive.save(sessionWrite(session));
+      affectedIds.add(currentActive._id.toString());
+    } else if (successorId) {
+      const successor = await FuelRecord.findById(successorId).session(sessionQuery(session));
+      if (successor && !successor.isDeleted && !successor.isCancelled) {
+        if (successor.journeyStatus === 'completed') {
+          throw new ApiError(409, 'Cannot undo — a later journey has already been completed');
+        }
+        if (successor.journeyStatus === 'active') {
+          successor.journeyStatus = 'queued';
+          successor.queueOrder = 0;
+          await successor.save(sessionWrite(session));
+          affectedIds.add(successor._id.toString());
+        }
+      }
+    }
+
+    await FuelRecord.updateOne(
+      { _id: record._id },
+      {
+        $set: { journeyStatus: 'active', manuallyCompleted: false },
+        $unset: { completedAt: 1, completedBy: 1, promotedSuccessorId: 1, queueOrder: 1 },
+      },
+      sessionWrite(session)
+    );
+
+    for (const id of await renumberQueuedJourneys(truckNo, session)) {
+      affectedIds.add(id);
+    }
+
+    logger.info(
+      `Journey ${record.goingDo} (truck ${truckNo}) manual complete undone by ${username}`
+    );
+  });
+
+  const record = await FuelRecord.findById(recordId);
+  if (!record) throw new ApiError(404, 'Fuel record not found');
+
+  await emitFuelRecordUpdates(affectedIds);
+  return { record, affectedIds: [...affectedIds], promotedId: null };
 }
 
 /**

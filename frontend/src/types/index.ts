@@ -309,6 +309,8 @@ export interface FuelRecord {
   queueOrder?: number;
   activatedAt?: string;
   completedAt?: string;
+  completedBy?: string;
+  manuallyCompleted?: boolean;
   estimatedStartDate?: string;
   previousJourneyId?: string;
   // Lock status for pending configurations

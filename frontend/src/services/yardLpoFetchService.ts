@@ -69,10 +69,34 @@ export async function fetchYardRecordByDo(doNumber: string): Promise<{
   };
 }
 
+export function journeysFromYardCandidates(candidates: FuelRecord[]): {
+  active: FuelRecord | null;
+  queued: FuelRecord[];
+} {
+  const queued = candidates.filter((c) => c.journeyStatus === 'queued');
+  const active = candidates.find((c) => c.journeyStatus === 'active') || null;
+  return { active, queued };
+}
+
+/**
+ * Queue-first, then active, then remaining — same priority as LPO Detail yard.
+ */
+export function sortYardJourneyCandidates(records: FuelRecord[]): FuelRecord[] {
+  return [...records].sort((a, b) => {
+    const rank = (r: FuelRecord) =>
+      r.journeyStatus === 'queued' ? 0 : r.journeyStatus === 'active' ? 1 : 2;
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    if (ra === 0) return (Number((a as any).queueOrder) || 0) - (Number((b as any).queueOrder) || 0);
+    return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+  });
+}
+
 /**
  * Truck-only fuel-record candidates for dedicated Dar/Tanga yard forms.
  * No calendar day window — prefer active/queued journeys (same gate as LPO Detail yard).
- * Newest first, capped at YARD_FETCH_CANDIDATE_CAP.
+ * Queued first (by queueOrder), then active, newest first within a rank. Capped at YARD_FETCH_CANDIDATE_CAP.
  */
 export async function fetchYardTruckCandidates(
   truckNo: string,
@@ -103,11 +127,7 @@ export async function fetchYardTruckCandidates(
   );
   const pool = preferred.length > 0 ? preferred : active;
 
-  const sorted = [...pool].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-
   return {
-    candidates: sorted.slice(0, YARD_FETCH_CANDIDATE_CAP),
+    candidates: sortYardJourneyCandidates(pool).slice(0, YARD_FETCH_CANDIDATE_CAP),
   };
 }

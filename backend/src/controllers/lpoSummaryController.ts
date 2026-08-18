@@ -35,6 +35,13 @@ import {
   YARD_DEFAULT_ORDER_OF,
 } from '../utils/yardStations';
 import { normalizeYardEntriesForSummary } from '../services/yardUnifiedLpoService';
+import {
+  buildLpoCheckpointAudit,
+  commitFuelRecordAudits,
+  queueFuelRecordAudit,
+  type FuelRecordAuditContext,
+  type FuelRecordAuditPayload,
+} from '../utils/fuelRecordAudit';
 
 // Dynamic station to fuel field mapping cache
 let STATION_TO_FUEL_FIELD_CACHE: Record<string, { going?: string; returning?: string }> = {};
@@ -291,10 +298,28 @@ interface FuelUpdateBatch {
   resolution: Map<string, { fuelRecord: any; direction: 'going' | 'returning' } | null>;
   /** Accumulated field deltas per fuel-record id (applied atomically via pipeline $add/$max). */
   pendingInc: Map<string, Record<string, number>>;
+  pendingAudits: FuelRecordAuditPayload[];
+  audit?: FuelRecordAuditContext;
 }
 
 function createFuelUpdateBatch(): FuelUpdateBatch {
-  return { byId: new Map(), resolution: new Map(), pendingInc: new Map() };
+  return { byId: new Map(), resolution: new Map(), pendingInc: new Map(), pendingAudits: [] };
+}
+
+function lpoFuelAuditOpts(
+  req: AuthRequest,
+  extra?: Partial<FuelRecordAuditContext>,
+  rest?: Record<string, any>
+) {
+  return {
+    ...(rest || {}),
+    audit: {
+      username: req.user?.username || 'system',
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      ...extra,
+    } as FuelRecordAuditContext,
+  };
 }
 
 /**
@@ -577,6 +602,8 @@ async function updateFuelRecordForLPOEntry(
     touchedIds?: Set<string>;
     // When true (atomic LPO create with deduct ON), missing fuel/field is a hard error.
     requireSuccess?: boolean;
+    audit?: FuelRecordAuditContext;
+    pendingAudits?: FuelRecordAuditPayload[];
   }
 ): Promise<string | undefined> {
   try {
@@ -661,6 +688,27 @@ async function updateFuelRecordForLPOEntry(
     const action = litersChange > 0 ? 'added' : 'removed';
     logger.debug(`Updating field ${fieldToUpdate}: ${currentValue}L -> ${Math.max(0, newValue)}L (${action}: ${Math.abs(litersChange)}L, balance: ${oldBalance}L -> ${newBalance}L)`);
 
+    const enqueueCheckpointAudit = () => {
+      const payload = buildLpoCheckpointAudit({
+        resourceId: fuelRecord._id.toString(),
+        record: fuelRecord,
+        field: fieldToUpdate!,
+        previousLiters: currentValue,
+        nextLiters: Math.max(0, newValue),
+        previousBalance: oldBalance,
+        nextBalance: newBalance,
+        litersChange,
+        audit: opts?.audit || batch?.audit,
+        station,
+      });
+      const queue = batch?.pendingAudits || opts?.pendingAudits;
+      if (queue) {
+        queue.push(payload);
+      } else if (!opts?.session) {
+        queueFuelRecordAudit(undefined, payload);
+      }
+    };
+
     // Batched path: mutate the shared in-memory record so subsequent entries see this change,
     // accumulate atomic $inc deltas, and defer emit/promotion to flushFuelUpdateBatch().
     if (batch) {
@@ -671,6 +719,7 @@ async function updateFuelRecordForLPOEntry(
       existing[fieldToUpdate] = (existing[fieldToUpdate] || 0) + litersChange;
       existing.balance = (existing.balance || 0) - litersChange;
       batch.pendingInc.set(idStr, existing);
+      enqueueCheckpointAudit();
       logger.debug(`✓ Queued fuel record ${idStr} field ${fieldToUpdate}: ${litersChange > 0 ? 'deducted' : 'restored'} ${Math.abs(litersChange)}L`);
       return fieldToUpdate;
     }
@@ -692,6 +741,7 @@ async function updateFuelRecordForLPOEntry(
     );
 
     logger.debug(`✓ Updated fuel record ${fuelRecord._id} field ${fieldToUpdate}: ${litersChange > 0 ? 'deducted' : 'restored'} ${Math.abs(litersChange)}L`);
+    enqueueCheckpointAudit();
 
     if (updatedRecord) {
       // In a transaction, defer the live-emit and journey promotion to the caller
@@ -1188,12 +1238,19 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
     let lpoSummary: any;
     let createDeductionsSkipped = 0;
     let touchedFuelIds: string[] = [];
+    const pendingFuelAudits: FuelRecordAuditPayload[] = [];
+    const createFuelAudit: FuelRecordAuditContext = {
+      username: req.user?.username || 'system',
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+    };
 
     const applyCreateDeductions = async (
       lpo: any,
       session?: ClientSession,
     ): Promise<string[]> => {
       const fuelBatch = createFuelUpdateBatch();
+      fuelBatch.audit = { ...createFuelAudit, lpoNo: lpo.lpoNo, station: lpo.station };
       if (!lpo.entries || lpo.entries.length === 0) return [];
 
       let entriesTouched = false;
@@ -1224,8 +1281,8 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
         } : undefined;
 
         const deductOpts = session
-          ? { session, requireSuccess: true as const }
-          : undefined;
+          ? { session, requireSuccess: true as const, audit: fuelBatch.audit, pendingAudits: fuelBatch.pendingAudits }
+          : { audit: fuelBatch.audit, pendingAudits: fuelBatch.pendingAudits };
 
         let lastField: string | undefined;
         if (entry.goingCheckpoint) {
@@ -1263,7 +1320,9 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
         await lpo.save(session ? { session } : undefined);
       }
 
-      return flushFuelUpdateBatch(fuelBatch, 'lpo-system', session ? { session } : undefined);
+      const flushedIds = await flushFuelUpdateBatch(fuelBatch, req.user?.username || 'lpo-system', session ? { session } : undefined);
+      pendingFuelAudits.push(...fuelBatch.pendingAudits);
+      return flushedIds;
     };
 
     if (needsAtomicDeduct) {
@@ -1295,6 +1354,8 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
 
     logger.info(`LPO document created: ${lpoSummary.lpoNo} for year ${year} by ${req.user?.username}`);
 
+    await commitFuelRecordAudits(pendingFuelAudits);
+
     await AuditService.log({
       userId: req.user?.userId,
       username: req.user?.username || 'system',
@@ -1311,7 +1372,7 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
         userId: req.user?.userId,
         username: req.user?.username || 'system',
         action: 'UPDATE',
-        resourceType: 'FuelRecord',
+        resourceType: 'LPOSummary',
         resourceId: lpoSummary.lpoNo,
         details: `Fuel deduction SKIPPED for ${createDeductionsSkipped} entr${createDeductionsSkipped === 1 ? 'y' : 'ies'} on LPO ${lpoSummary.lpoNo} — automation 'lpoCreateDeduct' is disabled. Manual fuel-record adjustment required.`,
         ipAddress: req.ip,
@@ -1457,6 +1518,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     const newlyCancelledEntries: EntryType[] = [];
     const skippedAutomation = new Set<string>();
     const touchedFuelIds = new Set<string>();
+    const pendingFuelAudits: FuelRecordAuditPayload[] = [];
+    const fuelAuditCtx: FuelRecordAuditContext = {
+      username,
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+    };
     let lpoSummary: any;
 
     // Transaction: fuel-record mutations and LPO save are atomic
@@ -1465,6 +1532,15 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
     try {
       const existingLpo = await LPOSummary.findOne({ _id: id, isDeleted: false }).session(session);
       if (!existingLpo) throw new ApiError(404, 'LPO document not found');
+
+      fuelAuditCtx.lpoNo = existingLpo.lpoNo;
+      fuelAuditCtx.station = String(existingLpo.station);
+      const fuelMutOpts = {
+        session,
+        touchedIds: touchedFuelIds,
+        audit: fuelAuditCtx,
+        pendingAudits: pendingFuelAudits,
+      };
 
       logger.info(`Updating LPO ${existingLpo.lpoNo}, station: ${existingLpo.station}`);
 
@@ -1511,14 +1587,14 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
                 customReturnCheckpoint: newEntry.customReturnCheckpoint || oldEntry.customReturnCheckpoint,
               } : undefined,
               undefined,
-              { session, touchedIds: touchedFuelIds }
+              fuelMutOpts
             );
             if (field) newEntry.dispensedCheckpoint = field;
           } else if (manualFieldFor(newEntry)) {
             // Automation off, but operator chose the checkpoint manually.
             const field = await updateFuelRecordForLPOEntry(
               newEntry.doNo, newEntry.liters, newData.station || existingLpo.station, newEntry.truckNo,
-              undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
+              undefined, undefined, undefined, { ...fuelMutOpts, explicitField: manualFieldFor(newEntry) }
             );
             if (field) newEntry.dispensedCheckpoint = field;
             logger.info(`[fuelAutomation] lpoCancelRevert OFF — manual checkpoint ${manualFieldFor(newEntry)} re-deducted for ${newEntry.truckNo}`);
@@ -1563,12 +1639,12 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
               customReturnCheckpoint: oldEntry.customReturnCheckpoint,
             } : undefined,
             undefined,
-            { session, touchedIds: touchedFuelIds }
+            fuelMutOpts
           );
         } else if (manualFieldFor(oldEntry)) {
           await updateFuelRecordForLPOEntry(
             oldEntry.doNo, -oldEntry.liters, existingLpo.station, oldEntry.truckNo,
-            undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(oldEntry) }
+            undefined, undefined, undefined, { ...fuelMutOpts, explicitField: manualFieldFor(oldEntry) }
           );
           logger.info(`[fuelAutomation] lpoEditAdjust OFF — manual checkpoint ${manualFieldFor(oldEntry)} reverted for removed entry ${oldEntry.truckNo}`);
         } else {
@@ -1592,13 +1668,13 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
                 customReturnCheckpoint: oldEntry.customReturnCheckpoint,
               } : undefined,
               undefined,
-              { session, touchedIds: touchedFuelIds }
+              fuelMutOpts
             );
           } else if (manualFieldFor(newEntry)) {
             // Automation off, but operator chose the checkpoint manually.
             await updateFuelRecordForLPOEntry(
               oldEntry.doNo, -oldEntry.liters, existingLpo.station, oldEntry.truckNo,
-              undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
+              undefined, undefined, undefined, { ...fuelMutOpts, explicitField: manualFieldFor(newEntry) }
             );
             logger.info(`[fuelAutomation] lpoCancelRevert OFF — manual checkpoint ${manualFieldFor(newEntry)} reverted for ${oldEntry.truckNo}`);
           } else {
@@ -1630,7 +1706,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
                 customReturnCheckpoint: oldEntry.customReturnCheckpoint,
               } : undefined,
               undefined,
-              { session, touchedIds: touchedFuelIds }
+              fuelMutOpts
             );
           } else {
             skippedAutomation.add('lpoEditAdjust');
@@ -1669,7 +1745,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
               customReturnCheckpoint: newEntry.customReturnCheckpoint || oldEntry.customReturnCheckpoint,
             } : undefined,
             undefined,
-            { session, touchedIds: touchedFuelIds }
+            fuelMutOpts
           );
           if (field && difference > 0) newEntry.dispensedCheckpoint = field;
           else if (!newEntry.dispensedCheckpoint) newEntry.dispensedCheckpoint = oldEntry.dispensedCheckpoint;
@@ -1677,7 +1753,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
           // Automation off, but operator chose the checkpoint manually.
           const field = await updateFuelRecordForLPOEntry(
             oldEntry.doNo, difference, newData.station || existingLpo.station, oldEntry.truckNo,
-            undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
+            undefined, undefined, undefined, { ...fuelMutOpts, explicitField: manualFieldFor(newEntry) }
           );
           if (field && difference > 0) newEntry.dispensedCheckpoint = field;
           else if (!newEntry.dispensedCheckpoint) newEntry.dispensedCheckpoint = oldEntry.dispensedCheckpoint;
@@ -1735,13 +1811,13 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
               customReturnCheckpoint: newEntry.customReturnCheckpoint,
             } : undefined,
             undefined,
-            { session, touchedIds: touchedFuelIds }
+            fuelMutOpts
           );
           if (field) newEntry.dispensedCheckpoint = field;
         } else if (manualFieldFor(newEntry)) {
           const field = await updateFuelRecordForLPOEntry(
             newEntry.doNo, newEntry.liters, newData.station || existingLpo.station, newEntry.truckNo,
-            undefined, undefined, undefined, { session, touchedIds: touchedFuelIds, explicitField: manualFieldFor(newEntry) }
+            undefined, undefined, undefined, { ...fuelMutOpts, explicitField: manualFieldFor(newEntry) }
           );
           if (field) newEntry.dispensedCheckpoint = field;
           logger.info(`[fuelAutomation] lpoEditAdjust OFF — manual checkpoint ${manualFieldFor(newEntry)} deducted for newly-added entry ${newEntry.truckNo}`);
@@ -1811,6 +1887,8 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
 
   logger.info(`LPO document updated: ${lpoSummary?.lpoNo} by ${username}`);
 
+  await commitFuelRecordAudits(pendingFuelAudits);
+
   await AuditService.log({
     userId: req.user?.userId,
     username,
@@ -1827,7 +1905,7 @@ export const updateLPOSummary = async (req: AuthRequest, res: Response): Promise
       userId: req.user?.userId,
       username,
       action: 'UPDATE',
-      resourceType: 'FuelRecord',
+      resourceType: 'LPOSummary',
       resourceId: lpoSummary?.lpoNo || id,
       details: `Fuel-record sync SKIPPED on LPO ${lpoSummary?.lpoNo} — disabled automation: [${[...skippedAutomation].join(', ')}]. Manual fuel-record adjustment required.`,
       ipAddress: req.ip,
@@ -2541,10 +2619,10 @@ export const cancelTruckInLPO = async (req: AuthRequest, res: Response): Promise
         isCustomStation: entry.isCustomStation,
         customGoingCheckpoint: entry.customGoingCheckpoint,
         customReturnCheckpoint: entry.customReturnCheckpoint,
-      } : undefined
+      } : undefined,
+      undefined,
+      lpoFuelAuditOpts(req, { lpoNo: lpo.lpoNo, station: String(lpo.station) })
     );
-
-    // Mark the entry as cancelled
     lpo.entries[entryIndex].isCancelled = true;
     lpo.entries[entryIndex].cancellationPoint = cancellationPoint;
     
@@ -2664,7 +2742,9 @@ export const amendTruckInLPO = async (req: AuthRequest, res: Response): Promise<
           isCustomStation: entry.isCustomStation,
           customGoingCheckpoint: entry.customGoingCheckpoint,
           customReturnCheckpoint: entry.customReturnCheckpoint,
-        } : undefined
+        } : undefined,
+        undefined,
+        lpoFuelAuditOpts(req, { lpoNo: lpo.lpoNo, station: String(lpo.station) })
       );
     }
 
@@ -2777,7 +2857,9 @@ export const cancelAllEntriesInLPO = async (req: AuthRequest, res: Response): Pr
                 customReturnCheckpoint: entry.customReturnCheckpoint,
               } : undefined,
               undefined,
-              fuelFlags.lpoCancelRevert ? undefined : { explicitField: manualField }
+              fuelFlags.lpoCancelRevert
+                ? lpoFuelAuditOpts(req, { lpoNo: lpo.lpoNo, station: String(lpo.station) })
+                : lpoFuelAuditOpts(req, { lpoNo: lpo.lpoNo, station: String(lpo.station) }, { explicitField: manualField })
             );
             results.push({ truckNo: entry.truckNo, reverted: true });
           } catch (err) {
@@ -2947,7 +3029,9 @@ export const forwardLPO = async (req: AuthRequest, res: Response): Promise<void>
           isCustomStation: entry.isCustomStation,
           customGoingCheckpoint: entry.customGoingCheckpoint,
           customReturnCheckpoint: entry.customReturnCheckpoint,
-        } : undefined
+        } : undefined,
+        undefined,
+        lpoFuelAuditOpts(req, { lpoNo: forwardedLpo.lpoNo, station: String(targetStation) })
       );
     }
 
@@ -3070,6 +3154,7 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
   }
 
   const touchedIds = new Set<string>();
+  const pendingFuelAudits: FuelRecordAuditPayload[] = [];
   let createdLpo: any = null;
   let sourceLpoNo = '';
   let pickedUpCount = 0;
@@ -3140,7 +3225,11 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
               customReturnCheckpoint: entry.customReturnCheckpoint,
             } : undefined,
             undefined,
-            { session, touchedIds, explicitField: autoCheckpoints ? undefined : sel.revertField }
+            lpoFuelAuditOpts(
+              req,
+              { lpoNo: sourceLpo.lpoNo, station: String(sourceLpo.station) },
+              { session, touchedIds, pendingAudits: pendingFuelAudits, explicitField: autoCheckpoints ? undefined : sel.revertField }
+            )
           );
         }
         entry.isCancelled = true;
@@ -3236,7 +3325,11 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
             customReturnCheckpoint,
           } : undefined,
           undefined,
-          { session, touchedIds, explicitField: autoCheckpoints ? undefined : selected[i].addField }
+          lpoFuelAuditOpts(
+            req,
+            { lpoNo: createdLpo?.lpoNo, station: String(targetStation) },
+            { session, touchedIds, pendingAudits: pendingFuelAudits, explicitField: autoCheckpoints ? undefined : selected[i].addField }
+          )
         );
       }
 
@@ -3249,6 +3342,8 @@ export const pickupAtStation = async (req: AuthRequest, res: Response): Promise<
     throw new ApiError(500, `Pick-up-at failed: ${error.message}`);
   }
   await session.endSession();
+
+  await commitFuelRecordAudits(pendingFuelAudits);
 
   // Post-commit: live-update affected fuel records and run journey promotion.
   if (touchedIds.size > 0) {
@@ -3339,6 +3434,7 @@ export const setPickedAtStation = async (req: AuthRequest, res: Response): Promi
   await enforceEditLock(LPOSummary, lpoId, username, 'lpo_summaries');
 
   const touchedIds = new Set<string>();
+  const pendingFuelAudits: FuelRecordAuditPayload[] = [];
   const session = await mongoose.startSession();
   let updatedEntry: any = null;
   let lpoNo = '';
@@ -3402,7 +3498,11 @@ export const setPickedAtStation = async (req: AuthRequest, res: Response): Promi
               }
             : undefined,
           undefined,
-          { session, touchedIds, explicitField: autoCheckpoints ? undefined : revertField }
+          lpoFuelAuditOpts(
+            req,
+            { lpoNo, station: previousStation },
+            { session, touchedIds, pendingAudits: pendingFuelAudits, explicitField: autoCheckpoints ? undefined : revertField }
+          )
         );
       }
 
@@ -3431,11 +3531,11 @@ export const setPickedAtStation = async (req: AuthRequest, res: Response): Promi
           entry.cancellationPoint,
           customInfo,
           undefined,
-          {
-            session,
-            touchedIds,
-            explicitField: autoCheckpoints ? undefined : addField,
-          }
+          lpoFuelAuditOpts(
+            req,
+            { lpoNo, station: String(deductStation) },
+            { session, touchedIds, pendingAudits: pendingFuelAudits, explicitField: autoCheckpoints ? undefined : addField }
+          )
         );
         if (dispensed) entry.dispensedCheckpoint = dispensed;
       }
@@ -3471,6 +3571,8 @@ export const setPickedAtStation = async (req: AuthRequest, res: Response): Promi
       await checkAndPromoteStartedJourney(rec, username);
     }
   }
+
+  await commitFuelRecordAudits(pendingFuelAudits);
 
   await AuditService.log({
     userId: req.user?.userId,

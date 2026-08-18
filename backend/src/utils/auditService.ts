@@ -280,11 +280,21 @@ export class AuditService {
     page?: number;
     minRiskScore?: number;
     correlationId?: string;
+    search?: string;
+    truckNo?: string;
   }) {
     const filter: any = {};
 
     if (options.action)        filter.action        = options.action;
-    if (options.resourceType)  filter.resourceType  = options.resourceType;
+    if (options.resourceType) {
+      if (options.resourceType === 'FuelRecord' || options.resourceType === 'fuel_record') {
+        filter.resourceType = { $in: ['FuelRecord', 'fuel_record'] };
+      } else if (options.resourceType === 'DeliveryOrder' || options.resourceType === 'delivery_order') {
+        filter.resourceType = { $in: ['DeliveryOrder', 'delivery_order'] };
+      } else {
+        filter.resourceType = options.resourceType;
+      }
+    }
     if (options.username)      filter.username      = new RegExp(options.username, 'i');
     if (options.severity)      filter.severity      = options.severity;
     if (options.outcome)       filter.outcome       = options.outcome;
@@ -295,6 +305,42 @@ export class AuditService {
       filter.timestamp = {};
       if (options.startDate) filter.timestamp.$gte = options.startDate;
       if (options.endDate)   filter.timestamp.$lte = options.endDate;
+    }
+
+    const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const orClauses: any[] = [];
+
+    const truckQ = (options.truckNo || '').trim();
+    if (truckQ) {
+      const re = new RegExp(escapeRe(truckQ), 'i');
+      orClauses.push(
+        { 'previousValue.truckNo': re },
+        { 'newValue.truckNo': re },
+        { tags: re },
+        { details: re },
+      );
+    }
+
+    const searchQ = (options.search || '').trim();
+    if (searchQ) {
+      const re = new RegExp(escapeRe(searchQ), 'i');
+      orClauses.push(
+        { details: re },
+        { username: re },
+        { resourceId: re },
+        { resourceType: re },
+        { tags: re },
+        { 'previousValue.truckNo': re },
+        { 'newValue.truckNo': re },
+        { 'previousValue.goingDo': re },
+        { 'newValue.goingDo': re },
+        { 'previousValue.returnDo': re },
+        { 'newValue.returnDo': re },
+      );
+    }
+
+    if (orClauses.length > 0) {
+      filter.$or = orClauses;
     }
 
     const limit = options.limit || 50;

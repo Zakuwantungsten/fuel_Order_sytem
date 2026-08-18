@@ -1473,6 +1473,16 @@ export const fuelRecordsAPI = {
     return response.data.data;
   },
 
+  complete: async (id: string | number): Promise<FuelRecord> => {
+    const response = await apiClient.post(`/fuel-records/${id}/complete`);
+    return response.data.data;
+  },
+
+  uncomplete: async (id: string | number): Promise<FuelRecord> => {
+    const response = await apiClient.post(`/fuel-records/${id}/uncomplete`);
+    return response.data.data;
+  },
+
   // Edit lock management
   acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
     const response = await apiClient.post(`/fuel-records/${id}/lock`);
@@ -1484,7 +1494,7 @@ export const fuelRecordsAPI = {
   },
 
   getHistory: async (id: string | number): Promise<any[]> => {
-    const response = await apiClient.get(`/fuel-records/${id}/history`);
+    const response = await apiClient.get(`/fuel-records/${id}/history`, { params: { limit: 200 } });
     return response.data.data || [];
   },
 };
@@ -2274,6 +2284,8 @@ export const systemAdminAPI = {
     outcome?: string;
     startDate?: string;
     endDate?: string;
+    search?: string;
+    truckNo?: string;
     page?: number;
     limit?: number;
   }) => {
@@ -2304,6 +2316,7 @@ export const systemAdminAPI = {
   exportAuditLogs: async (params?: {
     action?: string; resourceType?: string; username?: string;
     severity?: string; outcome?: string; startDate?: string; endDate?: string;
+    search?: string; truckNo?: string;
   }) => {
     const response = await apiClient.get('/admin/audit-logs/export', {
       params,

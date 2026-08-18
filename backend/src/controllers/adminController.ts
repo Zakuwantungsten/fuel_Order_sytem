@@ -10,7 +10,7 @@ import { AuditService } from '../utils/auditService';
 import emailService from '../services/emailService';
 import { emitToUser, emitMaintenanceEvent, emitSecuritySettingsEvent, emitDataChange } from '../services/websocket';
 import { invalidateMaintenanceCache } from '../middleware/maintenance';
-import { DEFAULT_START_COLUMNS, SELECTABLE_START_COLUMNS, invalidateJourneyConfigCache } from '../services/journeyService';
+import { DEFAULT_START_COLUMNS, SELECTABLE_START_COLUMNS, invalidateJourneyConfigCache, normalizeJourneyStartColumns } from '../services/journeyService';
 import {
   findAffectedUsers,
   getMigrationStats,
@@ -1382,7 +1382,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
       success: true,
       message: 'Journey configuration retrieved successfully',
       data: {
-        startColumns: config.journeyConfig?.startColumns || DEFAULT_START_COLUMNS,
+        startColumns: normalizeJourneyStartColumns(config.journeyConfig?.startColumns),
         selectableColumns: SELECTABLE_START_COLUMNS,
         superManagerStations: config.journeyConfig?.superManagerStations || [],
         superManagerNotifyCustomZambia: config.journeyConfig?.superManagerNotifyCustomZambia !== false,
@@ -1758,10 +1758,13 @@ export const getAuditLogs = async (req: AuthRequest, res: Response): Promise<voi
       resourceType,
       username,
       severity,
+      outcome,
       startDate,
       endDate,
       page = 1,
       limit = 50,
+      search,
+      truckNo,
     } = req.query;
 
     const result = await AuditService.getLogs({
@@ -1769,10 +1772,13 @@ export const getAuditLogs = async (req: AuthRequest, res: Response): Promise<voi
       resourceType: resourceType as string,
       username: username as string,
       severity: severity as any,
+      outcome: outcome as any,
       startDate: startDate ? new Date(startDate as string) : undefined,
       endDate: endDate ? new Date(endDate as string) : undefined,
       page: Number(page),
       limit: Number(limit),
+      search: search as string,
+      truckNo: truckNo as string,
     });
 
     res.status(200).json({
@@ -1881,7 +1887,7 @@ export const verifyAuditIntegrity = async (req: AuthRequest, res: Response): Pro
  */
 export const exportAuditLogs = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { action, resourceType, username, severity, outcome, startDate, endDate } = req.query;
+    const { action, resourceType, username, severity, outcome, startDate, endDate, search, truckNo } = req.query;
 
     const result = await AuditService.getLogs({
       action:       action       as any,
@@ -1891,6 +1897,8 @@ export const exportAuditLogs = async (req: AuthRequest, res: Response): Promise<
       outcome:      outcome      as any,
       startDate:    startDate ? new Date(startDate as string) : undefined,
       endDate:      endDate   ? new Date(endDate   as string) : undefined,
+      search:       search as string,
+      truckNo:      truckNo as string,
       limit:        10000, // max export size
       page:         1,
     });

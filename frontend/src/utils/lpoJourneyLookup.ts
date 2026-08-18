@@ -100,21 +100,6 @@ export async function fetchTruckForLpo(
       };
     }
 
-    const lockedRecord = activeFuelRecords.find((r: any) => r.isLocked);
-    if (lockedRecord) {
-      return {
-        fuelRecord: lockedRecord,
-        goingDo: lockedRecord.goingDo || 'NIL',
-        returnDo: lockedRecord.returnDo || 'NIL',
-        destination: lockedRecord.to || 'NIL',
-        goingDestination: lockedRecord.originalGoingTo || lockedRecord.to || 'NIL',
-        balance: lockedRecord.balance || 0,
-        message: `🔒 LOCKED: Missing configuration. DO: ${lockedRecord.goingDo} | Truck: ${lockedRecord.truckNo}`,
-        success: true,
-        allJourneys: { active: lockedRecord, queued: [] },
-      };
-    }
-
     const now = new Date();
     const monthStarts: Date[] = [];
     for (let i = 0; i < lookupMonths; i++) {

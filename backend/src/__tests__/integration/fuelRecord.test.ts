@@ -7,6 +7,7 @@ import {
   createTestDeliveryOrder,
   generateTestToken 
 } from '../helpers/testUtils';
+import { errorHandler } from '../../middleware/errorHandler';
 
 // Create test app
 const createTestApp = (): Express => {
@@ -16,6 +17,7 @@ const createTestApp = (): Express => {
   // Import fuel record routes
   const fuelRecordRoutes = require('../../../routes/fuelRecordRoutes').default;
   app.use('/api/fuel-records', fuelRecordRoutes);
+  app.use(errorHandler);
   
   return app;
 };
@@ -458,6 +460,103 @@ describe('Fuel Record API Integration Tests', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data.returnDo).toBe('DO-RETURN-EXP');
       expect(response.body.data.zambiaReturn).toBe(400);
+    });
+  });
+
+  describe('POST /api/fuel-records/:id/complete', () => {
+    it('should complete an active journey and promote the next queued one', async () => {
+      const active = await createTestFuelRecord({
+        truckNo: 'T500 CMP',
+        goingDo: 'DO-CMP-ACTIVE',
+        journeyStatus: 'active',
+      });
+      const queued = await createTestFuelRecord({
+        truckNo: 'T500 CMP',
+        goingDo: 'DO-CMP-QUEUED',
+        journeyStatus: 'queued',
+        queueOrder: 1,
+      });
+
+      const response = await request(app)
+        .post(`/api/fuel-records/${active._id}/complete`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.journeyStatus).toBe('completed');
+      expect(response.body.data.manuallyCompleted).toBe(true);
+      expect(String(response.body.data.promotedSuccessorId)).toBe(String(queued._id));
+
+      const refreshedQueued = await FuelRecord.findById(queued._id);
+      expect(refreshedQueued?.journeyStatus).toBe('active');
+      expect(refreshedQueued?.queueOrder).toBeUndefined();
+    });
+
+    it('should reject completing a queued journey', async () => {
+      const queued = await createTestFuelRecord({
+        truckNo: 'T501 CMP',
+        goingDo: 'DO-CMP-QONLY',
+        journeyStatus: 'queued',
+        queueOrder: 1,
+      });
+
+      const response = await request(app)
+        .post(`/api/fuel-records/${queued._id}/complete`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(409);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toMatch(/active journey/i);
+    });
+  });
+
+  describe('POST /api/fuel-records/:id/uncomplete', () => {
+    it('should undo a manual complete and restore the queued successor', async () => {
+      const active = await createTestFuelRecord({
+        truckNo: 'T502 CMP',
+        goingDo: 'DO-UNCMP-ACTIVE',
+        journeyStatus: 'active',
+      });
+      const queued = await createTestFuelRecord({
+        truckNo: 'T502 CMP',
+        goingDo: 'DO-UNCMP-QUEUED',
+        journeyStatus: 'queued',
+        queueOrder: 1,
+      });
+
+      await request(app)
+        .post(`/api/fuel-records/${active._id}/complete`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const undo = await request(app)
+        .post(`/api/fuel-records/${active._id}/uncomplete`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      expect(undo.body.data.journeyStatus).toBe('active');
+      expect(undo.body.data.manuallyCompleted).toBe(false);
+
+      const restoredQueued = await FuelRecord.findById(queued._id);
+      expect(restoredQueued?.journeyStatus).toBe('queued');
+      expect(restoredQueued?.queueOrder).toBe(1);
+    });
+
+    it('should not undo an automatically completed journey', async () => {
+      const autoCompleted = await createTestFuelRecord({
+        truckNo: 'T503 CMP',
+        goingDo: 'DO-AUTO-DONE',
+        journeyStatus: 'completed',
+        completedAt: new Date(),
+        manuallyCompleted: false,
+      });
+
+      const response = await request(app)
+        .post(`/api/fuel-records/${autoCompleted._id}/uncomplete`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(409);
+
+      expect(response.body.message).toMatch(/automatically/i);
     });
   });
 });

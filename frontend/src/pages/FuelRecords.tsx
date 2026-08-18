@@ -2,13 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, XCircle, RotateCcw, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check, Clock } from 'lucide-react';
+import { Search, Plus, Download, Edit, XCircle, RotateCcw, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check, Clock, MoreVertical, CheckCircle2, Undo2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { FuelRecord } from '../types';
 import { fuelRecordsAPI, configAPI, StandardAllocations } from '../services/api';
 import FuelRecordForm from '../components/FuelRecordForm';
 import FuelAnalytics from '../components/FuelAnalytics';
 import FuelRecordDetailsModal from '../components/FuelRecordDetailsModal';
+import FuelRecordActionsModal, { actionsMenuPositionFromEvent } from '../components/FuelRecordActionsModal';
+import type { FuelRecordActionsPosition } from '../components/FuelRecordActionsModal';
 import JourneyStatusBadge from '../components/JourneyStatusBadge';
 import Pagination from '../components/Pagination';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
@@ -170,6 +172,10 @@ const FuelRecords = () => {
   const [pendingCreateBusy, setPendingCreateBusy] = useState(false);
   const [cancelPending, setCancelPending] = useState<string | number | null>(null);
   const [uncancelPending, setUncancelPending] = useState<string | number | null>(null);
+  const [completePending, setCompletePending] = useState<string | number | null>(null);
+  const [uncompletePending, setUncompletePending] = useState<string | number | null>(null);
+  const [actionsRecord, setActionsRecord] = useState<FuelRecord | null>(null);
+  const [actionsMenuPosition, setActionsMenuPosition] = useState<FuelRecordActionsPosition | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
   
   // Standard allocations (fetched from backend)
@@ -756,8 +762,8 @@ const FuelRecords = () => {
     }
   };
 
-  const handleEdit = async (record: FuelRecord, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent row click
+  const handleEdit = async (record: FuelRecord, e?: React.MouseEvent) => {
+    e?.stopPropagation(); // Prevent row click
     const recordId = record.id || (record as any)._id;
     if (recordId) {
       try {
@@ -814,8 +820,8 @@ const FuelRecords = () => {
     }
   };
 
-  const handleCancel = (id: string | number, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCancel = (id: string | number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setCancelPending(id);
   };
 
@@ -835,9 +841,64 @@ const FuelRecords = () => {
     }
   };
 
-  const handleUncancel = (id: string | number, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleUncancel = (id: string | number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setUncancelPending(id);
+  };
+
+  const handleComplete = (id: string | number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCompletePending(id);
+  };
+
+  const executeComplete = async () => {
+    if (!completePending) return;
+    setIsActionLoading(true);
+    try {
+      await fuelRecordsAPI.complete(completePending);
+      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+      toast.success('Journey marked complete');
+    } catch (error: any) {
+      console.error('Error marking journey complete:', error);
+      toast.error(error.response?.data?.message || 'Failed to mark journey complete');
+    } finally {
+      setIsActionLoading(false);
+      setCompletePending(null);
+    }
+  };
+
+  const handleUncomplete = (id: string | number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setUncompletePending(id);
+  };
+
+  const executeUncomplete = async () => {
+    if (!uncompletePending) return;
+    setIsActionLoading(true);
+    try {
+      await fuelRecordsAPI.uncomplete(uncompletePending);
+      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+      toast.success('Journey complete undone');
+    } catch (error: any) {
+      console.error('Error undoing journey complete:', error);
+      toast.error(error.response?.data?.message || 'Failed to undo complete');
+    } finally {
+      setIsActionLoading(false);
+      setUncompletePending(null);
+    }
+  };
+
+  const recordIdOf = (record: FuelRecord) => record.id || (record as any)._id;
+
+  const closeActionsMenu = () => {
+    setActionsRecord(null);
+    setActionsMenuPosition(null);
+  };
+
+  const openActionsMenu = (record: FuelRecord, e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    setActionsMenuPosition(actionsMenuPositionFromEvent(e));
+    setActionsRecord(record);
   };
 
   const executeUncancel = async () => {
@@ -1691,34 +1752,65 @@ const FuelRecords = () => {
 
                     {/* Actions */}
                     {!isCancelled && (
-                      <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
+                      <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
                         <button
                           onClick={(e) => handleEdit(record, e)}
-                          className="flex-1 px-3 py-2 text-xs font-medium rounded-lg inline-flex items-center justify-center"
+                          className="px-2 py-2 text-xs font-medium rounded-lg inline-flex items-center justify-center"
                           style={{ color: isDark ? '#93C5FD' : '#2563EB', background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.3)' : '#DBEAFE')}
-                          onMouseLeave={e => (e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF')}
                         >
-                          <Edit className="w-4 h-4 mr-1" />
+                          <Edit className="w-3.5 h-3.5 mr-1" />
                           Edit
                         </button>
                         <button
                           onClick={(e) => {
-                            const id = record.id || (record as any)._id;
+                            const id = recordIdOf(record);
                             if (id) handleCancel(id, e);
                           }}
-                          className="flex-1 px-3 py-2 text-xs font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 inline-flex items-center justify-center"
+                          className="px-2 py-2 text-xs font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 inline-flex items-center justify-center"
                         >
-                          <XCircle className="w-4 h-4 mr-1" />
+                          <XCircle className="w-3.5 h-3.5 mr-1" />
                           Cancel
                         </button>
+                        {record.journeyStatus === 'active' ? (
+                          <button
+                            onClick={(e) => {
+                              const id = recordIdOf(record);
+                              if (id) handleComplete(id, e);
+                            }}
+                            className="px-2 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 inline-flex items-center justify-center"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                            Complete
+                          </button>
+                        ) : record.manuallyCompleted && record.journeyStatus === 'completed' ? (
+                          <button
+                            onClick={(e) => {
+                              const id = recordIdOf(record);
+                              if (id) handleUncomplete(id, e);
+                            }}
+                            className="px-2 py-2 text-xs font-medium text-violet-700 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-900/30 inline-flex items-center justify-center"
+                          >
+                            <Undo2 className="w-3.5 h-3.5 mr-1" />
+                            Undo
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            title="Only an active journey can be marked complete"
+                            className="px-2 py-2 text-xs font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700/50 rounded-lg inline-flex items-center justify-center cursor-not-allowed"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                            Complete
+                          </button>
+                        )}
                       </div>
                     )}
                     {isCancelled && canUncancel && (
                       <div className="flex items-center gap-2 pt-3 border-t border-red-200 dark:border-red-700">
                         <button
                           onClick={(e) => {
-                            const id = record.id || (record as any)._id;
+                            const id = recordIdOf(record);
                             if (id) handleUncancel(id, e);
                           }}
                           className="flex-1 px-3 py-2 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 inline-flex items-center justify-center"
@@ -1877,39 +1969,17 @@ const FuelRecords = () => {
                       {renderFuelCell('darReturn', record.darReturn)}
                       {renderFuelCell('tangaReturn', record.tangaReturn)}
                       <td className={`px-2 py-2 text-[10px] sm:text-xs text-center font-semibold ${isCancelled ? 'text-red-500 dark:text-red-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>{record.balance.toLocaleString()}</td>
-                      <td className="px-2 py-2">
-                        <div className="flex space-x-1 justify-center">
-                          {!isCancelled && (
-                            <>
-                              <button
-                                onClick={(e) => handleEdit(record, e)}
-                                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" style={{ color: '#2563EB' }}
-                                title="Edit"
-                              >
-                                <Edit className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  const id = record.id || (record as any)._id;
-                                  if (id) handleCancel(id, e);
-                                }}
-                                className="text-orange-600 hover:text-orange-900 dark:text-orange-400 dark:hover:text-orange-300 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                                title="Cancel"
-                              >
-                                <XCircle className="w-3 h-3" />
-                              </button>
-                            </>
-                          )}
-                          {isCancelled && canUncancel && (
+                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-center">
+                          {(!isCancelled || canUncancel) && (
                             <button
-                              onClick={(e) => {
-                                const id = record.id || (record as any)._id;
-                                if (id) handleUncancel(id, e);
-                              }}
-                              className="text-green-700 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                              title="Uncancel"
+                              type="button"
+                              onClick={(e) => openActionsMenu(record, e)}
+                              className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                              title="Actions"
+                              aria-label="Row actions"
                             >
-                              <RotateCcw className="w-3 h-3" />
+                              <MoreVertical className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -1956,6 +2026,42 @@ const FuelRecords = () => {
           setSelectedRecordId(null);
         }}
         recordId={selectedRecordId}
+        onEdit={(record) => {
+          setIsDetailsModalOpen(false);
+          setSelectedRecordId(null);
+          void handleEdit(record);
+        }}
+      />
+
+      <FuelRecordActionsModal
+        record={actionsRecord}
+        position={actionsMenuPosition}
+        canUncancel={canUncancel}
+        onClose={closeActionsMenu}
+        onEdit={(record) => {
+          closeActionsMenu();
+          void handleEdit(record);
+        }}
+        onCancel={(record) => {
+          const id = recordIdOf(record);
+          closeActionsMenu();
+          if (id) handleCancel(id);
+        }}
+        onComplete={(record) => {
+          const id = recordIdOf(record);
+          closeActionsMenu();
+          if (id) handleComplete(id);
+        }}
+        onUncomplete={(record) => {
+          const id = recordIdOf(record);
+          closeActionsMenu();
+          if (id) handleUncomplete(id);
+        }}
+        onUncancel={(record) => {
+          const id = recordIdOf(record);
+          closeActionsMenu();
+          if (id) handleUncancel(id);
+        }}
       />
 
       <PendingDoFollowUpModal
@@ -2090,6 +2196,28 @@ const FuelRecords = () => {
         loading={isActionLoading}
         onConfirm={executeUncancel}
         onCancel={() => setUncancelPending(null)}
+      />
+      <ConfirmModal
+        open={completePending !== null}
+        title="Mark Journey Complete"
+        message="This will complete the active journey and promote the next queued journey for this truck (if any). You can undo this if it was a mistake."
+        confirmLabel="Mark Complete"
+        cancelLabel="Keep Active"
+        variant="info"
+        loading={isActionLoading}
+        onConfirm={executeComplete}
+        onCancel={() => setCompletePending(null)}
+      />
+      <ConfirmModal
+        open={uncompletePending !== null}
+        title="Undo Complete"
+        message="This will set the journey back to active and return the promoted journey to the queue, if it is still this truck's active journey."
+        confirmLabel="Undo Complete"
+        cancelLabel="Keep Completed"
+        variant="warning"
+        loading={isActionLoading}
+        onConfirm={executeUncomplete}
+        onCancel={() => setUncompletePending(null)}
       />
     </div>
   );
