@@ -42,11 +42,16 @@ interface TruckFetchResult {
   balance: number;
   message: string;
   success: boolean;
-  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | null;
+  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | 'ambiguous_truck' | null;
   // Set when the same DO is on more than one truck/journey (dirty imported data).
   // The caller must let the user pick rather than silently committing the primary.
   ambiguous?: boolean;
   matches?: (TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' })[];
+  // Set when the same truck has more than one *active* journey with different DOs
+  // (data-entry error). Lookup still returns a primary so other callers keep working;
+  // the truck-number change handler stops auto-fill and makes the user pick.
+  ambiguousActive?: boolean;
+  activeMatches?: (TruckFetchResult & { truckNo?: string })[];
   queueInfo?: {
     hasQueue: boolean;
     queuedCount: number;
@@ -72,7 +77,7 @@ interface EntryAutoFillData {
   entryType?: 'regular' | 'da' | 'ref' | 'nil';
   referenceDoNo?: string;  // For DA: the real journey DO number
   // Warning states for trucks without valid fuel records
-  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | null;
+  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | 'ambiguous_truck' | null;
   warningMessage?: string;
   // Journey navigation: track available journeys and current selection
   allJourneys?: {
@@ -288,6 +293,44 @@ const buildDoResult = (
   };
 };
 
+// Collapse parallel *active* fuel records for one truck: same going DO counts as
+// one journey (imported duplicates of the same DO). Different DOs stay distinct
+// so the truck-lookup gate can ask the user which journey to put the LPO on.
+const uniqueActiveJourneysByDo = (records: FuelRecord[]): FuelRecord[] => {
+  const unique = new Map<string, FuelRecord>();
+  for (const r of records) {
+    if (r.journeyStatus !== 'active') continue;
+    const doKey = (r.goingDo || '').trim().toUpperCase();
+    const key = doKey && doKey !== 'NIL' && doKey !== 'N/A'
+      ? `do:${doKey}`
+      : `id:${String((r as any).id || (r as any)._id || '')}`;
+    if (!unique.has(key)) unique.set(key, r);
+  }
+  return Array.from(unique.values());
+};
+
+const buildTruckActiveMatch = (
+  record: FuelRecord,
+  queuedJourneys: FuelRecord[]
+): TruckFetchResult & { truckNo?: string } => {
+  const goingDestination = record.originalGoingTo || record.to || 'NIL';
+  return {
+    fuelRecord: record,
+    truckNo: record.truckNo,
+    goingDo: record.goingDo || 'NIL',
+    returnDo: record.returnDo || 'NIL',
+    destination: record.to || 'NIL',
+    goingDestination,
+    balance: record.balance || 0,
+    message: `ACTIVE Journey: DO ${record.goingDo}, Balance: ${record.balance ?? 0}L`,
+    success: true,
+    allJourneys: {
+      active: record,
+      queued: queuedJourneys,
+    },
+  };
+};
+
 const LPODetailForm: React.FC<LPODetailFormProps> = ({
   isOpen,
   onClose,
@@ -426,6 +469,16 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     doNo: string;
     matches: (TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' })[];
   }>({ open: false, index: -1, doNo: '', matches: [] });
+
+  // Ambiguous-truck picker. Opens when a typed truck has more than one *active*
+  // journey with different DOs (data-entry error). Same-DO duplicates are
+  // collapsed first; queued journeys never trigger this. User must pick.
+  const [truckAmbiguityModal, setTruckAmbiguityModal] = useState<{
+    open: boolean;
+    index: number;
+    truckNo: string;
+    matches: (TruckFetchResult & { truckNo?: string })[];
+  }>({ open: false, index: -1, truckNo: '', matches: [] });
 
   // Optional per-row context note for truck orders
   const [contextModal, setContextModal] = useState<{
@@ -1430,6 +1483,23 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const queuedJourneys = activeFuelRecords.filter((r: FuelRecord) => 
         r.journeyStatus === 'queued' && r.truckNo === selectedRecord.truckNo
       ).sort((a: any, b: any) => (a.queueOrder || 0) - (b.queueOrder || 0));
+
+      // Parallel-active gate (data-entry error): same truck, two+ journeys both
+      // marked Active. Collapse same going-DO first (imported duplicates of one
+      // journey). Different DOs → surface all candidates; callers that still want
+      // the primary (pending-DO create, etc.) keep using selectedRecord below.
+      const uniqueActives = uniqueActiveJourneysByDo(sortedRecords);
+      const ambiguousActive = uniqueActives.length > 1;
+      const activeMatches = ambiguousActive
+        ? uniqueActives.map((r) => buildTruckActiveMatch(r, queuedJourneys))
+        : undefined;
+      if (ambiguousActive) {
+        console.warn(
+          `[LPO Truck Lookup] AMBIGUOUS ACTIVE truck ${selectedRecord.truckNo}: ` +
+          `${uniqueActives.length} active journeys — ` +
+          uniqueActives.map((r) => r.goingDo).join(', ')
+        );
+      }
       
       // Build message with journey status
       let statusMessage = `Found (${searchMonth} month): Going DO ${selectedRecord.goingDo}, Balance: ${selectedRecord.balance}L`;
@@ -1469,6 +1539,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           active: activeRecord,
           queued: queuedJourneys,
         },
+        ambiguousActive,
+        activeMatches,
       };
     } catch (error) {
       console.error('Error fetching truck data:', error);
@@ -2294,6 +2366,102 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     pasteTimeoutsRef.current.push(outerTimer);
   };
 
+  /**
+   * Commit a resolved truck lookup into the row. Shared by the normal single-active
+   * path and the parallel-active picker (a picked journey fills exactly like a
+   * clean lookup). Does not change queued-journey navigation or DA/REF/NIL rules.
+   */
+  const applyTruckFetchResult = (
+    index: number,
+    formattedTruckNo: string,
+    result: TruckFetchResult
+  ) => {
+    const direction = entryAutoFillData[index]?.direction || 'going';
+    const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
+
+    const returnDoMissing = isReturnDoMissing(result.returnDo);
+
+    const destinationForAllocation = direction === 'going'
+      ? result.goingDestination
+      : result.destination;
+
+    const isCustomStation = formData.station === 'CUSTOM';
+    const isCashStation = formData.station === 'CASH';
+    const defaults = isCustomStation
+      ? { liters: customDefaultLitersRef.current, rate: customRateRef.current }
+      : isCashStation
+      ? { liters: cashDefaultLitersRef.current, rate: cashRateRef.current }
+      : (formData.station
+          ? getStationDefaults(
+              formData.station,
+              direction,
+              destinationForAllocation,
+              result.fuelRecord?.totalLts ?? undefined,
+              result.fuelRecord?.extra ?? undefined,
+              result.fuelRecord?.balance ?? undefined
+            )
+          : { liters: noStationDefaultLitersRef.current, rate: noStationRateRef.current });
+
+    setFormData(prev => {
+      const newEntries = [...(prev.entries || [])];
+
+      if (!newEntries[index]) {
+        newEntries[index] = {
+          doNo: '',
+          truckNo: '',
+          liters: 0,
+          rate: prev.station === 'CUSTOM' ? customRate : prev.station === 'CASH' ? cashRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2),
+          amount: 0,
+          dest: 'NIL',
+        };
+      }
+
+      const isDA = entryAutoFillData[index]?.entryType === 'da';
+
+      newEntries[index] = {
+        ...newEntries[index],
+        truckNo: formattedTruckNo,
+        doNo: isDA ? 'DA' : doNumber,
+        dest: destinationForAllocation,
+        liters: defaults.liters,
+        rate: defaults.rate,
+        amount: defaults.liters * defaults.rate
+      };
+
+      const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
+
+      return { ...prev, entries: newEntries, total };
+    });
+    setEntryAutoFillData(prev => ({
+      ...prev,
+      [index]: {
+        ...prev[index],
+        direction,
+        loading: false,
+        fetched: result.success,
+        fuelRecord: result.fuelRecord,
+        fuelRecordId: result.fuelRecord?.id,
+        goingDestination: result.goingDestination,
+        returnDoMissing,
+        referenceDoNo: prev[index]?.entryType === 'da' ? doNumber : prev[index]?.referenceDoNo,
+        warningType: result.warningType || null,
+        warningMessage: result.message,
+        formulaStatus: defaults.formulaStatus || null,
+        formulaMessage: defaults.formulaMessage,
+        allJourneys: result.allJourneys,
+        selectedJourneyIndex: result.allJourneys?.active ? -1 : 0,
+        selectedJourneyType: result.allJourneys?.active ? 'active' : 'queued',
+        entryType: prev[index]?.entryType || 'regular',
+      }
+    }));
+  };
+
+  const handlePickAmbiguousTruckMatch = (match: TruckFetchResult & { truckNo?: string }) => {
+    const { index, truckNo } = truckAmbiguityModal;
+    if (index >= 0) applyTruckFetchResult(index, truckNo, match);
+    setTruckAmbiguityModal({ open: false, index: -1, truckNo: '', matches: [] });
+  };
+
   // Handle truck number change with auto-fetch
   const handleTruckNoChange = async (index: number, truckNo: string, modeOverride?: EntryMode) => {
     // Format the truck number to standard format: T(number)(space)(letters) and uppercase
@@ -2364,93 +2532,30 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       // 300ms safety timer (guards the final character gap, not typing speed)
       fetchDebounceTimers.current[index] = setTimeout(async () => {
         const result = await fetchTruckData(formattedTruckNo);
-        
-        const direction = entryAutoFillData[index]?.direction || 'going';
-        const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
-        
-        // Check if return DO is missing (PR#### pending return counts as present)
-        const returnDoMissing = isReturnDoMissing(result.returnDo);
-        
-        // IMPORTANT: Use goingDestination for going journey fuel allocation
-        // This ensures we use the original destination before EXPORT DO changed it
-        const destinationForAllocation = direction === 'going'
-          ? result.goingDestination 
-          : result.destination;
-        
-        const isCustomStation = formData.station === 'CUSTOM';
-        const isCashStation = formData.station === 'CASH';
-        const defaults = isCustomStation
-          ? { liters: customDefaultLitersRef.current, rate: customRateRef.current }
-          : isCashStation
-          ? { liters: cashDefaultLitersRef.current, rate: cashRateRef.current }
-          : (formData.station
-              ? getStationDefaults(
-                  formData.station,
-                  direction,
-                  destinationForAllocation,
-                  result.fuelRecord?.totalLts ?? undefined,
-                  result.fuelRecord?.extra ?? undefined,
-                  result.fuelRecord?.balance ?? undefined
-                )
-              : { liters: noStationDefaultLitersRef.current, rate: noStationRateRef.current });
 
-        // Auto-fill the entry - USE CALLBACK FORM to avoid race conditions
-        setFormData(prev => {
-          const newEntries = [...(prev.entries || [])];
+        // Parallel active journeys with different DOs: DON'T silently auto-fill
+        // the first active. Stop, flag the row, and make the user pick. Same-DO
+        // duplicates were already collapsed in fetchTruckData.
+        const activeMatches = result.activeMatches;
+        if (result.ambiguousActive && activeMatches && activeMatches.length > 1) {
+          setEntryAutoFillData(prev => ({
+            ...prev,
+            [index]: {
+              ...prev[index],
+              loading: false,
+              fetched: false,
+              fuelRecord: null,
+              entryType: prev[index]?.entryType || 'regular',
+              warningType: 'ambiguous_truck',
+              warningMessage: `⚠️ Truck ${formattedTruckNo} has ${activeMatches.length} active journeys — pick the correct one.`,
+            }
+          }));
+          setTruckAmbiguityModal({ open: true, index, truckNo: formattedTruckNo, matches: activeMatches });
+          delete fetchDebounceTimers.current[index];
+          return;
+        }
 
-          // Ensure entry exists
-          if (!newEntries[index]) {
-            newEntries[index] = {
-              doNo: '',  // Start empty
-              truckNo: '',
-              liters: 0,
-              rate: prev.station === 'CUSTOM' ? customRate : prev.station === 'CASH' ? cashRate : (prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2),
-              amount: 0,
-              dest: 'NIL',
-            };
-          }
-
-          // For DA entries: keep DO as DA, store real DO in referenceDoNo
-          const isDA = entryAutoFillData[index]?.entryType === 'da';
-
-          newEntries[index] = {
-            ...newEntries[index],
-            truckNo: formattedTruckNo,  // Use formatted truck number to maintain consistent format
-            doNo: isDA ? 'DA' : doNumber,
-            dest: destinationForAllocation,  // Use correct destination based on direction
-            liters: defaults.liters,
-            rate: defaults.rate,
-            amount: defaults.liters * defaults.rate
-          };
-          
-          const total = newEntries.reduce((sum, entry) => sum + (entry?.amount || 0), 0);
-          
-          return { ...prev, entries: newEntries, total };
-        });
-        setEntryAutoFillData(prev => ({
-          ...prev,
-          [index]: { 
-            ...prev[index],
-            direction, 
-            loading: false, 
-            fetched: result.success, 
-            fuelRecord: result.fuelRecord,
-            fuelRecordId: result.fuelRecord?.id,  // Store fuel record ID for inspect modal
-            goingDestination: result.goingDestination,  // Store for later use when toggling direction
-            returnDoMissing,  // Track if return DO is missing
-            // For DA: store the real journey DO as referenceDoNo
-            referenceDoNo: prev[index]?.entryType === 'da' ? doNumber : prev[index]?.referenceDoNo,
-            warningType: result.warningType || null,
-            warningMessage: result.message,
-            formulaStatus: defaults.formulaStatus || null,
-            formulaMessage: defaults.formulaMessage,
-            // Journey navigation: store all available journeys
-            allJourneys: result.allJourneys,
-            selectedJourneyIndex: result.allJourneys?.active ? -1 : 0, // -1 for active, 0 for first queued
-            selectedJourneyType: result.allJourneys?.active ? 'active' : 'queued',
-            entryType: prev[index]?.entryType || 'regular',
-          }
-        }));
+        applyTruckFetchResult(index, formattedTruckNo, result);
 
         delete fetchDebounceTimers.current[index];
       }, 300);
@@ -3813,6 +3918,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       (af as EntryAutoFillData).entryType === 'ref' ||
       (af.warningType && !af.loading && (entry?.truckNo?.length || 0) >= 5) ||
       (af.warningType === 'ambiguous_do' && !af.loading) ||
+      (af.warningType === 'ambiguous_truck' && !af.loading) ||
       hasDup ||
       (af.fetched && af.allJourneys) ||
       (af.direction === 'returning' && af.returnDoMissing && af.fuelRecord) ||
@@ -4757,7 +4863,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 const isDifferentAmount = hasDuplicate && !!duplicateInfo?.isDifferentAmount;
                 const isNilDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount && !!duplicateInfo?.isNilDo;
                 const hasNoRecordWarning = (autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && autoFill.entryType !== 'ref')
-                  || (autoFill.warningType === 'ambiguous_do' && !autoFill.loading);
+                  || (autoFill.warningType === 'ambiguous_do' && !autoFill.loading)
+                  || (autoFill.warningType === 'ambiguous_truck' && !autoFill.loading);
                 const mobileReturnDoMissing = autoFill.direction === 'returning' && autoFill.returnDoMissing && !!autoFill.fuelRecord;
                 return (
                   <div key={index} className={`border rounded-lg p-2 transition-colors ${
@@ -4853,6 +4960,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
                               {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
                               {autoFill.warningType === 'ambiguous_do' && '⚠️ DO on multiple trucks — pick one'}
+                              {autoFill.warningType === 'ambiguous_truck' && '⚠️ Truck has multiple active journeys — pick one'}
                             </span>
                         )}
                         {canOfferPendingGoing(index) && (
@@ -5053,7 +5161,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       const isDifferentAmount = hasDuplicate && !!duplicateInfo?.isDifferentAmount;
                       const isNilDuplicate = hasDuplicate && !duplicateInfo?.isDifferentAmount && !!duplicateInfo?.isNilDo;
                       const hasNoRecordWarning = (autoFill.warningType && !autoFill.loading && (entry?.truckNo?.length || 0) >= 5 && (autoFill as EntryAutoFillData).entryType !== 'ref')
-                        || (autoFill.warningType === 'ambiguous_do' && !autoFill.loading);
+                        || (autoFill.warningType === 'ambiguous_do' && !autoFill.loading)
+                        || (autoFill.warningType === 'ambiguous_truck' && !autoFill.loading);
                       return (
                         <tr key={index} className={`lpo-row ${
                           (autoFill as EntryAutoFillData).entryType === 'ref' ? 'row-orange'
@@ -5287,10 +5396,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                         {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
                                         {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
                                         {autoFill.warningType === 'ambiguous_do' && '⚠️ DO on multiple trucks — pick one'}
+                                        {autoFill.warningType === 'ambiguous_truck' && '⚠️ Truck has multiple active journeys — pick one'}
                                       </>
                                     )}
                                     <span className="block text-[10px] text-gray-500 dark:text-gray-400">
-                                      {autoFill.warningMessage?.includes('DUPLICATE') ? 'Remove duplicate or use different truck' : 'Manual entry allowed'}
+                                      {autoFill.warningMessage?.includes('DUPLICATE')
+                                        ? 'Remove duplicate or use different truck'
+                                        : autoFill.warningType === 'ambiguous_truck'
+                                          ? 'Pick the journey for this order'
+                                          : 'Manual entry allowed'}
                                     </span>
                                     {canOfferPendingGoing(index) && (
                                       <button
@@ -5722,6 +5836,78 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               <button
                 type="button"
                 onClick={() => setDoAmbiguityModal({ open: false, index: -1, doNo: '', matches: [] })}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ambiguous-truck picker — the typed truck has more than one Active
+          journey with different DOs (data-entry error). Same-DO duplicates are
+          collapsed first; queued journeys never trigger this. Closing without
+          picking leaves the row flagged and un-filled rather than guessing. */}
+      {truckAmbiguityModal.open && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setTruckAmbiguityModal({ open: false, index: -1, truckNo: '', matches: [] });
+          }}
+        >
+          <div
+            className="lpo-rd w-full max-w-lg rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 p-5 border-b border-gray-100 dark:border-gray-800">
+              <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  Truck {formatTruckNumber(truckAmbiguityModal.truckNo)} has {truckAmbiguityModal.matches.length} active journeys
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  This truck is marked Active on more than one journey with different
+                  DOs (likely a data-entry mistake). Pick the journey this LPO should
+                  go on — you can cancel the unwanted one later from the fuel record.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 max-h-[55vh] overflow-y-auto lpo-scroll space-y-2">
+              {truckAmbiguityModal.matches.map((m, i) => (
+                <button
+                  key={`${m.fuelRecord?.id || m.fuelRecord?._id || i}`}
+                  type="button"
+                  onClick={() => handlePickAmbiguousTruckMatch(m)}
+                  className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/60 dark:hover:bg-indigo-900/20 transition-colors p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-bold text-gray-900 dark:text-gray-100 mono">
+                      Going DO {m.goingDo}
+                    </span>
+                    <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded-md bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                      Active
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Date: <span className="text-gray-700 dark:text-gray-300">{m.fuelRecord?.date || '—'}</span></span>
+                    <span>Dest: <span className="text-gray-700 dark:text-gray-300">{m.goingDestination || m.destination || '—'}</span></span>
+                    <span>Balance: <span className="text-gray-700 dark:text-gray-300 mono">{m.balance ?? 0}L</span></span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                    Return DO {m.returnDo}
+                    {(m.fuelRecord as any)?.journeyStatus ? ` · ${(m.fuelRecord as any).journeyStatus}` : ''}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setTruckAmbiguityModal({ open: false, index: -1, truckNo: '', matches: [] })}
                 className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 Cancel
