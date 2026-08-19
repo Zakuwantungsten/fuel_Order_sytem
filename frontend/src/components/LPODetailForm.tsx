@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight, MessageSquare, Clock } from 'lucide-react';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight, MessageSquare, Clock, RefreshCw } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI, tangaLPOAPI, darLPOAPI } from '../services/api';
 import YardEntriesTable from './YardEntriesTable';
@@ -496,6 +496,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     loading: boolean;
   }>({ open: false, index: -1, truckNo: '', loading: false });
 
+  // Confirm before creating a pending going DO (PG####) from a row action
+  const [pendingGoingConfirm, setPendingGoingConfirm] = useState<{
+    open: boolean;
+    index: number;
+    truckNo: string;
+    loading: boolean;
+  }>({ open: false, index: -1, truckNo: '', loading: false });
+
   // Multi-select state for bulk editing
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
   const [bulkLiters, setBulkLiters] = useState('');
@@ -508,6 +516,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     station: string;
   } | null>(null);
   const [isCreatingAndForwarding, setIsCreatingAndForwarding] = useState(false);
+  const [isRecalculatingLiters, setIsRecalculatingLiters] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { data: journeyConfig } = useJourneyConfig();
   const autoDownloadLPOPdf = journeyConfig?.autoDownloadLPOPdf ?? true;
@@ -823,6 +832,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setHasDraft(false);
     setIsForwardingMode(false);
     setForwardedFromInfo(null);
+    setIsRecalculatingLiters(false);
     setYardDraftEntries([]);
     setYardDraftVersion((v) => v + 1);
     setYardSummary({ count: 0, total: 0, totalLiters: 0 });
@@ -1713,6 +1723,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   /** Apply the selected station's rate (and optionally default liters) to every row. */
   const applyStationToEntries = (station: string, repopulateLiters: boolean) => {
+    const formulaByIndex: Record<number, { formulaStatus: EntryAutoFillData['formulaStatus']; formulaMessage?: string }> = {};
     setFormData(prev => {
       const updatedEntries = (prev.entries || []).map((entry, idx) => {
         const afill = entryAutoFillData[idx];
@@ -1731,6 +1742,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 fr?.extra ?? undefined,
                 fr?.balance ?? undefined,
               );
+        if (repopulateLiters) {
+          formulaByIndex[idx] = {
+            formulaStatus: defaults.formulaStatus || null,
+            formulaMessage: defaults.formulaMessage,
+          };
+        }
         const resolvedLiters = repopulateLiters ? defaults.liters : (entry.liters || 0);
         return {
           ...entry,
@@ -1742,6 +1759,124 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       const total = updatedEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
       return { ...prev, entries: updatedEntries, total };
     });
+    if (repopulateLiters) {
+      setEntryAutoFillData(prev => {
+        const next = { ...prev };
+        Object.entries(formulaByIndex).forEach(([key, value]) => {
+          const idx = Number(key);
+          next[idx] = { ...next[idx], ...value };
+        });
+        return next;
+      });
+    }
+  };
+
+  const fuelRecordKey = (record: FuelRecord | null | undefined) =>
+    record ? String((record as any).id ?? (record as any)._id ?? '') : '';
+
+  const pickRefreshedFuelRecord = (
+    prev: EntryAutoFillData | undefined,
+    result: TruckFetchResult
+  ): FuelRecord | null => {
+    const active = result.allJourneys?.active ?? null;
+    const queued = result.allJourneys?.queued || [];
+    const prevId = fuelRecordKey(prev?.fuelRecord) || String(prev?.fuelRecordId ?? '');
+    if (prevId) {
+      if (fuelRecordKey(active) === prevId) return active;
+      const queuedMatch = queued.find((q) => fuelRecordKey(q) === prevId);
+      if (queuedMatch) return queuedMatch;
+    }
+    if (prev?.selectedJourneyType === 'queued' && queued.length > 0) {
+      return queued[Math.min(prev.selectedJourneyIndex ?? 0, queued.length - 1)] || result.fuelRecord;
+    }
+    return result.fuelRecord || active || queued[0] || null;
+  };
+
+  const fetchFreshLookupsForEntries = async (entries: LPODetail[]) => {
+    return Promise.all(entries.map(async (entry, idx) => {
+      const mode = entryAutoFillData[idx]?.entryType || 'regular';
+      const truckNo = formatTruckNumber((entry?.truckNo || '').trim());
+      if (mode !== 'regular' || !truckNo || truckNo.length < 4) {
+        return { idx, result: null as TruckFetchResult | null };
+      }
+      try {
+        return { idx, result: await fetchTruckData(truckNo) };
+      } catch {
+        return { idx, result: null as TruckFetchResult | null };
+      }
+    }));
+  };
+
+  const handleRecalculateLiters = async () => {
+    const station = formData.station;
+    if (!station || station === 'CASH' || station === 'CUSTOM') {
+      toast.warn('Select a formula station to recalculate liters');
+      return;
+    }
+    const entries = formData.entries || [];
+    if (entries.length === 0) return;
+
+    setIsRecalculatingLiters(true);
+    try {
+      const lookupRows = await fetchFreshLookupsForEntries(entries);
+      const nextAutoFill: Record<number, EntryAutoFillData> = { ...entryAutoFillData };
+      const newEntries = entries.map((entry, idx) => {
+        const result = lookupRows[idx]?.result;
+        if (!result) return entry;
+        const prevAf = entryAutoFillData[idx];
+        const selected = pickRefreshedFuelRecord(prevAf, result);
+        const direction = prevAf?.direction || 'going';
+        const dest = direction === 'going'
+          ? (selected?.originalGoingTo || selected?.to || result.goingDestination)
+          : (selected?.to || result.destination);
+        const defaults = getStationDefaults(
+          station,
+          direction,
+          dest,
+          selected?.totalLts ?? undefined,
+          selected?.extra ?? undefined,
+          selected?.balance ?? undefined,
+        );
+        const queued = result.allJourneys?.queued || [];
+        const selectedType: 'active' | 'queued' = selected?.journeyStatus === 'queued' ? 'queued' : 'active';
+        const selectedIndex = selectedType === 'queued'
+          ? Math.max(0, queued.findIndex((q) => fuelRecordKey(q) === fuelRecordKey(selected)))
+          : -1;
+        nextAutoFill[idx] = {
+          ...prevAf,
+          direction,
+          loading: false,
+          fetched: result.success || !!selected,
+          fuelRecord: selected,
+          fuelRecordId: selected ? ((selected as any).id ?? (selected as any)._id) : prevAf?.fuelRecordId,
+          goingDestination: selected?.originalGoingTo || selected?.to || result.goingDestination,
+          allJourneys: result.allJourneys,
+          selectedJourneyType: selectedType,
+          selectedJourneyIndex: selectedIndex,
+          warningType: result.warningType || null,
+          warningMessage: result.message,
+          formulaStatus: defaults.formulaStatus || null,
+          formulaMessage: defaults.formulaMessage,
+          returnDoMissing: isReturnDoMissing(selected?.returnDo || result.returnDo),
+          entryType: prevAf?.entryType || 'regular',
+        };
+        return {
+          ...entry,
+          liters: defaults.liters,
+          rate: defaults.rate,
+          amount: defaults.liters * defaults.rate,
+        };
+      });
+      const total = newEntries.reduce((sum, e) => sum + (e?.amount || 0), 0);
+      setFormData((prev) => ({ ...prev, entries: newEntries, total }));
+      setEntryAutoFillData(nextAutoFill);
+      toast.success('Liters recalculated from latest fuel records');
+    } catch (err) {
+      console.error('Recalculate liters failed:', err);
+      toast.error('Failed to recalculate liters');
+    } finally {
+      setIsRecalculatingLiters(false);
+    }
   };
 
   const handleStationLitersKeep = () => {
@@ -2970,6 +3105,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     setPendingReturnConfirm({ open: true, index, truckNo, loading: false });
   };
 
+  const requestCreatePendingGoingDo = (index: number) => {
+    const entry = formData.entries?.[index];
+    const truckNo = formatTruckNumber((entry?.truckNo || '').trim());
+    if (!truckNo || truckNo.length < 4) {
+      toast.error('Enter a valid truck number first');
+      return;
+    }
+    if (!isPendingGoingCreateMonth()) {
+      toast.error('Pending going DOs can only be created for the current calendar month');
+      return;
+    }
+    setPendingGoingConfirm({ open: true, index, truckNo, loading: false });
+  };
+
   const confirmCreatePendingReturnDo = async () => {
     const { index } = pendingReturnConfirm;
     if (index < 0) return;
@@ -2979,6 +3128,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       setPendingReturnConfirm({ open: false, index: -1, truckNo: '', loading: false });
     } catch {
       setPendingReturnConfirm((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  const confirmCreatePendingGoingDo = async () => {
+    const { index } = pendingGoingConfirm;
+    if (index < 0) return;
+    setPendingGoingConfirm((prev) => ({ ...prev, loading: true }));
+    try {
+      await handleCreatePendingDo(index, 'going');
+      setPendingGoingConfirm({ open: false, index: -1, truckNo: '', loading: false });
+    } catch {
+      setPendingGoingConfirm((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -3368,6 +3529,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           toast.warn('LPO created, but linking fuel records failed. Use manual link from the LPO sheet.');
         }
       }
+
+      // Same as regular submit: clear in-memory state + localStorage so a pending
+      // autosave debounce cannot rewrite the LPO we just created. Reopen then
+      // takes the no-draft path (reset + fetchNextLpoNumber) instead of restoring
+      // the used number and yard trucks.
+      resetForm();
     } finally {
       setIsSubmitting(false);
     }
@@ -3763,6 +3930,11 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       // Fetch the next LPO number immediately for the forwarded LPO
       const nextLpoNo = await lpoDocumentsAPI.getNextLpoNumber();
 
+      // Re-fetch fuel records AFTER the source LPO deducted, so the next
+      // station's formula uses post-create total/extra/balance — not the
+      // snapshot from before this LPO was made.
+      const lookupRows = await fetchFreshLookupsForEntries(formData.entries);
+
       // Keep the same trucks for forwarding. Zero liters/rate/amount so the next
       // station's defaults populate cleanly when the user selects a station.
       const forwardedEntries = formData.entries.map(entry => ({
@@ -3794,26 +3966,35 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         Object.fromEntries(
           forwardedEntries.map((_, idx) => {
             const prev = entryAutoFillData[idx];
+            const result = lookupRows[idx]?.result;
+            const selected = result ? pickRefreshedFuelRecord(prev, result) : (prev?.fuelRecord ?? null);
+            const queued = result?.allJourneys?.queued || prev?.allJourneys?.queued || [];
+            const selectedType: 'active' | 'queued' =
+              selected?.journeyStatus === 'queued'
+                ? 'queued'
+                : (result ? 'active' : (prev?.selectedJourneyType ?? 'active'));
+            const selectedIndex = selectedType === 'queued'
+              ? Math.max(0, queued.findIndex((q) => fuelRecordKey(q) === fuelRecordKey(selected)))
+              : -1;
             return [
               idx,
               {
                 direction:            prev?.direction            ?? 'going',
                 loading:              false,
-                fetched:              prev?.fuelRecord != null,
-                fuelRecord:           prev?.fuelRecord           ?? null,
-                fuelRecordId:         prev?.fuelRecordId,
-                goingDestination:     prev?.goingDestination,
+                fetched:              selected != null || !!prev?.fetched,
+                fuelRecord:           selected,
+                fuelRecordId:         selected ? ((selected as any).id ?? (selected as any)._id) : prev?.fuelRecordId,
+                goingDestination:     selected?.originalGoingTo || selected?.to || prev?.goingDestination,
                 entryType:            prev?.entryType,
                 referenceDoNo:        prev?.referenceDoNo,
-                allJourneys:          prev?.allJourneys,
-                selectedJourneyIndex: prev?.selectedJourneyIndex,
-                selectedJourneyType:  prev?.selectedJourneyType,
-                // Reset station-specific computed fields — they re-derive on station select
+                allJourneys:          result?.allJourneys ?? prev?.allJourneys,
+                selectedJourneyIndex: result ? selectedIndex : prev?.selectedJourneyIndex,
+                selectedJourneyType:  result ? selectedType : prev?.selectedJourneyType,
                 formulaStatus:        null,
                 formulaMessage:       undefined,
-                returnDoMissing:      prev?.returnDoMissing,
-                warningType:          null,
-                warningMessage:       undefined,
+                returnDoMissing:      selected ? isReturnDoMissing(selected.returnDo as string) : prev?.returnDoMissing,
+                warningType:          result ? (result.warningType || null) : null,
+                warningMessage:       result?.message,
               },
             ];
           })
@@ -3935,6 +4116,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const af = entryAutoFillData[idx];
     return !!(af && af.direction === 'returning' && af.returnDoMissing && af.fuelRecord);
   });
+
+  const currentStationHasFormula = (() => {
+    if (!formData.station || formData.station === 'CASH' || formData.station === 'CUSTOM') return false;
+    const station = availableStations.find(
+      s => s.stationName.toUpperCase() === formData.station!.toUpperCase()
+    );
+    return !!(station?.formulaGoing?.trim() || station?.formulaReturning?.trim());
+  })();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 p-0 sm:p-4" onClick={handleCancel}>
@@ -4781,9 +4970,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 </span>
               )}
               <div className="flex-1 h-px bg-[#eef1f6] dark:bg-[#1e293b] min-w-[20px]" />
-              <span className="text-[11.5px] text-[#9aa6b6] font-medium hidden md:inline-flex items-center gap-1.5">
-                <ClipboardPaste className="w-3.5 h-3.5" />Paste a column to fill multiple rows
-              </span>
+              {currentStationHasFormula && (formData.entries?.length || 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void handleRecalculateLiters()}
+                  disabled={isRecalculatingLiters || isSubmitting || isCreatingAndForwarding}
+                  title="Re-fetch fuel records and re-run this station's formula"
+                  className="inline-flex items-center gap-1.5 h-[30px] px-2.5 rounded-[7px] border border-[#d9dcfb] dark:border-indigo-800 bg-[#eef0fe] dark:bg-indigo-900/20 text-[#4338ca] dark:text-indigo-300 text-[11.5px] font-semibold hover:bg-[#e0e4fd] dark:hover:bg-indigo-900/40 disabled:opacity-50"
+                >
+                  {isRecalculatingLiters ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Recalculate liters
+                </button>
+              ) : (
+                <span className="text-[11.5px] text-[#9aa6b6] font-medium hidden md:inline-flex items-center gap-1.5">
+                  <ClipboardPaste className="w-3.5 h-3.5" />Paste a column to fill multiple rows
+                </span>
+              )}
             </div>
 
             {/* Bulk action bar — visible when 1+ entries are selected */}
@@ -4963,18 +5165,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                               {autoFill.warningType === 'ambiguous_truck' && '⚠️ Truck has multiple active journeys — pick one'}
                             </span>
                         )}
-                        {canOfferPendingGoing(index) && (
-                          <button
-                            type="button"
-                            onClick={() => handleCreatePendingDo(index, 'going')}
-                            disabled={autoFill.loading}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
-                            title="Create temporary PG#### going DO and fuel record for this truck"
-                          >
-                            <PlusCircle className="w-3 h-3" />
-                            Create pending going DO
-                          </button>
-                        )}
                         {isExactDuplicate && duplicateInfo && <span className="text-red-600 dark:text-red-400">⛔ Dup LPO #{duplicateInfo.lpoNo} ({duplicateInfo.liters}L)</span>}
                         {isDifferentAmount && duplicateInfo && <span className="text-blue-600 dark:text-blue-400">➕ Top-up +{duplicateInfo.newLiters}L (existing {duplicateInfo.liters}L)</span>}
                       </div>
@@ -4999,18 +5189,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           <span className={`text-[10px] ${(autoFill.fuelRecord as any)?.isLocked ? 'text-amber-600 dark:text-amber-400' : autoFill.selectedJourneyType === 'queued' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
                             {(autoFill.fuelRecord as any)?.isLocked ? 'Locked' : autoFill.selectedJourneyType === 'queued' ? 'Queued' : 'Active'}
                           </span>
-                        )}
-                        {canOfferPendingGoing(index) && !hasNoRecordWarning && (
-                          <button
-                            type="button"
-                            onClick={() => handleCreatePendingDo(index, 'going')}
-                            disabled={autoFill.loading}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
-                            title="Queue a pending going DO behind the active journey"
-                          >
-                            <PlusCircle className="w-3 h-3" />
-                            Pending DO
-                          </button>
                         )}
                       </div>
                     )}
@@ -5046,6 +5224,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     </div>
                     {/* Card actions */}
                     <div className="flex items-center gap-2 pt-1.5 mt-1.5 border-t border-gray-200 dark:border-gray-600">
+                      {canOfferPendingGoing(index) && (
+                        <button
+                          type="button"
+                          onClick={() => requestCreatePendingGoingDo(index)}
+                          disabled={autoFill.loading}
+                          title="Create pending going DO (PG####)"
+                          className="shrink-0 p-1.5 rounded-lg text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors disabled:opacity-50"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => autoFill.fuelRecord && handleInspectRecord(index)}
@@ -5406,17 +5595,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                           ? 'Pick the journey for this order'
                                           : 'Manual entry allowed'}
                                     </span>
-                                    {canOfferPendingGoing(index) && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCreatePendingDo(index, 'going')}
-                                        disabled={autoFill.loading}
-                                        className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
-                                      >
-                                        <PlusCircle className="w-3 h-3" />
-                                        Create pending going DO
-                                      </button>
-                                    )}
                                   </div>
                                 )}
                                 {/* Duplicate allocation warning */}
@@ -5447,18 +5625,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                       <span className="text-blue-600 dark:text-blue-400 font-medium">
                                         ⏳ Queued #{autoFill.allJourneys.queued[autoFill.selectedJourneyIndex || 0]?.queueOrder || (autoFill.selectedJourneyIndex || 0) + 1}
                                       </span>
-                                    )}
-                                    {canOfferPendingGoing(index) && !hasNoRecordWarning && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCreatePendingDo(index, 'going')}
-                                        disabled={autoFill.loading}
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
-                                        title="Queue a pending going DO behind the active journey"
-                                      >
-                                        <PlusCircle className="w-3 h-3" />
-                                        Create pending going DO
-                                      </button>
                                     )}
                                   </div>
                                 )}
@@ -5570,6 +5736,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             <span className="inline-flex gap-1 justify-end">
+                              {canOfferPendingGoing(index) && (
+                                <button
+                                  type="button"
+                                  onClick={() => requestCreatePendingGoingDo(index)}
+                                  disabled={autoFill.loading}
+                                  className="icon-btn icon-btn-pending disabled:opacity-50"
+                                  title="Create pending going DO (PG####)"
+                                >
+                                  <PlusCircle className="w-4 h-4" />
+                                </button>
+                              )}
                               {/* Inspect button - Quick view fuel record */}
                               {autoFill.fuelRecord && (
                                 <button
@@ -5724,6 +5901,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             </div>
           </div>
         </form>
+      </div>
+
+      {/* Confirm pending going DO create */}
+      <div onClick={e => e.stopPropagation()}>
+        <ConfirmModal
+          open={pendingGoingConfirm.open}
+          title="Create Pending Going DO?"
+          message={`Create a temporary pending going DO (PG####) for truck ${pendingGoingConfirm.truckNo}? It will stay on the fuel record until a real going DO is linked.`}
+          variant="warning"
+          confirmLabel="Create pending going"
+          cancelLabel="Cancel"
+          loading={pendingGoingConfirm.loading}
+          onConfirm={confirmCreatePendingGoingDo}
+          onCancel={() => {
+            if (pendingGoingConfirm.loading) return;
+            setPendingGoingConfirm({ open: false, index: -1, truckNo: '', loading: false });
+          }}
+        />
       </div>
 
       {/* Confirm pending return DO create */}
