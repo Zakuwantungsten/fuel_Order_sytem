@@ -1263,11 +1263,11 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
             {onBack && (
               <button
                 onClick={onBack}
-                className="w-8 h-8 rounded-[10px] flex items-center justify-center flex-shrink-0"
+                className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0"
                 style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)' }}
-                aria-label="Back to list"
+                aria-label="Close and return to list"
               >
-                <ArrowLeft className="w-4 h-4 text-[#c4cedd]" />
+                <X className="w-4 h-4 text-[#c4cedd]" />
               </button>
             )}
             <div>

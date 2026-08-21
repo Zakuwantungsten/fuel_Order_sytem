@@ -1502,7 +1502,7 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
     if (!user) {
       throw new ApiError(401, 'Invalid refresh token');
     }
-
+ 
     if (user.isDeleted || user.isBanned || !user.isActive) {
       throw new ApiError(401, 'Invalid refresh token');
     }

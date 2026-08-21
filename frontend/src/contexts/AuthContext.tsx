@@ -6,6 +6,7 @@ import { activityTracker } from '../utils/activityTracker';
 import { setSystemTimezone, setSystemDateFormat, setSystemName } from '../utils/timezone';
 import systemConfigAPI from '../services/systemConfigService';
 import { toUserFacingErrorMessage } from '../utils/userFacingErrors';
+import { flushHeldLocksKeepalive } from '../utils/heldEditLocks';
 
 // Auth Actions
 type AuthAction =
@@ -506,6 +507,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = () => {
     // Stop activity tracking
     activityTracker.stop();
+
+    // Drop any edit locks while the Bearer token is still available.
+    // Must run before sessionStorage token clear / navigation.
+    flushHeldLocksKeepalive();
     
     sessionStorage.removeItem('fuel_order_auth');
     sessionStorage.removeItem('fuel_order_token');

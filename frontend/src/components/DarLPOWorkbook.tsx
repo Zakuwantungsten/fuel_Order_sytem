@@ -93,8 +93,8 @@ export default function DarLPOWorkbook({ onBack, initialLpoId, initialYear, init
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-      {/* Year + Month header */}
-      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 px-3 py-2 flex items-center gap-3 flex-wrap">
+      {/* Year + Month header — desktop only (mobile uses sheet view + onBack, like inland) */}
+      <div className="hidden lg:flex border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 px-3 py-2 items-center gap-3 flex-wrap">
         <BookOpen className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
         {isFetching && !!workbookData && (
           <Loader2 className="w-3.5 h-3.5 text-green-500 animate-spin flex-shrink-0" />
@@ -138,9 +138,9 @@ export default function DarLPOWorkbook({ onBack, initialLpoId, initialYear, init
         </div>
       </div>
 
-      {/* LPO tabs row */}
+      {/* LPO tabs row — desktop only */}
       {monthLpos.length > 0 && (
-        <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700 flex items-stretch min-h-[38px]">
+        <div className="hidden lg:flex border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700 items-stretch min-h-[38px]">
           {canGoPrev && (
             <button
               onClick={() => setTabPageStart(p => Math.max(0, p - TABS_PER_PAGE))}

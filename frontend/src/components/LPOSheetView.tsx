@@ -27,6 +27,11 @@ import {
 import PickupAtModal from './PickupAtModal';
 import PickedAtModal from './PickedAtModal';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
+import {
+  registerHeldLock,
+  unregisterHeldLock,
+  releaseLockKeepalive,
+} from '../utils/heldEditLocks';
 
 /** Stable id for a truck entry (subdocument _id), used for per-entry edit locks. */
 const entryLockId = (entry: LPODetail | undefined | null): string | null => {
@@ -86,13 +91,30 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [heldLock, setHeldLock] = useState<HeldEditLock | null>(null);
   const heldLockRef = useRef<HeldEditLock | null>(null);
+  const heldLockRegistryKeyRef = useRef<string | null>(null);
   const editingRowRef = useRef<number | null>(null);
   editingRowRef.current = editingRow;
+  const copyDropdownMobileRef = useRef<HTMLDivElement | null>(null);
+  const copyDropdownDesktopRef = useRef<HTMLDivElement | null>(null);
 
   const rememberHeldLock = useCallback((lock: HeldEditLock | null) => {
     heldLockRef.current = lock;
     setHeldLock(lock);
-  }, []);
+
+    // Keep a global registry so logout / pagehide can release before tokens clear.
+    if (heldLockRegistryKeyRef.current) {
+      unregisterHeldLock(heldLockRegistryKeyRef.current);
+      heldLockRegistryKeyRef.current = null;
+    }
+    const sheetId = sheet.id;
+    if (lock && sheetId) {
+      heldLockRegistryKeyRef.current = registerHeldLock({
+        collectionPath: 'lpo-documents',
+        documentId: String(sheetId),
+        entryId: lock.scope === 'entry' ? lock.entryId : undefined,
+      });
+    }
+  }, [sheet.id]);
   const [showCopyDropdown, setShowCopyDropdown] = useState(false);
   const [isSaving, setIsSaving] = useState(false); // Prevent double submissions
   const [cancellationReport, setCancellationReport] = useState<CancellationReport | null>(null);
@@ -450,28 +472,24 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
     }
   }, [editedSheet.entries]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (ref-scoped — not every .relative)
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!(event.target as Element).closest('.relative')) {
+    if (!showCopyDropdown) return;
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      const inMobile = copyDropdownMobileRef.current?.contains(target);
+      const inDesktop = copyDropdownDesktopRef.current?.contains(target);
+      if (!inMobile && !inDesktop) {
         setShowCopyDropdown(false);
       }
     };
-
-    const handleScroll = () => {
-      setShowCopyDropdown(false);
-    };
-
-    const scrollEl = document.getElementById('main-scroll-container');
     document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
-    scrollEl?.addEventListener('scroll', handleScroll);
+    document.addEventListener('touchstart', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
-      scrollEl?.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, []);
+  }, [showCopyDropdown]);
 
   // Copy cancellation report to clipboard
   const handleCopyCancellationReport = async () => {
@@ -514,7 +532,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
   };
 
   /** Release the currently held edit lock (document or per-entry) immediately. */
-  const releaseLockIfNeeded = async () => {
+  const releaseLockIfNeeded = useCallback(async () => {
     const sheetId = sheet.id;
     const current = heldLockRef.current;
     if (!sheetId || !current) return;
@@ -527,7 +545,47 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       );
     } catch { /* ignore — lock may already be expired */ }
     rememberHeldLock(null);
-  };
+  }, [sheet.id, rememberHeldLock]);
+
+  /** Best-effort lock release that still works during unload / tab kill. */
+  const releaseLockKeepaliveIfNeeded = useCallback(() => {
+    const sheetId = sheet.id;
+    const current = heldLockRef.current;
+    if (!sheetId || !current) return;
+    releaseLockKeepalive({
+      collectionPath: 'lpo-documents',
+      documentId: String(sheetId),
+      entryId: current.scope === 'entry' ? current.entryId : undefined,
+    });
+    // Clear refs/registry without setState — safe during pagehide / unmount.
+    heldLockRef.current = null;
+    if (heldLockRegistryKeyRef.current) {
+      unregisterHeldLock(heldLockRegistryKeyRef.current);
+      heldLockRegistryKeyRef.current = null;
+    }
+  }, [sheet.id]);
+
+  const releaseLockKeepaliveIfNeededRef = useRef(releaseLockKeepaliveIfNeeded);
+  releaseLockKeepaliveIfNeededRef.current = releaseLockKeepaliveIfNeeded;
+
+  /** Leave the sheet — always drop any held lock first. */
+  const handleBack = useCallback(async () => {
+    await releaseLockIfNeeded();
+    onBack?.();
+  }, [releaseLockIfNeeded, onBack]);
+
+  // Unmount + pagehide only — deps empty so we never release mid-session on callback identity change.
+  useEffect(() => {
+    const onPageHide = () => {
+      releaseLockKeepaliveIfNeededRef.current();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      // Keepalive avoids setState-after-unmount; covers SPA leave without pagehide.
+      releaseLockKeepaliveIfNeededRef.current();
+    };
+  }, []);
 
   /** Exit edit mode as soon as the lock TTL elapses (no wait for Save → 409). */
   const exitEditOnLockExpire = useCallback(() => {
@@ -2082,83 +2140,155 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
       {/* Mobile Header */}
       <div className="lg:hidden bg-gradient-to-br from-[#1d4ed8] to-[#1e3a8a] px-[18px] pt-[14px] pb-[22px] rounded-b-[26px] relative" style={{boxShadow: '0 12px 28px -14px rgba(30,58,138,0.6)'}}>
         <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px'}}>
-          <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+          <div style={{display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0}}>
             {onBack && (
-              <button onClick={onBack} style={{width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)'}}>
+              <button
+                type="button"
+                onClick={handleBack}
+                aria-label="Back"
+                style={{width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)'}}
+              >
                 <X className="w-4 h-4 text-[#c4cedd]" />
               </button>
             )}
-            <div className="text-[17px] font-extrabold text-white tracking-tight">LPO {editedSheet.lpoNo}</div>
-          </div>
-          <div className="relative">
-            <button
-              onClick={() => setShowCopyDropdown(!showCopyDropdown)}
-              style={{width: '38px', height: '38px', borderRadius: '11px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)'}}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c4cedd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
-              </svg>
-            </button>
-            {showCopyDropdown && (
-              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50">
-                <div className="py-1">
-                  <div className="px-3 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Copy</div>
-                  <button
-                    onClick={handleCopyImageToClipboard}
-                    disabled={copyingImage || isLPOMultiPage(editedSheet.entries?.length ?? 0)}
-                    title={isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
-                    className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {copyingImage ? <Loader2 className="w-4 h-4 mr-3 text-blue-500 animate-spin" /> : <Image className="w-4 h-4 mr-3 text-gray-400" />}
-                    {copyingImage ? 'Copying...' : isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Copy as Image (multi-page — use PDF)' : 'Copy as Image'}
-                  </button>
-                  <button onClick={handleCopyWhatsAppText} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <MessageSquare className="w-4 h-4 mr-3 text-gray-400" />Copy for WhatsApp
-                  </button>
-                  <button onClick={handleCopyCsvText} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <Calculator className="w-4 h-4 mr-3 text-gray-400" />Copy as CSV Text
-                  </button>
-                  <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
-                  <div className="px-3 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Download</div>
-                  <button onClick={handleDownloadPDF} disabled={downloadingPdf} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
-                    {downloadingPdf ? <Loader2 className="w-4 h-4 mr-3 text-red-500 animate-spin" /> : <FileDown className="w-4 h-4 mr-3 text-red-500" />}
-                    {downloadingPdf ? 'Downloading...' : 'Download as PDF'}
-                  </button>
-                  <button
-                    onClick={handleDownloadImage}
-                    disabled={downloadingImage || isLPOMultiPage(editedSheet.entries?.length ?? 0)}
-                    title={isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
-                    className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {downloadingImage ? <Loader2 className="w-4 h-4 mr-3 text-green-500 animate-spin" /> : <Download className="w-4 h-4 mr-3 text-green-500" />}
-                    {downloadingImage ? 'Downloading...' : isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Download as Image (use PDF)' : 'Download as Image'}
-                  </button>
-                  <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
-                  <button onClick={handleStartEdit} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <PenSquare className="w-4 h-4 mr-3 text-blue-500" />Edit LPO
-                  </button>
-                  {editedSheet.entries.some(e => !e.isCancelled) && (
-                    <button onClick={() => { setShowCopyDropdown(false); setShowCancelAllModal(true); }} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
-                      <XCircle className="w-4 h-4 mr-3" />Cancel LPO
-                    </button>
-                  )}
-                </div>
-              </div>
+            {isEditing ? (
+              <input
+                type="text"
+                value={editedSheet.lpoNo}
+                onChange={(e) => handleHeaderEdit('lpoNo', e.target.value)}
+                className="min-w-0 max-w-[140px] px-2 py-1 rounded-lg text-[15px] font-extrabold text-white bg-white/15 border border-white/25 outline-none focus:ring-2 focus:ring-white/40"
+                aria-label="LPO number"
+              />
+            ) : (
+              <div className="text-[17px] font-extrabold text-white tracking-tight truncate">LPO {editedSheet.lpoNo}</div>
             )}
           </div>
+          {isEditing ? (
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0}}>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex items-center gap-1 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded-[11px] text-xs font-bold"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {isSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="flex items-center gap-1 px-3 py-2 bg-white/15 hover:bg-white/25 text-white rounded-[11px] text-xs font-bold border border-white/20"
+              >
+                <X className="w-3.5 h-3.5" />
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="relative" ref={copyDropdownMobileRef}>
+              <button
+                type="button"
+                onClick={() => setShowCopyDropdown(!showCopyDropdown)}
+                aria-label="More actions"
+                style={{width: '38px', height: '38px', borderRadius: '11px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)'}}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c4cedd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
+                </svg>
+              </button>
+              {showCopyDropdown && (
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50">
+                  <div className="py-1">
+                    <div className="px-3 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Copy</div>
+                    <button
+                      type="button"
+                      onClick={handleCopyImageToClipboard}
+                      disabled={copyingImage || isLPOMultiPage(editedSheet.entries?.length ?? 0)}
+                      title={isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
+                      className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {copyingImage ? <Loader2 className="w-4 h-4 mr-3 text-blue-500 animate-spin" /> : <Image className="w-4 h-4 mr-3 text-gray-400" />}
+                      {copyingImage ? 'Copying...' : isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Copy as Image (multi-page — use PDF)' : 'Copy as Image'}
+                    </button>
+                    <button type="button" onClick={handleCopyWhatsAppText} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <MessageSquare className="w-4 h-4 mr-3 text-gray-400" />Copy for WhatsApp
+                    </button>
+                    <button type="button" onClick={handleCopyCsvText} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <Calculator className="w-4 h-4 mr-3 text-gray-400" />Copy as CSV Text
+                    </button>
+                    <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                    <div className="px-3 py-2 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Download</div>
+                    <button type="button" onClick={handleDownloadPDF} disabled={downloadingPdf} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
+                      {downloadingPdf ? <Loader2 className="w-4 h-4 mr-3 text-red-500 animate-spin" /> : <FileDown className="w-4 h-4 mr-3 text-red-500" />}
+                      {downloadingPdf ? 'Downloading...' : 'Download as PDF'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadImage}
+                      disabled={downloadingImage || isLPOMultiPage(editedSheet.entries?.length ?? 0)}
+                      title={isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Multi-page LPO — download as PDF instead' : undefined}
+                      className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {downloadingImage ? <Loader2 className="w-4 h-4 mr-3 text-green-500 animate-spin" /> : <Download className="w-4 h-4 mr-3 text-green-500" />}
+                      {downloadingImage ? 'Downloading...' : isLPOMultiPage(editedSheet.entries?.length ?? 0) ? 'Download as Image (use PDF)' : 'Download as Image'}
+                    </button>
+                    <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                    <button
+                      type="button"
+                      onClick={() => { setShowCopyDropdown(false); void handleStartEdit(); }}
+                      className="flex items-center w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                      <PenSquare className="w-4 h-4 mr-3 text-blue-500" />Edit LPO
+                    </button>
+                    {editedSheet.entries.some(e => !e.isCancelled) && (
+                      <button type="button" onClick={() => { setShowCopyDropdown(false); setShowCancelAllModal(true); }} className="flex items-center w-full px-4 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                        <XCircle className="w-4 h-4 mr-3" />Cancel LPO
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
           <div>
             <div className="text-[9.5px] font-semibold tracking-[0.1em] uppercase text-[#bfdbfe] mb-[3px]">Station</div>
-            <div className="text-[13.5px] font-bold text-[#eef2f8]">{editedSheet.station}</div>
+            {isEditing ? (
+              <input
+                type="text"
+                value={editedSheet.station}
+                onChange={(e) => handleHeaderEdit('station', e.target.value)}
+                className="w-full px-2 py-1 rounded-lg text-[13.5px] font-bold text-white bg-white/15 border border-white/25 outline-none focus:ring-2 focus:ring-white/40"
+              />
+            ) : (
+              <div className="text-[13.5px] font-bold text-[#eef2f8]">{editedSheet.station}</div>
+            )}
           </div>
           <div>
             <div className="text-[9.5px] font-semibold tracking-[0.1em] uppercase text-[#bfdbfe] mb-[3px]">Date</div>
-            <div className="text-[13.5px] font-bold text-[#eef2f8]">{new Date(editedSheet.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+            {isEditing ? (
+              <input
+                type="date"
+                value={editedSheet.date}
+                onChange={(e) => handleHeaderEdit('date', e.target.value)}
+                className="w-full px-2 py-1 rounded-lg text-[13.5px] font-bold text-white bg-white/15 border border-white/25 outline-none focus:ring-2 focus:ring-white/40"
+              />
+            ) : (
+              <div className="text-[13.5px] font-bold text-[#eef2f8]">{new Date(editedSheet.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+            )}
           </div>
           <div>
             <div className="text-[9.5px] font-semibold tracking-[0.1em] uppercase text-[#bfdbfe] mb-[3px]">Order Of</div>
-            <div className="text-[13.5px] font-bold text-[#eef2f8]">{editedSheet.orderOf}</div>
+            {isEditing ? (
+              <input
+                type="text"
+                value={editedSheet.orderOf}
+                onChange={(e) => handleHeaderEdit('orderOf', e.target.value)}
+                className="w-full px-2 py-1 rounded-lg text-[13.5px] font-bold text-white bg-white/15 border border-white/25 outline-none focus:ring-2 focus:ring-white/40"
+              />
+            ) : (
+              <div className="text-[13.5px] font-bold text-[#eef2f8]">{editedSheet.orderOf}</div>
+            )}
           </div>
           <div>
             <div className="text-[9.5px] font-semibold tracking-[0.1em] uppercase text-[#bfdbfe] mb-[3px]">Grand Total</div>
@@ -2266,7 +2396,7 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             ) : (
               <>
                 {/* Copy/Download Dropdown */}
-                <div className="relative">
+                <div className="relative" ref={copyDropdownDesktopRef}>
                   <button
                     onClick={() => setShowCopyDropdown(!showCopyDropdown)}
                     className="flex items-center px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
