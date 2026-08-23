@@ -33,6 +33,35 @@ const SPECIAL_STATION_OPTIONS: { value: string; label: string }[] = [
   { value: YARD_STATION.DAR, label: 'Dar Yard' },
 ];
 
+/** Direction support is defined by admin checkpoint config, not default liters. */
+const stationSupportsDirection = (
+  station: Pick<FuelStationConfig, 'fuelRecordFieldGoing' | 'fuelRecordFieldReturning'>,
+  direction: 'going' | 'returning',
+): boolean =>
+  direction === 'going'
+    ? !!station.fuelRecordFieldGoing?.trim()
+    : !!station.fuelRecordFieldReturning?.trim();
+
+const formatStationDirectionLabel = (
+  station: Pick<
+    FuelStationConfig,
+    | 'defaultLitersGoing'
+    | 'defaultLitersReturning'
+    | 'formulaGoing'
+    | 'formulaReturning'
+    | 'fuelRecordFieldGoing'
+    | 'fuelRecordFieldReturning'
+  >,
+  direction: 'going' | 'returning',
+): string => {
+  if (!stationSupportsDirection(station, direction)) return '—';
+  const formula = direction === 'going' ? station.formulaGoing : station.formulaReturning;
+  if (formula?.trim()) return 'Formula';
+  const liters = direction === 'going' ? station.defaultLitersGoing : station.defaultLitersReturning;
+  if (liters > 0) return `${liters}L`;
+  return 'Manual';
+};
+
 interface TruckFetchResult {
   fuelRecord: FuelRecord | null;
   goingDo: string;
@@ -690,6 +719,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   // Refs for dropdown positioning
   const stationDropdownRef = React.useRef<HTMLDivElement>(null);
   const stationInputRef = React.useRef<HTMLInputElement>(null);
+  const customStationPanelRef = React.useRef<HTMLDivElement>(null);
+  const customStationNameInputRef = React.useRef<HTMLInputElement>(null);
   const commitStationQueryRef = React.useRef<() => void>(() => {});
   const goingCheckpointRef = React.useRef<HTMLDivElement>(null);
   const returningCheckpointRef = React.useRef<HTMLDivElement>(null);
@@ -725,7 +756,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
         setShowStationDropdown(false);
-        commitStationQueryRef.current();
+        // Custom-station fields live outside the combobox ref — don't commit on those clicks
+        if (!customStationPanelRef.current?.contains(event.target as Node)) {
+          commitStationQueryRef.current();
+        }
       }
       if (goingCheckpointRef.current && !goingCheckpointRef.current.contains(event.target as Node)) {
         setShowGoingCheckpointDropdown(false);
@@ -1968,13 +2002,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
     setShowStationDropdown(false);
     if (value === 'CUSTOM') {
-      requestAnimationFrame(() => stationInputRef.current?.focus());
+      requestAnimationFrame(() => customStationNameInputRef.current?.focus());
     }
   };
 
   const commitStationQuery = () => {
     const q = stationQuery.trim();
     if (!q) {
+      // CUSTOM name is edited in the panel below — empty combobox must not reset station
+      if (formData.station === 'CUSTOM') {
+        setStationQuery(customStationName);
+        return;
+      }
       if (formData.station) applyStationSelection('');
       setStationQuery('');
       return;
@@ -2149,7 +2188,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   const handleStationBlur = () => {
     requestAnimationFrame(() => {
-      if (stationDropdownRef.current?.contains(document.activeElement)) return;
+      const active = document.activeElement;
+      if (stationDropdownRef.current?.contains(active)) return;
+      if (customStationPanelRef.current?.contains(active)) return;
       setShowStationDropdown(false);
       commitStationQueryRef.current();
     });
@@ -2964,26 +3005,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const currentDirection = entryAutoFillData[index]?.direction || 'going';
     const newDirection = currentDirection === 'going' ? 'returning' : 'going';
 
-    // Guard: block toggle if the selected station doesn't service the new direction
+    // Guard: block toggle when admin has no checkpoint configured for that direction
     if (formData.station && formData.station !== 'CASH' && formData.station !== 'CUSTOM') {
       const stationConfig = availableStations.find(
         s => s.stationName.toUpperCase() === formData.station!.toUpperCase()
       );
-      if (stationConfig) {
-        const litersForNewDirection = newDirection === 'going'
-          ? stationConfig.defaultLitersGoing
-          : stationConfig.defaultLitersReturning;
-        const hasFormula = newDirection === 'going'
-          ? !!stationConfig.formulaGoing?.trim()
-          : !!stationConfig.formulaReturning?.trim();
-        if ((!litersForNewDirection || litersForNewDirection === 0) && !hasFormula) {
-          setDirectionWarningModal({
-            open: true,
-            stationName: stationConfig.stationName,
-            blockedDirection: newDirection,
-          });
-          return;
-        }
+      if (stationConfig && !stationSupportsDirection(stationConfig, newDirection)) {
+        setDirectionWarningModal({
+          open: true,
+          stationName: stationConfig.stationName,
+          blockedDirection: newDirection,
+        });
+        return;
       }
     }
 
@@ -4277,7 +4310,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     <div
                       id="station-combobox-list"
                       role="listbox"
-                      className="menu absolute z-40 left-0 top-[46px] p-1.5 max-h-[280px] overflow-y-auto w-[calc(200%+1rem)] min-w-full max-w-[min(100vw-1.5rem,22rem)] lg:w-full lg:max-w-none"
+                      className="menu absolute z-40 left-0 top-[46px] p-1.5 max-h-[280px] overflow-y-auto w-full min-w-full max-w-[min(100vw-2.5rem,22rem)] lg:max-w-none"
                     >
                       {stationMenuItems.flat.length === 0 && (
                         <p className="px-[11px] py-2 text-[12px] text-[#9aa6b6] font-medium">
@@ -4327,7 +4360,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                 {station.stationName}
                               </span>
                               <span className="text-[11px] text-[#9aa6b6] font-medium truncate">
-                                Going {station.formulaGoing?.trim() ? 'Formula' : `${station.defaultLitersGoing}L`} · Return {station.formulaReturning?.trim() ? 'Formula' : `${station.defaultLitersReturning}L`} · @{station.defaultRate}/L
+                                Going {formatStationDirectionLabel(station, 'going')} · Return {formatStationDirectionLabel(station, 'returning')} · @{station.defaultRate}/L
                               </span>
                             </span>
                             {active
@@ -4383,7 +4416,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       return (
                         <p className="m-0 mt-1.5 text-[11px] text-[#16a34a] dark:text-green-400 font-semibold flex items-center gap-1.5">
                           <Check className="w-3.5 h-3.5" />
-                          Going {station.formulaGoing?.trim() ? 'Formula' : `${station.defaultLitersGoing}L`} · Return {station.formulaReturning?.trim() ? 'Formula' : `${station.defaultLitersReturning}L`} @ {station.defaultRate}/L ({currency})
+                          Going {formatStationDirectionLabel(station, 'going')} · Return {formatStationDirectionLabel(station, 'returning')} @ {station.defaultRate}/L ({currency})
                         </p>
                       );
                     }
@@ -4754,19 +4787,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
           {/* Custom Station Section - Only shown when CUSTOM is selected */}
           {formData.station === 'CUSTOM' && (
-            <div className="mb-[22px] p-4 rounded-xl border border-purple-200/80 dark:border-purple-800/60 bg-white dark:bg-gray-800/40 shadow-sm">
+            <div ref={customStationPanelRef} className="mb-[22px] p-4 rounded-xl border border-purple-200/80 dark:border-purple-800/60 bg-white dark:bg-gray-800/40 shadow-sm">
               <p className="text-xs font-semibold text-purple-800 dark:text-purple-300 mb-3">
                 Custom station — unlisted / ad-hoc
               </p>
 
-              <div className="overflow-x-auto">
-                <div className="flex items-end gap-2 min-w-[920px] pb-0.5">
+              <div className="flex flex-wrap gap-3 items-end">
                   {/* Station name */}
-                  <div className="flex-[2] min-w-[150px]">
+                  <div className="w-full min-w-0 sm:flex-[2] sm:min-w-[200px]">
                     <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
                       Station name *
                     </label>
                     <input
+                      ref={customStationNameInputRef}
                       type="text"
                       value={customStationName}
                       onChange={(e) => {
@@ -4780,7 +4813,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   </div>
 
                   {/* Going */}
-                  <div className="w-[148px] shrink-0">
+                  <div className="w-full min-w-0 sm:flex-1 sm:min-w-[160px]">
                     <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-green-700 dark:text-green-400 mb-1 cursor-pointer">
                       <input
                         type="checkbox"
@@ -4811,7 +4844,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   </div>
 
                   {/* Return */}
-                  <div className="w-[148px] shrink-0">
+                  <div className="w-full min-w-0 sm:flex-1 sm:min-w-[160px]">
                     <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400 mb-1 cursor-pointer">
                       <input
                         type="checkbox"
@@ -4842,7 +4875,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   </div>
 
                   {/* Country */}
-                  <div className="w-[108px] shrink-0">
+                  <div className="w-full min-w-0 sm:w-auto sm:min-w-[120px]">
                     <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
                       Country
                     </label>
@@ -4857,7 +4890,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   </div>
 
                   {/* Rate */}
-                  <div className="w-[104px] shrink-0">
+                  <div className="w-full min-w-0 sm:w-auto sm:min-w-[120px]">
                     <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1.5">
                       Rate
                     </label>
@@ -4903,7 +4936,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   </div>
 
                   {/* Default liters */}
-                  <div className="w-[72px] shrink-0">
+                  <div className="w-full min-w-0 sm:w-auto sm:min-w-[80px]">
                     <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
                       Liters
                     </label>
@@ -4917,7 +4950,6 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                       className="w-full h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
                     />
                   </div>
-                </div>
               </div>
 
               {/* Inline validation */}
@@ -5944,7 +5976,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         <ConfirmModal
           open={directionWarningModal.open}
           title="Direction Not Available"
-          message={`Station "${directionWarningModal.stationName}" does not fill ${directionWarningModal.blockedDirection === 'going' ? 'Going' : 'Returning'} direction. Please keep the current direction or choose a different station.`}
+          message={`Station "${directionWarningModal.stationName}" has no ${directionWarningModal.blockedDirection === 'going' ? 'going' : 'return'} checkpoint configured in station admin. Set that checkpoint in Fuel Stations, or keep the current direction / choose another station.`}
           variant="warning"
           confirmLabel="Got it"
           cancelLabel="Dismiss"
