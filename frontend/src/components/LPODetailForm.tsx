@@ -4792,163 +4792,165 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 Custom station — unlisted / ad-hoc
               </p>
 
-              <div className="flex flex-wrap gap-3 items-end">
-                  {/* Station name */}
-                  <div className="w-full min-w-0 sm:flex-[2] sm:min-w-[200px]">
-                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
-                      Station name *
-                    </label>
-                    <input
-                      ref={customStationNameInputRef}
-                      type="text"
-                      value={customStationName}
-                      onChange={(e) => {
-                        setCustomStationName(e.target.value);
-                        setStationQuery(e.target.value);
-                      }}
-                      placeholder="e.g. Lake Near Kapiri"
-                      required
-                      className="w-full h-9 px-2.5 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  {/* Going */}
-                  <div className="w-full min-w-0 sm:flex-1 sm:min-w-[160px]">
-                    <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-green-700 dark:text-green-400 mb-1 cursor-pointer">
+              <div className="space-y-3">
+                  {/* Row 1: Station name + Country */}
+                  <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+                    <div className="min-w-0">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
+                        Station name *
+                      </label>
                       <input
-                        type="checkbox"
-                        checked={customGoingEnabled}
+                        ref={customStationNameInputRef}
+                        type="text"
+                        value={customStationName}
                         onChange={(e) => {
-                          setCustomGoingEnabled(e.target.checked);
-                          if (!e.target.checked) setCustomGoingCheckpoint('');
+                          setCustomStationName(e.target.value);
+                          setStationQuery(e.target.value);
                         }}
-                        className="w-3.5 h-3.5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                        placeholder="e.g. Lake Near Kapiri"
+                        required
+                        className="w-full h-9 px-2.5 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       />
-                      Going
-                    </label>
-                    <select
-                      value={customGoingCheckpoint}
-                      disabled={!customGoingEnabled}
-                      onChange={(e) => setCustomGoingCheckpoint(e.target.value)}
-                      className={`w-full h-9 px-2 text-xs border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-40 disabled:cursor-not-allowed ${
-                        customGoingEnabled && !customGoingCheckpoint
-                          ? 'border-red-300 dark:border-red-600'
-                          : 'border-green-200 dark:border-green-700'
-                      }`}
-                    >
-                      <option value="">Checkpoint…</option>
-                      {FUEL_RECORD_COLUMNS.going.map((col) => (
-                        <option key={col.field} value={col.field}>{col.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Return */}
-                  <div className="w-full min-w-0 sm:flex-1 sm:min-w-[160px]">
-                    <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400 mb-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={customReturnEnabled}
-                        onChange={(e) => {
-                          setCustomReturnEnabled(e.target.checked);
-                          if (!e.target.checked) setCustomReturnCheckpoint('');
-                        }}
-                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      Return
-                    </label>
-                    <select
-                      value={customReturnCheckpoint}
-                      disabled={!customReturnEnabled}
-                      onChange={(e) => setCustomReturnCheckpoint(e.target.value)}
-                      className={`w-full h-9 px-2 text-xs border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-40 disabled:cursor-not-allowed ${
-                        customReturnEnabled && !customReturnCheckpoint
-                          ? 'border-red-300 dark:border-red-600'
-                          : 'border-blue-200 dark:border-blue-700'
-                      }`}
-                    >
-                      <option value="">Checkpoint…</option>
-                      {FUEL_RECORD_COLUMNS.return.map((col) => (
-                        <option key={col.field} value={col.field}>{col.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Country */}
-                  <div className="w-full min-w-0 sm:w-auto sm:min-w-[120px]">
-                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
-                      Country
-                    </label>
-                    <select
-                      value={customCountry}
-                      onChange={(e) => setCustomCountry(e.target.value)}
-                      className="w-full h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
-                    >
-                      <option value="Zambia">Zambia</option>
-                      <option value="Tanzania">Tanzania</option>
-                    </select>
-                  </div>
-
-                  {/* Rate */}
-                  <div className="w-full min-w-0 sm:w-auto sm:min-w-[120px]">
-                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1.5">
-                      Rate
-                    </label>
-                    <div
-                      className="flex p-0.5 mb-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-700"
-                      role="group"
-                      aria-label="Rate currency"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setCustomCurrency('USD')}
-                        aria-pressed={customCurrency === 'USD'}
-                        className={`flex-1 min-w-0 py-1 px-1 rounded-md text-[10px] font-semibold leading-tight transition-all duration-200 cursor-pointer ${
-                          customCurrency === 'USD'
-                            ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-600/20'
-                            : 'text-purple-600 dark:text-purple-400 hover:bg-purple-100/80 dark:hover:bg-purple-900/50'
-                        }`}
-                      >
-                        USD
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustomCurrency('TZS')}
-                        aria-pressed={customCurrency === 'TZS'}
-                        className={`flex-1 min-w-0 py-1 px-1 rounded-md text-[10px] font-semibold leading-tight transition-all duration-200 cursor-pointer ${
-                          customCurrency === 'TZS'
-                            ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-600/20'
-                            : 'text-purple-600 dark:text-purple-400 hover:bg-purple-100/80 dark:hover:bg-purple-900/50'
-                        }`}
-                      >
-                        TZS
-                      </button>
                     </div>
-                    <input
-                      type="number"
-                      value={customRate || ''}
-                      onChange={(e) => setCustomRate(parseFloat(e.target.value) || 0)}
-                      placeholder="0"
-                      step="0.01"
-                      min="0"
-                      className="w-full h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
-                    />
+                    <div className="w-[108px] shrink-0">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
+                        Country
+                      </label>
+                      <select
+                        value={customCountry}
+                        onChange={(e) => setCustomCountry(e.target.value)}
+                        className="w-full h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="Zambia">Zambia</option>
+                        <option value="Tanzania">Tanzania</option>
+                      </select>
+                    </div>
                   </div>
 
-                  {/* Default liters */}
-                  <div className="w-full min-w-0 sm:w-auto sm:min-w-[80px]">
-                    <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
-                      Liters
-                    </label>
-                    <input
-                      type="number"
-                      value={customDefaultLiters || ''}
-                      onChange={(e) => setCustomDefaultLiters(parseFloat(e.target.value) || 0)}
-                      placeholder="0"
-                      step="1"
-                      min="0"
-                      className="w-full h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
-                    />
+                  {/* Row 2: Going + Return (checkbox + checkpoint each, squeezed on one row) */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="min-w-0 flex items-center gap-1.5">
+                      <label className="flex items-center gap-1 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-green-700 dark:text-green-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={customGoingEnabled}
+                          onChange={(e) => {
+                            setCustomGoingEnabled(e.target.checked);
+                            if (!e.target.checked) setCustomGoingCheckpoint('');
+                          }}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                        />
+                        <span className="whitespace-nowrap">Going</span>
+                      </label>
+                      <select
+                        value={customGoingCheckpoint}
+                        disabled={!customGoingEnabled}
+                        onChange={(e) => setCustomGoingCheckpoint(e.target.value)}
+                        className={`flex-1 min-w-0 h-9 px-1.5 text-[11px] border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-40 disabled:cursor-not-allowed ${
+                          customGoingEnabled && !customGoingCheckpoint
+                            ? 'border-red-300 dark:border-red-600'
+                            : 'border-green-200 dark:border-green-700'
+                        }`}
+                      >
+                        <option value="">Checkpoint…</option>
+                        {FUEL_RECORD_COLUMNS.going.map((col) => (
+                          <option key={col.field} value={col.field}>{col.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="min-w-0 flex items-center gap-1.5">
+                      <label className="flex items-center gap-1 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={customReturnEnabled}
+                          onChange={(e) => {
+                            setCustomReturnEnabled(e.target.checked);
+                            if (!e.target.checked) setCustomReturnCheckpoint('');
+                          }}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="whitespace-nowrap">Return</span>
+                      </label>
+                      <select
+                        value={customReturnCheckpoint}
+                        disabled={!customReturnEnabled}
+                        onChange={(e) => setCustomReturnCheckpoint(e.target.value)}
+                        className={`flex-1 min-w-0 h-9 px-1.5 text-[11px] border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-40 disabled:cursor-not-allowed ${
+                          customReturnEnabled && !customReturnCheckpoint
+                            ? 'border-red-300 dark:border-red-600'
+                            : 'border-blue-200 dark:border-blue-700'
+                        }`}
+                      >
+                        <option value="">Checkpoint…</option>
+                        {FUEL_RECORD_COLUMNS.return.map((col) => (
+                          <option key={col.field} value={col.field}>{col.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row 3: Rate + Liters */}
+                  <div className="grid grid-cols-[1fr_auto] gap-2 items-end">
+                    <div className="min-w-0">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
+                        Rate
+                      </label>
+                      <div className="flex gap-1.5 items-center">
+                        <div
+                          className="flex p-0.5 shrink-0 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-700"
+                          role="group"
+                          aria-label="Rate currency"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setCustomCurrency('USD')}
+                            aria-pressed={customCurrency === 'USD'}
+                            className={`min-w-[36px] py-1 px-1.5 rounded-md text-[10px] font-semibold leading-tight transition-all duration-200 cursor-pointer ${
+                              customCurrency === 'USD'
+                                ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-600/20'
+                                : 'text-purple-600 dark:text-purple-400 hover:bg-purple-100/80 dark:hover:bg-purple-900/50'
+                            }`}
+                          >
+                            USD
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCustomCurrency('TZS')}
+                            aria-pressed={customCurrency === 'TZS'}
+                            className={`min-w-[36px] py-1 px-1.5 rounded-md text-[10px] font-semibold leading-tight transition-all duration-200 cursor-pointer ${
+                              customCurrency === 'TZS'
+                                ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-600/20'
+                                : 'text-purple-600 dark:text-purple-400 hover:bg-purple-100/80 dark:hover:bg-purple-900/50'
+                            }`}
+                          >
+                            TZS
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          value={customRate || ''}
+                          onChange={(e) => setCustomRate(parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                          step="0.01"
+                          min="0"
+                          className="flex-1 min-w-0 h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="w-[72px] shrink-0">
+                      <label className="block text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-400 mb-1">
+                        Liters
+                      </label>
+                      <input
+                        type="number"
+                        value={customDefaultLiters || ''}
+                        onChange={(e) => setCustomDefaultLiters(parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                        step="1"
+                        min="0"
+                        className="w-full h-9 px-2 text-sm border border-purple-200 dark:border-purple-700 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
                   </div>
               </div>
 
