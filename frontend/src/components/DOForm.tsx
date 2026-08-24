@@ -301,6 +301,10 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
         onClose();
       }
     } catch (error) {
+      if ((error as any)?.__userCancelled) {
+        // User explicitly declined a confirmation modal; keep form open and quiet.
+        return;
+      }
       console.error('Error in executeSave:', error);
       toast.error('Failed to save delivery order. Check console for details.');
       throw error;

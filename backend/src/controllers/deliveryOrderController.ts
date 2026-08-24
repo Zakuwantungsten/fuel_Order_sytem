@@ -41,8 +41,17 @@ import {
   promotePendingGoingToImport,
   promotePendingReturnToExport,
   fetchPendingDoListItems,
+  findPendingFuelRecordForTruck,
+  mergePendingGoingWithSourceFuelRecord,
 } from '../services/pendingDoService';
-import { returnDoOpenFilter, isReturnDoOpen, pickBestExportFuelMatch, compareExportFuelCandidates } from '../utils/pendingDoNumber';
+import {
+  returnDoOpenFilter,
+  isReturnDoOpen,
+  pickBestExportFuelMatch,
+  compareExportFuelCandidates,
+  isPendingGoingDo,
+  isPendingReturnDo,
+} from '../utils/pendingDoNumber';
 
 // Month names for sheet naming
 const MONTH_NAMES = [
@@ -2137,6 +2146,71 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       throw new ApiError(400, 'Cannot edit a cancelled delivery order');
     }
 
+    // Server-authoritative pending-merge gate:
+    // If an IMPORT DO is amended onto a truck that already has a pending going DO,
+    // require explicit client confirmation before applying the amendment.
+    const pendingMergeConfirmed = req.body?.pendingMergeConfirmed === true;
+    let pendingMergePreview: {
+      truckNo: string;
+      pendingDo: string;
+      pendingFuelRecordId: string;
+    } | null = null;
+    const nextDoType = String(payload.doType ?? originalDO.doType ?? '').toUpperCase();
+    const nextImportOrExport = String(payload.importOrExport ?? originalDO.importOrExport ?? '').toUpperCase();
+    const originalTruckNo = formatTruckNumber(String(originalDO.truckNo || ''));
+    const targetTruckNo = formatTruckNumber(String(payload.truckNo ?? originalDO.truckNo ?? ''));
+    const importTruckChanged =
+      nextDoType === 'DO' &&
+      nextImportOrExport === 'IMPORT' &&
+      !!targetTruckNo &&
+      targetTruckNo !== originalTruckNo;
+    const exportTruckChanged =
+      nextDoType === 'DO' &&
+      nextImportOrExport === 'EXPORT' &&
+      !!targetTruckNo &&
+      targetTruckNo !== originalTruckNo;
+
+    if (importTruckChanged || exportTruckChanged) {
+      const pendingFuel = await FuelRecord.findOne({
+        truckNo: { $regex: buildFuzzyRegex(targetTruckNo), $options: 'i' },
+        isDeleted: false,
+        isCancelled: { $ne: true },
+        journeyStatus: { $in: ['active', 'queued', 'completed'] },
+        $or: importTruckChanged
+          ? [{ isPendingGoing: true }, { goingDo: { $regex: /^PG\d{1,4}$/i } }]
+          : [{ isPendingReturn: true }, { returnDo: { $regex: /^PR\d{1,4}$/i } }],
+      })
+        .sort({ journeyStatus: 1, updatedAt: -1 })
+        .select('_id goingDo returnDo truckNo isPendingGoing isPendingReturn')
+        .lean();
+
+      if (pendingFuel) {
+        const pendingDo = String(
+          (importTruckChanged ? (pendingFuel as any).goingDo : (pendingFuel as any).returnDo) || ''
+        ).trim();
+        const isExpectedPending = importTruckChanged
+          ? isPendingGoingDo(pendingDo)
+          : isPendingReturnDo(pendingDo);
+        if (pendingDo && isExpectedPending) {
+          pendingMergePreview = {
+            truckNo: targetTruckNo,
+            pendingDo,
+            pendingFuelRecordId: String((pendingFuel as any)._id),
+          };
+        }
+      }
+    }
+
+    if (pendingMergePreview && !pendingMergeConfirmed) {
+      throw new ApiError(
+        409,
+        `Truck ${pendingMergePreview.truckNo} has pending DO ${pendingMergePreview.pendingDo}. Confirmation required before amend-merge.`
+      ).withData({
+        code: 'PENDING_MERGE_CONFIRMATION_REQUIRED',
+        pendingMergePreview,
+      });
+    }
+
     // Track changes for edit history
     const trackableFields = [
       'truckNo', 'trailerNo', 'loadingPoint', 'destination', 'tonnages', 'ratePerTon',
@@ -2222,12 +2296,22 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         to: string;
         manualSteps: string[];
       };
+      pendingMergePreview?: {
+        truckNo: string;
+        pendingDo: string;
+        pendingFuelRecordId: string;
+      };
+      pendingMerged?: boolean;
+      pendingMergeSkippedReason?: string;
     } = {
       fuelRecordUpdated: false,
       fuelRecordChanges: [],
       lpoEntriesUpdated: 0,
       affectedFuelRecordIds: [],
     };
+    if (pendingMergePreview) {
+      cascadeResults.pendingMergePreview = pendingMergePreview;
+    }
 
     try {
       await session.withTransaction(async () => {
@@ -2397,6 +2481,155 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           }, session);
           cascadeResults.lpoEntriesUpdated = lpoResult.count;
         }
+
+        // Confirmed pending merge runs even when doAmendCascade is OFF.
+        if (pendingMergeConfirmed && pendingMergePreview?.pendingFuelRecordId) {
+          let resolvedPendingFuelId: string | null = pendingMergePreview.pendingFuelRecordId;
+          const pendingStillExists = await FuelRecord.exists({
+            _id: pendingMergePreview.pendingFuelRecordId,
+            isDeleted: false,
+            isCancelled: { $ne: true },
+          }).session(session);
+          if (!pendingStillExists) {
+            const kind = importTruckChanged ? 'going' : exportTruckChanged ? 'return' : null;
+            if (kind) {
+              const fallbackPending = await findPendingFuelRecordForTruck(
+                deliveryOrder.truckNo,
+                kind,
+                session
+              );
+              resolvedPendingFuelId = fallbackPending ? String(fallbackPending._id) : null;
+            }
+          }
+
+          if (!resolvedPendingFuelId) {
+            cascadeResults.pendingMergeSkippedReason =
+              `Pending DO ${pendingMergePreview.pendingDo} is no longer available on truck ${deliveryOrder.truckNo}.`;
+          } else if (importTruckChanged) {
+            const source = await FuelRecord.findOne({
+              goingDo: deliveryOrder.doNumber,
+              isDeleted: false,
+              isCancelled: { $ne: true },
+              _id: { $ne: resolvedPendingFuelId },
+            }).session(session);
+
+            if (source) {
+              const mergeResult = await mergePendingGoingWithSourceFuelRecord({
+                pendingFuelRecordId: resolvedPendingFuelId,
+                sourceFuelRecordId: String(source._id),
+                username,
+                userId: req.user?.userId,
+                ipAddress: req.ip,
+                session,
+                allowTruckMismatch: true,
+              });
+              cascadeResults.fuelRecordUpdated = true;
+              cascadeResults.pendingMerged = true;
+              cascadeResults.fuelRecordId = String(
+                mergeResult.fuelRecord?._id || resolvedPendingFuelId
+              );
+              mergeAffectedFuelRecordIds([
+                resolvedPendingFuelId,
+                mergeResult.cancelledSourceId,
+              ].filter(Boolean) as string[]);
+              cascadeResults.fuelRecordChanges.push(
+                `Merged pending ${mergeResult.previousPendingDo} → ${mergeResult.realDoNumber}`
+              );
+              amendCascadeSkipped = false;
+            } else {
+              const { routes, truckBatches, batchDestinationRules: bdr } = await loadFuelConfig();
+              const routeMatch = matchRouteLiters(
+                routes,
+                deliveryOrder.loadingPoint || '',
+                deliveryOrder.destination || ''
+              );
+              const totalLiters = routeMatch.matched ? routeMatch.liters : null;
+              const batchMatch = matchExtraFuel(
+                deliveryOrder.truckNo,
+                truckBatches,
+                deliveryOrder.destination,
+                bdr
+              );
+              const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
+              const promoted = await promotePendingGoingToImport(
+                deliveryOrder.toObject() as any,
+                totalLiters,
+                extraFuel,
+                session,
+                {
+                  username,
+                  userId: req.user?.userId,
+                  deliveryOrderId: String(deliveryOrder._id),
+                  ipAddress: req.ip,
+                }
+              );
+              if (promoted.promoted) {
+                cascadeResults.fuelRecordUpdated = true;
+                cascadeResults.pendingMerged = true;
+                cascadeResults.fuelRecordId = promoted.fuelRecordId;
+                mergeAffectedFuelRecordIds(
+                  promoted.fuelRecordId ? [promoted.fuelRecordId] : []
+                );
+                cascadeResults.fuelRecordChanges.push(
+                  `Merged pending ${promoted.previousPendingDo} → ${deliveryOrder.doNumber}`
+                );
+                amendCascadeSkipped = false;
+              } else {
+                cascadeResults.pendingMergeSkippedReason =
+                  `No source fuel record found for DO ${deliveryOrder.doNumber}, and pending promotion could not be completed.`;
+              }
+            }
+          } else if (exportTruckChanged) {
+            const pendingDoc = await FuelRecord.findById(
+              resolvedPendingFuelId
+            ).session(session);
+            if (!pendingDoc) {
+              cascadeResults.pendingMergeSkippedReason =
+                `Pending return DO ${pendingMergePreview.pendingDo} is no longer available.`;
+            } else {
+              const existingLink = await FuelRecord.findOne({
+                returnDo: deliveryOrder.doNumber,
+                isDeleted: false,
+                isCancelled: { $ne: true },
+                _id: { $ne: pendingDoc._id },
+              }).session(session);
+              if (existingLink) {
+                existingLink.returnDo = '';
+                existingLink.isPendingReturn = false;
+                await existingLink.save({ session });
+                mergeAffectedFuelRecordIds([String(existingLink._id)]);
+              }
+              const { routes } = await loadFuelConfig();
+              const routeMatch = matchExportRouteLiters(
+                routes,
+                deliveryOrder.loadingPoint || '',
+                deliveryOrder.destination || ''
+              );
+              const exportRouteLiters = routeMatch.matched ? routeMatch.liters : 0;
+              const { update, previousPendingDo } = await promotePendingReturnToExport(
+                pendingDoc.toObject(),
+                deliveryOrder as unknown as DeliveryOrderLike,
+                exportRouteLiters,
+                session,
+                {
+                  username,
+                  userId: req.user?.userId,
+                  deliveryOrderId: String(deliveryOrder._id),
+                  ipAddress: req.ip,
+                }
+              );
+              await FuelRecord.updateOne({ _id: pendingDoc._id }, { $set: update }, { session });
+              cascadeResults.fuelRecordUpdated = true;
+              cascadeResults.pendingMerged = true;
+              cascadeResults.fuelRecordId = String(pendingDoc._id);
+              mergeAffectedFuelRecordIds([String(pendingDoc._id)]);
+              cascadeResults.fuelRecordChanges.push(
+                `Merged pending ${previousPendingDo || pendingMergePreview.pendingDo} → ${deliveryOrder.doNumber}`
+              );
+              amendCascadeSkipped = false;
+            }
+          }
+        }
       });
     } finally {
       await session.endSession();
@@ -2457,7 +2690,11 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     if (cascadeResults.routeNotificationCreated) {
       responseMessage += '. Note: Route configuration not found - fuel record locked and notification created for admin';
     }
-    if (cascadeResults.importExportFlip?.manualSteps.length) {
+    if (cascadeResults.pendingMerged && pendingMergePreview) {
+      responseMessage += `. Merged pending ${pendingMergePreview.pendingDo} with ${deliveryOrder.doNumber}`;
+    } else if (cascadeResults.pendingMergeSkippedReason) {
+      responseMessage += ` ${cascadeResults.pendingMergeSkippedReason}`;
+    } else if (cascadeResults.importExportFlip?.manualSteps.length) {
       responseMessage += `. Manual fuel steps: ${cascadeResults.importExportFlip.manualSteps.join(' ')}`;
     } else if (amendCascadeSkipped) {
       responseMessage += '. Note: fuel-record automation is disabled — adjust the fuel record manually.';
@@ -5323,6 +5560,281 @@ export const confirmExportLink = async (req: AuthRequest, res: Response): Promis
       },
     });
   } catch (error: any) {
+    throw error;
+  }
+};
+
+const pendingMergeKindForDo = (deliveryOrder: { importOrExport?: string }): 'going' | 'return' =>
+  String(deliveryOrder.importOrExport || '').toUpperCase() === 'EXPORT' ? 'return' : 'going';
+
+/**
+ * Preview whether this real DO can merge into a pending DO on the same truck.
+ * DO Management only — does not change Fuel Record picker merge.
+ */
+export const previewMergeToPending = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const deliveryOrder = await DeliveryOrder.findOne({ _id: id, isDeleted: false }).lean();
+    if (!deliveryOrder) {
+      throw new ApiError(404, 'Delivery order not found');
+    }
+    if (deliveryOrder.isCancelled) {
+      throw new ApiError(400, 'Cannot merge a cancelled delivery order');
+    }
+    if (deliveryOrder.doType === 'SDO') {
+      throw new ApiError(400, 'SDO orders do not merge with pending DOs');
+    }
+
+    const kind = pendingMergeKindForDo(deliveryOrder);
+    const pending = await findPendingFuelRecordForTruck(deliveryOrder.truckNo, kind);
+    const pendingDo =
+      kind === 'going' ? String(pending?.goingDo || '') : String(pending?.returnDo || '');
+
+    res.status(200).json({
+      success: true,
+      message: pending
+        ? `Pending ${kind} DO ${pendingDo} found for truck ${deliveryOrder.truckNo}`
+        : `No pending ${kind} DO found for truck ${deliveryOrder.truckNo}`,
+      data: {
+        deliveryOrder,
+        kind,
+        hasPending: !!pending,
+        pendingDo: pendingDo || null,
+        pendingFuelRecordId: pending ? String(pending._id) : null,
+        truckNo: formatTruckNumber(String(deliveryOrder.truckNo || '')) || deliveryOrder.truckNo,
+      },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Merge this real DO into the truck's pending going (IMPORT) or pending return (EXPORT).
+ */
+export const mergeDeliveryOrderToPending = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username || 'system';
+
+    const deliveryOrder = await DeliveryOrder.findOne({ _id: id, isDeleted: false });
+    if (!deliveryOrder) {
+      throw new ApiError(404, 'Delivery order not found');
+    }
+    if (deliveryOrder.isCancelled) {
+      throw new ApiError(400, 'Cannot merge a cancelled delivery order');
+    }
+    if (deliveryOrder.doType === 'SDO') {
+      throw new ApiError(400, 'SDO orders do not merge with pending DOs');
+    }
+
+    const kind = pendingMergeKindForDo(deliveryOrder);
+    const pending = await findPendingFuelRecordForTruck(deliveryOrder.truckNo, kind);
+    if (!pending) {
+      res.status(200).json({
+        success: true,
+        message: `No pending ${kind === 'return' ? 'return' : 'going'} DO found for truck ${deliveryOrder.truckNo}. Nothing merged.`,
+        data: {
+          kind,
+          skipped: true,
+          skipReason: 'pending_not_found',
+          alreadyMerged: false,
+          previousPendingDo: null,
+          realDoNumber: deliveryOrder.doNumber,
+        },
+      });
+      return;
+    }
+
+    const pendingDo = kind === 'going' ? String(pending.goingDo || '') : String(pending.returnDo || '');
+    const { routes, truckBatches, batchDestinationRules } = await loadFuelConfig();
+
+    if (kind === 'going') {
+      const source = await FuelRecord.findOne({
+        goingDo: deliveryOrder.doNumber,
+        isDeleted: false,
+        isCancelled: { $ne: true },
+      });
+
+      if (source && String(source._id) === String(pending._id)) {
+        res.status(200).json({
+          success: true,
+          message: `DO ${deliveryOrder.doNumber} is already on pending journey ${pendingDo}`,
+          data: {
+            alreadyMerged: true,
+            kind,
+            previousPendingDo: pendingDo,
+            realDoNumber: deliveryOrder.doNumber,
+          },
+        });
+        return;
+      }
+
+      if (source) {
+        const result = await mergePendingGoingWithSourceFuelRecord({
+          pendingFuelRecordId: String(pending._id),
+          sourceFuelRecordId: String(source._id),
+          username,
+          userId: req.user?.userId,
+          ipAddress: req.ip,
+        });
+        emitDataChange('fuel_records', 'update');
+        emitDataChange('delivery_orders', 'update');
+        emitDataChange('lpo_summaries', 'update');
+        res.status(200).json({
+          success: true,
+          message: `Merged pending ${result.previousPendingDo} with DO ${result.realDoNumber}`,
+          data: { ...result, kind, alreadyMerged: false },
+        });
+        return;
+      }
+
+      const routeMatch = matchRouteLiters(
+        routes,
+        deliveryOrder.loadingPoint || '',
+        deliveryOrder.destination || ''
+      );
+      const totalLiters = routeMatch.matched ? routeMatch.liters : null;
+      const batchMatch = matchExtraFuel(
+        deliveryOrder.truckNo,
+        truckBatches,
+        deliveryOrder.destination,
+        batchDestinationRules
+      );
+      const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
+      const promoted = await promotePendingGoingToImport(
+        { ...deliveryOrder.toObject(), truckNo: pending.truckNo } as any,
+        totalLiters,
+        extraFuel,
+        undefined,
+        {
+          username,
+          userId: req.user?.userId,
+          deliveryOrderId: String(deliveryOrder._id),
+          ipAddress: req.ip,
+        }
+      );
+      if (!promoted.promoted) {
+        throw new ApiError(400, `Could not merge DO ${deliveryOrder.doNumber} into pending ${pendingDo}`);
+      }
+      emitDataChange('fuel_records', 'update');
+      emitDataChange('delivery_orders', 'update');
+      emitDataChange('lpo_summaries', 'update');
+      res.status(200).json({
+        success: true,
+        message: `Merged pending ${promoted.previousPendingDo || pendingDo} with DO ${deliveryOrder.doNumber}`,
+        data: {
+          kind,
+          alreadyMerged: false,
+          previousPendingDo: promoted.previousPendingDo || pendingDo,
+          realDoNumber: deliveryOrder.doNumber,
+          fuelRecordId: promoted.fuelRecordId,
+        },
+      });
+      return;
+    }
+
+    const existingLink = await FuelRecord.findOne({
+      returnDo: deliveryOrder.doNumber,
+      isDeleted: false,
+      isCancelled: { $ne: true },
+    }).lean();
+    if (existingLink && String(existingLink._id) === String(pending._id)) {
+      res.status(200).json({
+        success: true,
+        message: `DO ${deliveryOrder.doNumber} is already merged into pending ${pendingDo}`,
+        data: {
+          alreadyMerged: true,
+          kind,
+          previousPendingDo: pendingDo,
+          realDoNumber: deliveryOrder.doNumber,
+        },
+      });
+      return;
+    }
+    if (existingLink && String(existingLink._id) !== String(pending._id)) {
+      res.status(200).json({
+        success: true,
+        message:
+          `EXPORT DO ${deliveryOrder.doNumber} is linked to another fuel record. ` +
+          `Merge skipped for pending ${pendingDo}.`,
+        data: {
+          kind,
+          skipped: true,
+          skipReason: 'already_linked_elsewhere',
+          alreadyMerged: false,
+          previousPendingDo: pendingDo,
+          realDoNumber: deliveryOrder.doNumber,
+        },
+      });
+      return;
+    }
+
+    const routeMatch = matchExportRouteLiters(
+      routes,
+      deliveryOrder.loadingPoint || '',
+      deliveryOrder.destination || ''
+    );
+    const exportRouteLiters = routeMatch.matched ? routeMatch.liters : 0;
+    const pendingDoc = await FuelRecord.findById(pending._id);
+    if (!pendingDoc) {
+      res.status(200).json({
+        success: true,
+        message: `Pending return fuel record (${pendingDo}) is no longer available. Nothing merged.`,
+        data: {
+          kind,
+          skipped: true,
+          skipReason: 'pending_record_missing',
+          alreadyMerged: false,
+          previousPendingDo: pendingDo,
+          realDoNumber: deliveryOrder.doNumber,
+        },
+      });
+      return;
+    }
+    const { update, info, previousPendingDo } = await promotePendingReturnToExport(
+      pendingDoc.toObject(),
+      deliveryOrder as unknown as DeliveryOrderLike,
+      exportRouteLiters,
+      undefined,
+      {
+        username,
+        userId: req.user?.userId,
+        deliveryOrderId: String(deliveryOrder._id),
+        ipAddress: req.ip,
+      }
+    );
+    const updatedFuelRecord = await FuelRecord.findByIdAndUpdate(
+      pendingDoc._id,
+      { $set: update },
+      { new: true }
+    );
+    try {
+      const { resolveUnlinkedDONotification } = await import('./notificationController');
+      await resolveUnlinkedDONotification(id, username);
+    } catch (notifErr: any) {
+      logger.warn(`Failed to resolve unlinked-DO notification after pending merge for ${id}: ${notifErr?.message}`);
+    }
+
+    emitDataChange('fuel_records', 'update');
+    emitDataChange('delivery_orders', 'update');
+    emitDataChange('lpo_summaries', 'update');
+    res.status(200).json({
+      success: true,
+      message: `Merged pending ${previousPendingDo || pendingDo} with EXPORT DO ${deliveryOrder.doNumber}`,
+      data: {
+        kind,
+        alreadyMerged: false,
+        previousPendingDo: previousPendingDo || pendingDo,
+        realDoNumber: deliveryOrder.doNumber,
+        fuelRecord: updatedFuelRecord,
+        fuelUpdates: routeMatch.matched
+          ? { originalTotalLts: info.originalTotalLiters, exportRouteLiters, newTotalLts: info.newTotalLiters }
+          : null,
+      },
+    });
+  } catch (error: any) {
+    if (error?.statusCode) throw new ApiError(error.statusCode, error.message);
     throw error;
   }
 };

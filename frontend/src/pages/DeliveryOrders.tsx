@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar, Link2, Clock } from 'lucide-react';
+import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar, Link2, Clock, GitMerge } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI, resourceLockAPI, fuelRecordsAPI } from '../services/api';
 import DODetailModal from '../components/DODetailModal';
@@ -13,6 +13,7 @@ import DOWorkbook from '../components/DOWorkbook';
 import CancelDOModal from '../components/CancelDOModal';
 import AmendedDOsModal from '../components/AmendedDOsModal';
 import ExportLinkModal from '../components/ExportLinkModal';
+import MergeToPendingDoModal from '../components/MergeToPendingDoModal';
 import PendingDoFollowUpModal from '../components/PendingDoFollowUpModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import Pagination from '../components/Pagination';
@@ -40,6 +41,7 @@ import {
 } from '../hooks/useDeliveryOrders';
 import { fuelRecordKeys } from '../hooks/useFuelRecords';
 import { toast } from 'react-toastify';
+import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
 
 // Month names for display
 const MONTH_NAMES = [
@@ -83,7 +85,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [pendingDoStats, setPendingDoStats] = useState({ total: 0, goingPending: 0, returnPending: 0 });
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
   const [linkingExportOrder, setLinkingExportOrder] = useState<DeliveryOrder | null>(null);
+  const [mergingToPendingOrder, setMergingToPendingOrder] = useState<DeliveryOrder | null>(null);
   const [conflictData, setConflictData] = useState<{ currentRecord: any; pendingData: any } | null>(null);
+  const [pendingMergePrompt, setPendingMergePrompt] = useState<{
+    truckNo: string;
+    pendingDo: string;
+    pendingFuelRecordId: string;
+  } | null>(null);
+  const pendingMergeDecisionRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [activeTab, setActiveTab] = usePersistedState<'list' | 'summary' | 'workbook'>('do:activeTab', 'list');
   
   // Pagination state
@@ -877,6 +886,8 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             fieldsChanged.push(field);
           }
         });
+
+        let mergeTarget: { truckNo: string; pendingDo: string; pendingFuelRecordId: string } | null = null;
         
         // Update existing DO - now returns { order, cascadeResults }
         // Include clientUpdatedAt for optimistic locking
@@ -884,7 +895,41 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           ...orderData,
           clientUpdatedAt: (editingOrder as any)?.updatedAt || (editingOrder as any)?.createdAt,
         };
-        const result = await deliveryOrdersAPI.update(orderId, updatePayload);
+        let result;
+        try {
+          result = await deliveryOrdersAPI.update(orderId, updatePayload);
+        } catch (updateError: any) {
+          const preview = updateError?.response?.data?.data?.pendingMergePreview;
+          const needsMergeConfirm =
+            updateError?.response?.status === 409 &&
+            !!preview?.pendingFuelRecordId;
+
+          if (!needsMergeConfirm) {
+            throw updateError;
+          }
+
+          mergeTarget = {
+            truckNo: String(preview.truckNo || ''),
+            pendingDo: String(preview.pendingDo || 'pending DO'),
+            pendingFuelRecordId: String(preview.pendingFuelRecordId || ''),
+          };
+
+          const confirmed = await new Promise<boolean>((resolve) => {
+            pendingMergeDecisionRef.current = resolve;
+            setPendingMergePrompt(mergeTarget);
+          });
+
+          if (!confirmed) {
+            const cancelError: any = new Error('Pending merge confirmation cancelled');
+            cancelError.__userCancelled = true;
+            throw cancelError;
+          }
+
+          result = await deliveryOrdersAPI.update(orderId, {
+            ...(updatePayload as any),
+            pendingMergeConfirmed: true,
+          } as any);
+        }
         savedOrder = result.order;
         
         // Add to amended DOs session list if any fields changed
@@ -988,6 +1033,9 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     } catch (error: any) {
       console.error('=== handleSaveOrder END - ERROR ===');
       console.error('Failed to save order:', error);
+      if (error?.__userCancelled) {
+        throw error;
+      }
       if (error.response?.status === 409) {
         setConflictData({ currentRecord: error.response?.data?.data?.current, pendingData: orderData });
         queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
@@ -999,6 +1047,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       }
       throw error;
     }
+  };
+
+  const handlePendingMergeConfirm = () => {
+    pendingMergeDecisionRef.current?.(true);
+    pendingMergeDecisionRef.current = null;
+    setPendingMergePrompt(null);
+  };
+
+  const handlePendingMergeCancel = () => {
+    pendingMergeDecisionRef.current?.(false);
+    pendingMergeDecisionRef.current = null;
+    setPendingMergePrompt(null);
   };
 
   // Cancel DO handler
@@ -1988,6 +2048,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                               <Ban className="w-4 h-4 mr-1" />
                               Cancel
                             </button>
+                            {order.doType === 'DO' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMergingToPendingOrder(order);
+                                }}
+                                className="flex-1 px-3 py-2 text-xs font-medium text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-900/30 inline-flex items-center justify-center"
+                              >
+                                <GitMerge className="w-4 h-4 mr-1" />
+                                Merge
+                              </button>
+                            )}
                             {canLinkExportDO &&
                               order.importOrExport === 'EXPORT' &&
                               order.doType === 'DO' &&
@@ -2163,6 +2235,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                                 >
                                   <Ban className="w-4 h-4" />
                                 </button>
+                                {order.doType === 'DO' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setMergingToPendingOrder(order);
+                                    }}
+                                    className="text-violet-600 dark:text-violet-400 hover:text-violet-900 dark:hover:text-violet-300 ml-3"
+                                    title="Merge to pending DO of this truck"
+                                  >
+                                    <GitMerge className="w-4 h-4" />
+                                  </button>
+                                )}
                                 {canLinkExportDO &&
                                   order.importOrExport === 'EXPORT' &&
                                   order.doType === 'DO' &&
@@ -2269,6 +2353,21 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         onClose={() => setShowPendingDoModal(false)}
       />
 
+      {/* Merge real DO → pending DO on the same truck (DO Management) */}
+      <MergeToPendingDoModal
+        isOpen={!!mergingToPendingOrder}
+        order={mergingToPendingOrder}
+        onClose={() => setMergingToPendingOrder(null)}
+        onMerged={() => {
+          refetchOrders();
+          queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+          queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+          fuelRecordsAPI.getPendingDoStats()
+            .then(setPendingDoStats)
+            .catch(() => { /* non-blocking */ });
+        }}
+      />
+
       {/* Manual EXPORT DO → fuel record linking */}
       <ExportLinkModal
         isOpen={!!linkingExportOrder}
@@ -2310,6 +2409,21 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         currentRecord={conflictData?.currentRecord}
         modifiedBy={conflictData?.currentRecord?.lastEditedBy?.name}
         modifiedAt={conflictData?.currentRecord?.updatedAt}
+      />
+
+      <ConfirmModal
+        open={!!pendingMergePrompt}
+        title="Pending DO Found on Target Truck"
+        message={
+          pendingMergePrompt
+            ? `Truck ${pendingMergePrompt.truckNo} already has pending DO ${pendingMergePrompt.pendingDo}. Continue and merge this amended DO into that pending journey?`
+            : ''
+        }
+        confirmLabel="Yes, merge"
+        cancelLabel="No, keep separate"
+        variant="warning"
+        onConfirm={handlePendingMergeConfirm}
+        onCancel={handlePendingMergeCancel}
       />
     </div>
   );

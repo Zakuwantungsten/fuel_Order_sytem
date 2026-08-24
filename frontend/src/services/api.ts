@@ -446,6 +446,35 @@ export const deliveryOrdersAPI = {
     return response.data;
   },
 
+  previewMergeToPending: async (id: string | number): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      kind: 'going' | 'return';
+      hasPending: boolean;
+      pendingDo: string | null;
+      pendingFuelRecordId: string | null;
+      truckNo: string;
+    };
+  }> => {
+    const response = await apiClient.get(`/delivery-orders/${id}/pending-merge-preview`);
+    return response.data;
+  },
+
+  mergeToPending: async (id: string | number): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      kind?: 'going' | 'return';
+      alreadyMerged?: boolean;
+      previousPendingDo?: string;
+      realDoNumber?: string;
+    };
+  }> => {
+    const response = await apiClient.post(`/delivery-orders/${id}/merge-to-pending`);
+    return response.data;
+  },
+
   // Create notification for unlinked EXPORT DO
   notifyUnlinkedExport: async (data: {
     deliveryOrderId: string;

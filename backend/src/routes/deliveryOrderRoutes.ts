@@ -135,6 +135,22 @@ router.post(
   asyncHandler(deliveryOrderController.confirmExportLink)
 );
 
+// Merge a real DO into the truck's pending going/return DO (DO Management action).
+router.get(
+  '/:id/pending-merge-preview',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'),
+  validate,
+  asyncHandler(deliveryOrderController.previewMergeToPending)
+);
+router.post(
+  '/:id/merge-to-pending',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'),
+  validate,
+  asyncHandler(deliveryOrderController.mergeDeliveryOrderToPending)
+);
+
 // Create notification for unlinked EXPORT DO
 router.post(
   '/notify-unlinked-export',

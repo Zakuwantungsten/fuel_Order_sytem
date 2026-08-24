@@ -22,6 +22,7 @@ import { AuditService } from '../utils/auditService';
 import { buildFuzzyRegex, formatTruckNumber, isTruckNoMatch } from '../utils';
 import type { DeliveryOrderLike } from '../utils/fuelRecordCalculator';
 import { buildImportFuelRecord, buildReturnUpdate } from '../utils/fuelRecordCalculator';
+import { afterJourneyCancelled } from './journeyService';
 
 const TBA = 'TBA';
 
@@ -871,6 +872,8 @@ export async function mergePendingGoingWithSourceFuelRecord(input: {
   userId?: string;
   ipAddress?: string;
   session?: ClientSession;
+  /** Amend-to-other-truck: source may still be on the old plate while pending is on the new one. */
+  allowTruckMismatch?: boolean;
 }): Promise<{
   fuelRecord: any;
   previousPendingDo: string;
@@ -916,7 +919,8 @@ export async function mergePendingGoingWithSourceFuelRecord(input: {
     });
   }
 
-  if (!isTruckNoMatch(String(pending.truckNo || ''), String(source.truckNo || ''))) {
+  const trucksMatch = isTruckNoMatch(String(pending.truckNo || ''), String(source.truckNo || ''));
+  if (!trucksMatch && !input.allowTruckMismatch) {
     throw Object.assign(
       new Error(
         `Truck mismatch: pending is ${pending.truckNo}, source is ${source.truckNo}`
@@ -924,6 +928,10 @@ export async function mergePendingGoingWithSourceFuelRecord(input: {
       { statusCode: 400 }
     );
   }
+
+  const sourceWasActive = source.journeyStatus === 'active';
+  const sourceWasQueued = source.journeyStatus === 'queued';
+  const sourceTruckNo = String(source.truckNo || '');
 
   const realDoNumber = String(source.goingDo || '').trim().toUpperCase();
   if (!realDoNumber || isPendingGoingDo(realDoNumber)) {
@@ -1052,6 +1060,21 @@ export async function mergePendingGoingWithSourceFuelRecord(input: {
     await source.save({ session });
   } else {
     await source.save();
+  }
+
+  // Cross-truck amend-merge: source lived on the old plate — advance that truck's queue.
+  if (input.allowTruckMismatch && !trucksMatch && (sourceWasActive || sourceWasQueued)) {
+    try {
+      await afterJourneyCancelled(String(source._id), input.username, {
+        session,
+        wasActive: sourceWasActive,
+        wasQueued: sourceWasQueued,
+      });
+    } catch (queueErr: any) {
+      logger.warn(
+        `Queue advance after cross-truck merge failed for source ${source._id}: ${queueErr?.message || queueErr}`
+      );
+    }
   }
 
   await writePromotionAudits({
@@ -1397,5 +1420,34 @@ export async function fetchPendingDoListItems(opts: {
     .lean();
 
   return mapPendingFuelRecordsToDoListItems(rows, { kind });
+}
+
+/**
+ * Find the latest pending going (PG) or return (PR) fuel record for a truck.
+ * Used by DO Management merge-to-pending (not the Fuel Record picker merge).
+ */
+export async function findPendingFuelRecordForTruck(
+  truckNo: string,
+  kind: PendingDoKind,
+  session?: ClientSession
+): Promise<any | null> {
+  const formatted = formatTruckNumber(truckNo) || String(truckNo || '').trim().toUpperCase();
+  if (!formatted) return null;
+  const fuzzyTruck =
+    buildFuzzyRegex(formatted) || `^${formatted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
+  const pendingOr =
+    kind === 'going'
+      ? [{ isPendingGoing: true }, { goingDo: { $regex: /^PG\d{1,4}$/i } }]
+      : [{ isPendingReturn: true }, { returnDo: { $regex: /^PR\d{1,4}$/i } }];
+
+  const query = FuelRecord.findOne({
+    truckNo: { $regex: fuzzyTruck, $options: 'i' },
+    isDeleted: false,
+    isCancelled: { $ne: true },
+    journeyStatus: { $in: [...PENDING_LIST_JOURNEY_STATUSES] },
+    $or: pendingOr,
+  }).sort({ journeyStatus: 1, updatedAt: -1 });
+  if (session) query.session(session);
+  return query;
 }
 
