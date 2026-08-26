@@ -467,6 +467,8 @@ export const deliveryOrdersAPI = {
     data: {
       kind?: 'going' | 'return';
       alreadyMerged?: boolean;
+      skipped?: boolean;
+      skipReason?: string;
       previousPendingDo?: string;
       realDoNumber?: string;
     };

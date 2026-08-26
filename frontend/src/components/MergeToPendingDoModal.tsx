@@ -62,6 +62,11 @@ export default function MergeToPendingDoModal({
     setMerging(true);
     try {
       const res = await deliveryOrdersAPI.mergeToPending(doId(order));
+      if (res.data?.skipped) {
+        toast.info(res.message || 'Nothing merged');
+        onClose();
+        return;
+      }
       toast.success(res.message || `Merged with pending ${pendingDo}`);
       onMerged();
       onClose();

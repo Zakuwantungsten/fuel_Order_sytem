@@ -44,6 +44,8 @@ export interface PendingPromotionContext {
   userId?: string;
   deliveryOrderId?: string;
   ipAddress?: string;
+  /** auto (default) = DO create promote; manual_merge = DO Management merge button */
+  mode?: 'auto' | 'manual_merge';
 }
 
 /** Pending follow-up lists include completed journeys (imported going legs often land as completed). */
@@ -677,6 +679,7 @@ export async function promotePendingReturnToExport(
       username: ctx?.username || 'system',
       userId: ctx?.userId,
       ipAddress: ctx?.ipAddress,
+      mode: ctx?.mode || 'auto',
     });
   }
 

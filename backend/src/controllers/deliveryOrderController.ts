@@ -2616,6 +2616,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
                   userId: req.user?.userId,
                   deliveryOrderId: String(deliveryOrder._id),
                   ipAddress: req.ip,
+                  mode: 'manual_merge',
                 }
               );
               await FuelRecord.updateOne({ _id: pendingDoc._id }, { $set: update }, { session });
@@ -5738,7 +5739,7 @@ export const mergeDeliveryOrderToPending = async (req: AuthRequest, res: Respons
       returnDo: deliveryOrder.doNumber,
       isDeleted: false,
       isCancelled: { $ne: true },
-    }).lean();
+    });
     if (existingLink && String(existingLink._id) === String(pending._id)) {
       res.status(200).json({
         success: true,
@@ -5752,22 +5753,17 @@ export const mergeDeliveryOrderToPending = async (req: AuthRequest, res: Respons
       });
       return;
     }
+
+    // Same as amend confirmed-merge: if EXPORT is linked elsewhere, clear that
+    // link so we can apply it onto the pending-return fuel row (keep pending liters).
     if (existingLink && String(existingLink._id) !== String(pending._id)) {
-      res.status(200).json({
-        success: true,
-        message:
-          `EXPORT DO ${deliveryOrder.doNumber} is linked to another fuel record. ` +
-          `Merge skipped for pending ${pendingDo}.`,
-        data: {
-          kind,
-          skipped: true,
-          skipReason: 'already_linked_elsewhere',
-          alreadyMerged: false,
-          previousPendingDo: pendingDo,
-          realDoNumber: deliveryOrder.doNumber,
-        },
-      });
-      return;
+      existingLink.returnDo = '';
+      existingLink.isPendingReturn = false;
+      await existingLink.save();
+      logger.info(
+        `Cleared returnDo ${deliveryOrder.doNumber} from fuel record ${existingLink._id} ` +
+          `before merging into pending ${pendingDo}`
+      );
     }
 
     const routeMatch = matchExportRouteLiters(
@@ -5802,6 +5798,7 @@ export const mergeDeliveryOrderToPending = async (req: AuthRequest, res: Respons
         userId: req.user?.userId,
         deliveryOrderId: String(deliveryOrder._id),
         ipAddress: req.ip,
+        mode: 'manual_merge',
       }
     );
     const updatedFuelRecord = await FuelRecord.findByIdAndUpdate(
