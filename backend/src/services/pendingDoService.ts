@@ -399,6 +399,146 @@ export async function createPendingReturnDo(
   return { fuelRecord: record, pendingDo };
 }
 
+export interface CancelPendingDoInput {
+  fuelRecordId: string;
+  kind: PendingDoKind;
+  username: string;
+}
+
+export interface CancelPendingDoResult {
+  fuelRecord: any;
+  kind: PendingDoKind;
+  pendingDo: string;
+  /** True when the whole fuel record was cancelled (pending going). */
+  cancelledWholeRecord: boolean;
+}
+
+async function removePendingDoHistory(opts: {
+  fuelRecordId: string;
+  kind: PendingDoKind;
+  pendingDo: string;
+  session?: ClientSession;
+}): Promise<void> {
+  const query = PendingDoHistory.deleteMany({
+    fuelRecordId: opts.fuelRecordId,
+    kind: opts.kind,
+    pendingDo: opts.pendingDo,
+    status: 'pending',
+  });
+  if (opts.session) query.session(opts.session);
+  await query;
+}
+
+/**
+ * Cancel a pending going (PG####) or pending return (PR####) DO from DO Management.
+ * - Pending going: cancels the fuel record (queue side effects via afterJourneyCancelled).
+ * - Pending return: clears return placeholder only; restores from/to from going snapshot.
+ */
+export async function cancelPendingDo(input: CancelPendingDoInput): Promise<CancelPendingDoResult> {
+  const record = await FuelRecord.findOne({
+    _id: input.fuelRecordId,
+    isDeleted: false,
+    isCancelled: { $ne: true },
+  });
+
+  if (!record) {
+    throw Object.assign(new Error('Fuel record not found'), { statusCode: 404 });
+  }
+
+  if (input.kind === 'going') {
+    const hasPendingGoing = record.isPendingGoing === true || isPendingGoingDo(record.goingDo);
+    if (!hasPendingGoing) {
+      throw Object.assign(new Error('Fuel record has no pending going DO to cancel'), { statusCode: 400 });
+    }
+
+    const pendingDo = String(record.goingDo || '').trim();
+    const wasActive = record.journeyStatus === 'active';
+    const wasQueued = record.journeyStatus === 'queued';
+
+    const fuelRecord = await FuelRecord.findOneAndUpdate(
+      { _id: input.fuelRecordId, isDeleted: false, isCancelled: { $ne: true } },
+      { isCancelled: true, cancelledAt: new Date(), cancelledBy: input.username },
+      { new: true, runValidators: true }
+    );
+
+    if (!fuelRecord) {
+      throw Object.assign(new Error('Fuel record not found'), { statusCode: 404 });
+    }
+
+    await afterJourneyCancelled(input.fuelRecordId, input.username, {
+      wasActive,
+      wasQueued,
+    });
+
+    await removePendingDoHistory({
+      fuelRecordId: input.fuelRecordId,
+      kind: 'going',
+      pendingDo,
+    });
+
+    if (record.isPendingReturn === true || isPendingReturnDo(record.returnDo)) {
+      const returnPendingDo = String(record.returnDo || '').trim();
+      if (returnPendingDo) {
+        await removePendingDoHistory({
+          fuelRecordId: input.fuelRecordId,
+          kind: 'return',
+          pendingDo: returnPendingDo,
+        });
+      }
+    }
+
+    const refreshed = await FuelRecord.findById(input.fuelRecordId);
+    if (!refreshed) {
+      throw Object.assign(new Error('Fuel record not found'), { statusCode: 404 });
+    }
+
+    logger.info(
+      `Pending going DO ${pendingDo} cancelled for fuel record ${input.fuelRecordId} by ${input.username}`
+    );
+
+    return {
+      fuelRecord: refreshed,
+      kind: 'going',
+      pendingDo,
+      cancelledWholeRecord: true,
+    };
+  }
+
+  const hasPendingReturn = record.isPendingReturn === true || isPendingReturnDo(record.returnDo);
+  if (!hasPendingReturn) {
+    throw Object.assign(new Error('Fuel record has no pending return DO to cancel'), { statusCode: 400 });
+  }
+
+  const pendingDo = String(record.returnDo || '').trim();
+  if (record.originalGoingFrom) {
+    record.from = record.originalGoingFrom;
+  }
+  if (record.originalGoingTo) {
+    record.to = record.originalGoingTo;
+  }
+  record.returnDo = undefined;
+  record.isPendingReturn = false;
+  record.pendingReturnAt = undefined;
+  await record.save();
+
+  await removePendingDoHistory({
+    fuelRecordId: input.fuelRecordId,
+    kind: 'return',
+    pendingDo,
+  });
+
+  logger.info(
+    `Pending return DO ${pendingDo} cancelled for fuel record ${input.fuelRecordId} by ${input.username}`
+  );
+
+  return {
+    fuelRecord: record,
+    kind: 'return',
+    pendingDo,
+    cancelledWholeRecord: false,
+  };
+}
+
 /**
  * Update a pending fuel-record journey (truck / date / route TBA fields).
  * Used when editing a pending DO row from DO Management.

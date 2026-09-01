@@ -20,8 +20,9 @@ import {
 } from '../services/yardLpoFetchService';
 import type { TangaLPO, TangaLPOEntry, FuelRecord } from '../types';
 import { useGridNav } from '../hooks/useGridNav';
-import { shouldOfferPendingGoingCreate } from '../utils/pendingDo';
+import { shouldOfferPendingGoingCreate, isPendingGoingCreateMonth } from '../utils/pendingDo';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import ConfirmModal from './SuperAdmin/ConfirmModal';
 
 interface Props {
   mode: 'new' | 'add-entries';
@@ -95,6 +96,10 @@ export default function TangaYardLPOForm({
   const [choiceModal, setChoiceModal] = useState<{
     open: boolean; index: number; truckNo: string; candidates: FuelRecord[];
   }>({ open: false, index: -1, truckNo: '', candidates: [] });
+
+  const [pendingGoingConfirm, setPendingGoingConfirm] = useState<{
+    open: boolean; index: number; truckNo: string; loading: boolean;
+  }>({ open: false, index: -1, truckNo: '', loading: false });
 
   // Grid keyboard navigation — col layout (desktop table only):
   // 0=Truck  1=DO#  2=Liters  3=Dispense(conditional)  4=Rate  5=Dest
@@ -254,7 +259,36 @@ export default function TangaYardLPOForm({
     }
   }, [applyCandidate]);
 
+  const requestCreatePendingGoingDo = (idx: number) => {
+    const truckNo = normalizeTruckInput(entries[idx]?.truckNo || '').trim();
+    if (!truckNo || truckNo.length < 4) {
+      toast.error('Enter a valid truck number first');
+      return;
+    }
+    if (!isPendingGoingCreateMonth(date)) {
+      toast.error('Pending going DOs can only be created for the current calendar month');
+      return;
+    }
+    setPendingGoingConfirm({ open: true, index: idx, truckNo, loading: false });
+  };
+
+  const confirmCreatePendingGoingDo = async () => {
+    const { index } = pendingGoingConfirm;
+    if (index < 0) return;
+    setPendingGoingConfirm((prev) => ({ ...prev, loading: true }));
+    try {
+      await handleCreatePendingDo(index);
+      setPendingGoingConfirm({ open: false, index: -1, truckNo: '', loading: false });
+    } catch {
+      setPendingGoingConfirm((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
   const handleCreatePendingDo = async (idx: number) => {
+    if (!isPendingGoingCreateMonth(date)) {
+      toast.error('Pending going DOs can only be created for the current calendar month');
+      return;
+    }
     const truckNo = normalizeTruckInput(entries[idx]?.truckNo || '').trim();
     if (!truckNo || truckNo.length < 4) {
       toast.error('Enter a valid truck number first');
@@ -267,12 +301,14 @@ export default function TangaYardLPOForm({
       await fetchTruck(idx, truckNo);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to create pending DO');
+      throw err;
     } finally {
       updateRow(idx, { creatingPendingDo: false });
     }
   };
 
   const offerPendingDo = (row: RowState) => {
+    if (!isPendingGoingCreateMonth(date)) return false;
     const j = journeysFromYardCandidates(row.candidates || []);
     return shouldOfferPendingGoingCreate({
       warningType: row.warningType === 'not_found' ? 'not_found' : null,
@@ -883,7 +919,7 @@ export default function TangaYardLPOForm({
                           {offerPendingDo(row) && (
                             <button
                               type="button"
-                              onClick={() => handleCreatePendingDo(idx)}
+                              onClick={() => requestCreatePendingGoingDo(idx)}
                               disabled={row.creatingPendingDo}
                               title="Queue a pending going DO behind the active journey"
                               style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '6px', padding: '2px 7px', fontSize: '10px', fontWeight: 600, border: 'none', borderRadius: '4px', background: '#f59e0b', color: '#fff', cursor: 'pointer' }}
@@ -913,7 +949,7 @@ export default function TangaYardLPOForm({
                           {offerPendingDo(row) && (
                             <button
                               type="button"
-                              onClick={() => handleCreatePendingDo(idx)}
+                              onClick={() => requestCreatePendingGoingDo(idx)}
                               disabled={row.creatingPendingDo}
                               style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 7px', fontSize: '10px', fontWeight: 600, border: 'none', borderRadius: '4px', background: '#f59e0b', color: '#fff', cursor: 'pointer', width: 'fit-content' }}
                             >
@@ -1178,7 +1214,7 @@ export default function TangaYardLPOForm({
                       {offerPendingDo(row) && (
                         <button
                           type="button"
-                          onClick={() => handleCreatePendingDo(idx)}
+                          onClick={() => requestCreatePendingGoingDo(idx)}
                           disabled={row.creatingPendingDo}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 w-fit"
                         >
@@ -1225,7 +1261,7 @@ export default function TangaYardLPOForm({
                       {offerPendingDo(row) && (
                         <button
                           type="button"
-                          onClick={() => handleCreatePendingDo(idx)}
+                          onClick={() => requestCreatePendingGoingDo(idx)}
                           disabled={row.creatingPendingDo}
                           className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 w-fit"
                         >
@@ -1373,6 +1409,23 @@ export default function TangaYardLPOForm({
           onClose={() => setChoiceModal({ open: false, index: -1, truckNo: '', candidates: [] })}
         />
       )}
+
+      <div onClick={e => e.stopPropagation()}>
+        <ConfirmModal
+          open={pendingGoingConfirm.open}
+          title="Create Pending Going DO?"
+          message={`Create a temporary pending going DO (PG####) for truck ${pendingGoingConfirm.truckNo}? It will stay on the fuel record until a real going DO is linked.`}
+          variant="warning"
+          confirmLabel="Create pending going"
+          cancelLabel="Cancel"
+          loading={pendingGoingConfirm.loading}
+          onConfirm={confirmCreatePendingGoingDo}
+          onCancel={() => {
+            if (pendingGoingConfirm.loading) return;
+            setPendingGoingConfirm({ open: false, index: -1, truckNo: '', loading: false });
+          }}
+        />
+      </div>
     </div>
   );
 }

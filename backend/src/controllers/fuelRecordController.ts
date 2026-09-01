@@ -12,7 +12,7 @@ import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
 import { logFuelRecordChange, snapshotFuelRecord } from '../utils/fuelRecordAudit';
-import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled, healCancelledQueuedJourneys, completeJourneyManually, reopenManuallyCompletedJourney } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled, healCancelledQueuedJourneys, completeJourneyManually, reopenManuallyCompletedJourney, restoreJourneyOnFuelRecordUncancel } from '../services/journeyService';
 import type { JourneyStatus } from '../types';
 import { isYardStation, isDarYardStation, isTangaYardStation, YARD_STATION } from '../utils/yardStations';
 
@@ -1205,18 +1205,7 @@ export const uncancelFuelRecord = async (req: AuthRequest, res: Response): Promi
       throw new ApiError(409, 'Fuel record is not cancelled');
     }
 
-    const fuelRecord = await FuelRecord.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      {
-        isCancelled: false,
-        uncancelledAt: new Date(),
-        uncancelledBy: username,
-        $unset: { cancelledAt: '', cancelledBy: '', cancellationReason: '' },
-      },
-      { new: true, runValidators: true }
-    );
-
-    if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
+    const { record: fuelRecord, affectedIds } = await restoreJourneyOnFuelRecordUncancel(id, username);
 
     await logFuelRecordChange({
       action: 'UPDATE',
@@ -1238,7 +1227,14 @@ export const uncancelFuelRecord = async (req: AuthRequest, res: Response): Promi
       message: 'Fuel record uncancelled successfully',
       data: fuelRecord,
     });
-    emitDataChange('fuel_records', 'update', fuelRecord.toObject());
+
+    const emitIds = new Set<string>([fuelRecord._id.toString(), ...affectedIds]);
+    for (const emitId of emitIds) {
+      const fresh = emitId === fuelRecord._id.toString()
+        ? fuelRecord
+        : await FuelRecord.findById(emitId);
+      if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+    }
   } catch (error: any) {
     throw error;
   }
@@ -2272,6 +2268,64 @@ export const updatePendingDo = async (req: AuthRequest, res: Response): Promise<
       success: true,
       message: `Pending DO updated for truck ${fuelRecord.truckNo}`,
       data: { fuelRecord },
+    });
+  } catch (error: any) {
+    if (error?.statusCode) throw new ApiError(error.statusCode, error.message);
+    throw error;
+  }
+};
+
+/**
+ * Cancel a pending going (PG####) or pending return (PR####) DO — used from DO Management.
+ * Body: { kind: 'going' | 'return' }
+ */
+export const cancelPendingDo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const { id } = req.params;
+    if (!id) throw new ApiError(400, 'Fuel record id is required');
+
+    const kind = req.body?.kind;
+    if (kind !== 'going' && kind !== 'return') {
+      throw new ApiError(400, 'kind must be "going" or "return"');
+    }
+
+    const existing = await FuelRecord.findOne({ _id: id, isDeleted: false }).lean();
+    if (!existing) throw new ApiError(404, 'Fuel record not found');
+
+    const { cancelPendingDo: cancelPending } = await import('../services/pendingDoService');
+    const result = await cancelPending({
+      fuelRecordId: id,
+      kind,
+      username,
+    });
+
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: String(result.fuelRecord._id),
+      username,
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existing),
+      next: snapshotFuelRecord(result.fuelRecord),
+      source: 'pending_do',
+      tags: ['pending_do', 'cancel', kind],
+      severity: 'medium',
+    });
+
+    emitDataChange('fuel_records', 'update');
+    emitDataChange('delivery_orders', 'update');
+
+    const message = result.cancelledWholeRecord
+      ? `Pending going DO ${result.pendingDo} cancelled — fuel record cancelled`
+      : `Pending return DO ${result.pendingDo} removed — going route restored on fuel record`;
+
+    res.status(200).json({
+      success: true,
+      message,
+      data: result,
     });
   } catch (error: any) {
     if (error?.statusCode) throw new ApiError(error.statusCode, error.message);

@@ -17,6 +17,15 @@ export function isPendingDo(doNumber: string | null | undefined): boolean {
   return isPendingGoingDo(doNumber) || isPendingReturnDo(doNumber);
 }
 
+/** Pending going DO create is only allowed when the given date is in the current calendar month. */
+export function isPendingGoingCreateMonth(dateStr?: string | null): boolean {
+  const raw = (dateStr || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (!parts) return false;
+  const now = new Date();
+  return Number(parts[1]) === now.getFullYear() && Number(parts[2]) === now.getMonth() + 1;
+}
+
 export function isPendingGoingRecord(record: {
   isPendingGoing?: boolean;
   goingDo?: string;

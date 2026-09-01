@@ -1384,6 +1384,14 @@ export const fuelRecordsAPI = {
     return response.data;
   },
 
+  cancelPendingDo: async (
+    fuelRecordId: string,
+    kind: 'going' | 'return'
+  ): Promise<{ fuelRecord: FuelRecord; kind: 'going' | 'return'; pendingDo: string; cancelledWholeRecord: boolean; message?: string }> => {
+    const response = await apiClient.post(`/fuel-records/pending-dos/${fuelRecordId}/cancel`, { kind });
+    return response.data.data;
+  },
+
   getPendingDoStats: async (): Promise<{ total: number; goingPending: number; returnPending: number; assigned?: number }> => {
     const response = await apiClient.get('/fuel-records/pending-dos/stats');
     return response.data.data || { total: 0, goingPending: 0, returnPending: 0, assigned: 0 };

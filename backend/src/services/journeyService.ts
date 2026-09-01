@@ -518,58 +518,58 @@ export async function afterJourneyCancelled(
   username: string,
   options: { session?: ClientSession; wasActive: boolean; wasQueued: boolean }
 ): Promise<{ affectedIds: string[] }> {
-  const session = options.session;
-  const ownSession = !session;
-  const localSession = session || (await mongoose.startSession());
   const affectedIds = new Set<string>([recordId]);
 
-  try {
-    const run = async (s: ClientSession) => {
-      const record = await FuelRecord.findById(recordId).session(s);
-      if (!record || record.isDeleted) return;
+  const run = async (s: ClientSession | null) => {
+    const record = await FuelRecord.findById(recordId).session(sessionQuery(s));
+    if (!record || record.isDeleted) return;
 
-      const truckNo = record.truckNo;
+    const truckNo = record.truckNo;
 
-      if (options.wasActive) {
-        if (record.journeyStatus !== 'completed') {
-          record.journeyStatus = 'completed';
-          record.completedAt = record.completedAt || new Date();
-          record.queueOrder = undefined;
-          await record.save({ session: s });
-        }
-        const promotedId = await promoteNextQueuedJourney(truckNo, username, s);
-        if (promotedId) affectedIds.add(promotedId);
-        for (const id of await renumberQueuedJourneys(truckNo, s)) affectedIds.add(id);
-        logger.info(
-          `Cancelled active journey ${record.goingDo} (truck ${truckNo}) completed; queue advanced by ${username}`
-        );
-        return;
-      }
-
-      if (options.wasQueued) {
-        // Leave the queue entirely — do not keep journeyStatus=queued / queueOrder
-        record.journeyStatus = 'cancelled';
+    if (options.wasActive) {
+      record.cancelledFromJourneyStatus = 'active';
+      if (record.journeyStatus !== 'completed') {
+        record.journeyStatus = 'completed';
+        record.completedAt = record.completedAt || new Date();
         record.queueOrder = undefined;
-        await record.save({ session: s });
-
-        for (const id of await renumberQueuedJourneys(truckNo, s)) affectedIds.add(id);
-        logger.info(
-          `Cancelled queued journey ${record.goingDo} (truck ${truckNo}); removed from queue and renumbered by ${username}`
-        );
       }
-    };
-
-    if (ownSession) {
-      await localSession.withTransaction(async () => run(localSession));
-    } else {
-      await run(localSession);
+      const promotedId = await promoteNextQueuedJourney(truckNo, username, s);
+      if (promotedId) {
+        record.cancelPromotedSuccessorId = promotedId;
+        affectedIds.add(promotedId);
+      }
+      await record.save(sessionWrite(s));
+      for (const id of await renumberQueuedJourneys(truckNo, s)) affectedIds.add(id);
+      logger.info(
+        `Cancelled active journey ${record.goingDo} (truck ${truckNo}) completed; queue advanced by ${username}`
+      );
+      return;
     }
-  } finally {
-    if (ownSession) await localSession.endSession();
+
+    if (options.wasQueued) {
+      record.cancelledFromJourneyStatus = 'queued';
+      if (record.queueOrder != null) {
+        record.cancelledFromQueueOrder = record.queueOrder;
+      }
+      record.journeyStatus = 'cancelled';
+      record.queueOrder = undefined;
+      await record.save(sessionWrite(s));
+
+      for (const id of await renumberQueuedJourneys(truckNo, s)) affectedIds.add(id);
+      logger.info(
+        `Cancelled queued journey ${record.goingDo} (truck ${truckNo}); removed from queue and renumbered by ${username}`
+      );
+    }
+  };
+
+  if (options.session) {
+    await run(options.session);
+  } else {
+    await runWithOptionalTransaction(run);
   }
 
   const ids = [...affectedIds];
-  if (ownSession) {
+  if (!options.session) {
     await emitFuelRecordUpdates(ids);
   }
   return { affectedIds: ids };
@@ -892,6 +892,124 @@ export async function reopenManuallyCompletedJourney(
 
   await emitFuelRecordUpdates(affectedIds);
   return { record, affectedIds: [...affectedIds], promotedId: null };
+}
+
+export interface UncancelJourneyResult {
+  record: any;
+  affectedIds: string[];
+}
+
+/**
+ * Restore journey queue state when a cancelled fuel record is uncancelled.
+ * Uses cancel snapshots written by afterJourneyCancelled. Legacy cancels without
+ * snapshots only clear isCancelled.
+ */
+export async function restoreJourneyOnFuelRecordUncancel(
+  recordId: string,
+  username: string
+): Promise<UncancelJourneyResult> {
+  const affectedIds = new Set<string>([recordId]);
+
+  await runWithOptionalTransaction(async (session) => {
+    const record = await FuelRecord.findById(recordId).session(sessionQuery(session));
+    if (!record || record.isDeleted) {
+      throw new ApiError(404, 'Fuel record not found');
+    }
+    if (!record.isCancelled) {
+      throw new ApiError(409, 'Fuel record is not cancelled');
+    }
+
+    const fromStatus = record.cancelledFromJourneyStatus;
+    const fromQueueOrder = record.cancelledFromQueueOrder;
+    const successorId = record.cancelPromotedSuccessorId
+      ? String(record.cancelPromotedSuccessorId)
+      : null;
+    const truckNo = record.truckNo;
+
+    record.isCancelled = false;
+    record.uncancelledAt = new Date();
+    record.uncancelledBy = username;
+    record.cancelledAt = undefined;
+    record.cancelledBy = undefined;
+    record.cancellationReason = undefined;
+
+    if (!fromStatus) {
+      await record.save(sessionWrite(session));
+      return;
+    }
+
+    if (fromStatus === 'active') {
+      const currentActive = await FuelRecord.findOne(activeJourneyFilter(truckNo, recordId)).session(
+        sessionQuery(session)
+      );
+
+      if (currentActive) {
+        if (!successorId || currentActive._id.toString() !== successorId) {
+          throw new ApiError(409, 'Cannot uncancel — another journey is now active for this truck');
+        }
+
+        currentActive.journeyStatus = 'queued';
+        currentActive.queueOrder = 0;
+        await currentActive.save(sessionWrite(session));
+        affectedIds.add(currentActive._id.toString());
+      } else if (successorId) {
+        const successor = await FuelRecord.findById(successorId).session(sessionQuery(session));
+        if (successor && !successor.isDeleted && !successor.isCancelled) {
+          if (successor.journeyStatus === 'completed') {
+            throw new ApiError(409, 'Cannot uncancel — a later journey has already been completed');
+          }
+          if (successor.journeyStatus === 'active') {
+            successor.journeyStatus = 'queued';
+            successor.queueOrder = 0;
+            await successor.save(sessionWrite(session));
+            affectedIds.add(successor._id.toString());
+          }
+        }
+      }
+
+      record.journeyStatus = 'active';
+      record.activatedAt = record.activatedAt || new Date();
+      record.completedAt = undefined;
+      record.completedBy = undefined;
+      record.queueOrder = undefined;
+      record.cancelledFromJourneyStatus = undefined;
+      record.cancelledFromQueueOrder = undefined;
+      record.cancelPromotedSuccessorId = undefined;
+      await record.save(sessionWrite(session));
+
+      for (const id of await renumberQueuedJourneys(truckNo, session)) {
+        affectedIds.add(id);
+      }
+
+      logger.info(
+        `Cancelled active journey ${record.goingDo} (truck ${truckNo}) restored on uncancel by ${username}`
+      );
+      return;
+    }
+
+    if (fromStatus === 'queued') {
+      record.journeyStatus = 'queued';
+      record.queueOrder = fromQueueOrder && fromQueueOrder > 0 ? fromQueueOrder : undefined;
+      record.cancelledFromJourneyStatus = undefined;
+      record.cancelledFromQueueOrder = undefined;
+      record.cancelPromotedSuccessorId = undefined;
+      await record.save(sessionWrite(session));
+
+      for (const id of await renumberQueuedJourneys(truckNo, session)) {
+        affectedIds.add(id);
+      }
+
+      logger.info(
+        `Cancelled queued journey ${record.goingDo} (truck ${truckNo}) restored on uncancel by ${username}`
+      );
+    }
+  });
+
+  const record = await FuelRecord.findById(recordId);
+  if (!record) throw new ApiError(404, 'Fuel record not found');
+
+  await emitFuelRecordUpdates(affectedIds);
+  return { record, affectedIds: [...affectedIds] };
 }
 
 /**

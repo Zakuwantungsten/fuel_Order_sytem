@@ -124,6 +124,22 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
       type: String,
       required: false,
     },
+    /** Journey status before cancel side-effects (for uncancel queue restore). */
+    cancelledFromJourneyStatus: {
+      type: String,
+      enum: ['active', 'queued'],
+      required: false,
+    },
+    /** Queue slot before a queued journey was cancelled. */
+    cancelledFromQueueOrder: {
+      type: Number,
+      required: false,
+    },
+    /** Journey promoted when an active journey was cancelled (undo on uncancel). */
+    cancelPromotedSuccessorId: {
+      type: String,
+      required: false,
+    },
     estimatedStartDate: {
       type: String,
       required: false,

@@ -56,6 +56,13 @@ router.put(
   asyncHandler(fuelRecordController.updatePendingDo)
 );
 router.post(
+  '/pending-dos/:id/cancel',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'),
+  validate,
+  asyncHandler(fuelRecordController.cancelPendingDo)
+);
+router.post(
   '/pending-dos/merge',
   authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss'),
   asyncHandler(fuelRecordController.mergePendingGoingDo)

@@ -21,6 +21,9 @@ const CancelDOModal = ({ order, isOpen, onClose, onConfirm, isLoading = false }:
 
   if (!isOpen) return null;
 
+  const isPendingReturn = order.isPendingDo && order.pendingKind === 'return';
+  const isPendingGoing = order.isPendingDo && order.pendingKind !== 'return';
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
@@ -37,7 +40,11 @@ const CancelDOModal = ({ order, isOpen, onClose, onConfirm, isLoading = false }:
             <div className="flex items-center">
               <Ban className="w-5 h-5 text-white mr-2" />
               <h3 className="text-lg font-semibold text-white">
-                Cancel Delivery Order
+                {isPendingReturn
+                  ? 'Cancel Pending Return DO?'
+                  : isPendingGoing
+                    ? 'Cancel Pending Going DO?'
+                    : 'Cancel Delivery Order'}
               </h3>
             </div>
             <button 
@@ -56,12 +63,34 @@ const CancelDOModal = ({ order, isOpen, onClose, onConfirm, isLoading = false }:
               <div className="flex items-start">
                 <AlertTriangle className="w-5 h-5 text-amber-500 dark:text-amber-400 mr-3 mt-0.5 flex-shrink-0" />
                 <div className="text-sm text-amber-800 dark:text-amber-300">
-                  <p className="font-medium mb-1">Warning: This action has cascading effects</p>
-                  <ul className="list-disc list-inside space-y-1 text-amber-700 dark:text-amber-400">
-                    <li>The associated fuel record will be cancelled</li>
-                    <li>This cannot be undone</li>
-                    <li>The DO will remain in records but marked as cancelled</li>
-                  </ul>
+                  {isPendingReturn ? (
+                    <>
+                      <p className="font-medium mb-1">This removes the pending return placeholder only</p>
+                      <ul className="list-disc list-inside space-y-1 text-amber-700 dark:text-amber-400">
+                        <li>The pending return DO (PR####) will be removed</li>
+                        <li>The going route on the fuel record will be restored</li>
+                        <li>The journey itself will not be cancelled</li>
+                      </ul>
+                    </>
+                  ) : isPendingGoing ? (
+                    <>
+                      <p className="font-medium mb-1">Warning: This cancels the fuel record</p>
+                      <ul className="list-disc list-inside space-y-1 text-amber-700 dark:text-amber-400">
+                        <li>The temporary pending going DO (PG####) will be removed</li>
+                        <li>The associated fuel record will be cancelled</li>
+                        <li>Queued journeys for this truck may be promoted</li>
+                      </ul>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium mb-1">Warning: This action has cascading effects</p>
+                      <ul className="list-disc list-inside space-y-1 text-amber-700 dark:text-amber-400">
+                        <li>The associated fuel record will be cancelled</li>
+                        <li>This cannot be undone</li>
+                        <li>The DO will remain in records but marked as cancelled</li>
+                      </ul>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -69,13 +98,13 @@ const CancelDOModal = ({ order, isOpen, onClose, onConfirm, isLoading = false }:
             {/* DO Details */}
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-6">
               <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                Delivery Order Details
+                {order.isPendingDo ? 'Pending DO Details' : 'Delivery Order Details'}
               </h4>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <span className="text-gray-500 dark:text-gray-400">DO Number:</span>
                   <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                    {order.doType}-{order.doNumber}
+                    {order.isPendingDo ? order.doNumber : `${order.doType}-${order.doNumber}`}
                   </span>
                 </div>
                 <div>
@@ -131,7 +160,7 @@ const CancelDOModal = ({ order, isOpen, onClose, onConfirm, isLoading = false }:
                 ) : (
                   <>
                     <Ban className="w-4 h-4 mr-2" />
-                    Confirm Cancellation
+                    {isPendingReturn ? 'Remove pending return' : 'Confirm Cancellation'}
                   </>
                 )}
               </button>

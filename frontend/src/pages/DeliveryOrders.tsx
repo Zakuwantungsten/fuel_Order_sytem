@@ -1073,11 +1073,34 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   };
 
   const handleConfirmCancel = async () => {
-    const orderId = cancellingOrder?.id || (cancellingOrder as any)?._id;
-    if (!orderId) return;
-    
+    if (!cancellingOrder) return;
+
     setIsCancelling(true);
     try {
+      if (cancellingOrder.isPendingDo) {
+        const fuelRecordId = cancellingOrder.fuelRecordId;
+        const kind = cancellingOrder.pendingKind || 'going';
+        if (!fuelRecordId) {
+          toast.error('Missing fuel record for this pending DO');
+          return;
+        }
+
+        const result = await fuelRecordsAPI.cancelPendingDo(String(fuelRecordId), kind);
+        toast.success(
+          result.cancelledWholeRecord
+            ? `Pending going DO ${result.pendingDo} cancelled — fuel record cancelled`
+            : `Pending return DO ${result.pendingDo} removed — going route restored`
+        );
+        handleCloseCancelModal();
+        queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
+        queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+        return;
+      }
+
+      const orderId = cancellingOrder.id || (cancellingOrder as any)?._id;
+      if (!orderId) return;
+
       const result = await deliveryOrdersAPI.cancel(orderId);
       
       console.log('DO cancelled:', result.order.doNumber);
@@ -2022,9 +2045,16 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                               <Edit className="w-4 h-4 mr-1" />
                               Edit
                             </button>
-                            <div className="flex-[1.5] text-[10px] text-amber-700 dark:text-amber-300 italic leading-tight">
-                              Pending {order.pendingKind === 'return' ? 'return' : 'going'} — edits sync to fuel record
-                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenCancelModal(order);
+                              }}
+                              className="flex-1 px-3 py-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 inline-flex items-center justify-center"
+                            >
+                              <Ban className="w-4 h-4 mr-1" />
+                              Cancel
+                            </button>
                           </>
                         ) : !order.isCancelled && (
                           <>
@@ -2203,16 +2233,28 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-xs font-medium">
                             {order.isPendingDo ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditOrder(order);
-                                }}
-                                className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300"
-                                title="Edit pending DO (syncs fuel record)"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditOrder(order);
+                                  }}
+                                  className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-3"
+                                  title="Edit pending DO (syncs fuel record)"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenCancelModal(order);
+                                  }}
+                                  className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                                  title="Cancel pending DO"
+                                >
+                                  <Ban className="w-4 h-4" />
+                                </button>
+                              </>
                             ) : !order.isCancelled && (
                               <>
                                 <button

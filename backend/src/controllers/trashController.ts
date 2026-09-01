@@ -11,6 +11,7 @@ import {
 import { AuditService } from '../utils/auditService';
 import logger from '../utils/logger';
 import { emitDataChange } from '../services/websocket';
+import { restoreJourneyOnFuelRecordUncancel } from '../services/journeyService';
 
 // Model map for dynamic access
 const MODELS_MAP: Record<string, any> = {
@@ -507,10 +508,7 @@ export const uncancelItem = async (req: AuthRequest, res: Response): Promise<voi
       const record = await FuelRecord.findOne({ _id: id, isCancelled: true, isDeleted: false });
       if (!record) { res.status(404).json({ success: false, message: 'Cancelled fuel record not found' }); return; }
 
-      await FuelRecord.findOneAndUpdate(
-        { _id: id },
-        { isCancelled: false, uncancelledAt: new Date(), uncancelledBy: username, $unset: { cancelledAt: '', cancelledBy: '', cancellationReason: '' } }
-      );
+      const { record: restored, affectedIds } = await restoreJourneyOnFuelRecordUncancel(id, username);
 
       await AuditService.logUpdate(
         req.user?.userId || 'system', username,
@@ -521,8 +519,13 @@ export const uncancelItem = async (req: AuthRequest, res: Response): Promise<voi
       );
 
       logger.info(`Fuel record ${id} uncancelled by ${username} via trash`);
-      res.status(200).json({ success: true, message: 'Fuel record uncancelled successfully' });
-      emitDataChange('fuel_records', 'update');
+      res.status(200).json({ success: true, message: 'Fuel record uncancelled successfully', data: restored });
+
+      const emitIds = new Set<string>([String(restored._id), ...affectedIds]);
+      for (const emitId of emitIds) {
+        const fresh = emitId === String(restored._id) ? restored : await FuelRecord.findById(emitId);
+        if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+      }
       return;
     }
 

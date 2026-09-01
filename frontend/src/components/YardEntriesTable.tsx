@@ -19,8 +19,9 @@ import {
 } from '../utils/yardJourneyLookup';
 import type { YardKey } from '../services/yardLpoFetchService';
 import type { FuelRecord } from '../types';
-import { shouldOfferPendingGoingCreate } from '../utils/pendingDo';
+import { shouldOfferPendingGoingCreate, isPendingGoingCreateMonth } from '../utils/pendingDo';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import ConfirmModal from './SuperAdmin/ConfirmModal';
 
 // ── Types exposed to the parent (LPODetailForm) ─────────────────────────────
 
@@ -143,6 +144,9 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
   const [inspectModal, setInspectModal] = useState<{ isOpen: boolean; fuelRecordId: string | number; truckNumber?: string }>({
     isOpen: false, fuelRecordId: '',
   });
+  const [pendingGoingConfirm, setPendingGoingConfirm] = useState<{
+    open: boolean; index: number; truckNo: string; loading: boolean;
+  }>({ open: false, index: -1, truckNo: '', loading: false });
 
   const accent = yard === 'darYard' ? '#16a34a' : '#1d6fc9';
 
@@ -387,7 +391,36 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
     applySelectedJourney(idx, record, row.allJourneys, type, type === 'active' ? -1 : qIdx, true);
   };
 
+  const requestCreatePendingGoingDo = (idx: number) => {
+    const truckNo = normalizeTruckInput(entries[idx]?.truckNo || '').trim();
+    if (!truckNo || truckNo.length < 4) {
+      toast.error('Enter a valid truck number first');
+      return;
+    }
+    if (!isPendingGoingCreateMonth(date)) {
+      toast.error('Pending going DOs can only be created for the current calendar month');
+      return;
+    }
+    setPendingGoingConfirm({ open: true, index: idx, truckNo, loading: false });
+  };
+
+  const confirmCreatePendingGoingDo = async () => {
+    const { index } = pendingGoingConfirm;
+    if (index < 0) return;
+    setPendingGoingConfirm((prev) => ({ ...prev, loading: true }));
+    try {
+      await handleCreatePendingDo(index);
+      setPendingGoingConfirm({ open: false, index: -1, truckNo: '', loading: false });
+    } catch {
+      setPendingGoingConfirm((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
   const handleCreatePendingDo = async (idx: number) => {
+    if (!isPendingGoingCreateMonth(date)) {
+      toast.error('Pending going DOs can only be created for the current calendar month');
+      return;
+    }
     const truckNo = normalizeTruckInput(entries[idx]?.truckNo || '').trim();
     if (!truckNo || truckNo.length < 4) {
       toast.error('Enter a valid truck number first');
@@ -400,6 +433,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
       await fetchTruck(idx, truckNo);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to create pending DO');
+      throw err;
     } finally {
       updateRow(idx, { creatingPendingDo: false });
     }
@@ -636,14 +670,14 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
           </button>
         ))}
         <span className={`text-[10px] font-semibold truncate ${toneClass}`} title={st.text}>{st.text}</span>
-        {shouldOfferPendingGoingCreate({
+        {isPendingGoingCreateMonth(date) && shouldOfferPendingGoingCreate({
           warningType: row.warningType,
           active: row.allJourneys.active,
           queued: row.allJourneys.queued,
         }) && (entries[idx]?.truckNo || '').trim().length >= 4 && (
           <button
             type="button"
-            onClick={() => handleCreatePendingDo(idx)}
+            onClick={() => requestCreatePendingGoingDo(idx)}
             disabled={disabled || row.creatingPendingDo}
             title="Create temporary PG#### going DO (queued if this truck already has an active journey)"
             className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
@@ -1151,6 +1185,23 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
           truckNumber={inspectModal.truckNumber}
         />
       )}
+
+      <div onClick={e => e.stopPropagation()}>
+        <ConfirmModal
+          open={pendingGoingConfirm.open}
+          title="Create Pending Going DO?"
+          message={`Create a temporary pending going DO (PG####) for truck ${pendingGoingConfirm.truckNo}? It will stay on the fuel record until a real going DO is linked.`}
+          variant="warning"
+          confirmLabel="Create pending going"
+          cancelLabel="Cancel"
+          loading={pendingGoingConfirm.loading}
+          onConfirm={confirmCreatePendingGoingDo}
+          onCancel={() => {
+            if (pendingGoingConfirm.loading) return;
+            setPendingGoingConfirm({ open: false, index: -1, truckNo: '', loading: false });
+          }}
+        />
+      </div>
     </div>
   );
 });
