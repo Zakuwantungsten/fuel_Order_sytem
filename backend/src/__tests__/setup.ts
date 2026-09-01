@@ -24,7 +24,10 @@ beforeAll(async () => {
   // Allow up to 2 minutes for the first-ever binary launch on this machine
   process.env.MONGOMS_STARTUP_TIMEOUT = '120000';
   mongoServer = await MongoMemoryServer.create({
-    instance: { args: ['--quiet'] },
+    instance: {
+      args: ['--quiet'],
+      launchTimeout: 120000,
+    },
   });
   const mongoUri = mongoServer.getUri();
   

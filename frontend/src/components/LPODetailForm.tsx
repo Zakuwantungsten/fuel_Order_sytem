@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight, MessageSquare, Clock, RefreshCw } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
-import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI, tangaLPOAPI, darLPOAPI } from '../services/api';
+import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI } from '../services/api';
 import YardEntriesTable from './YardEntriesTable';
 import type { YardEntriesTableHandle, YardDraftEntry } from './YardEntriesTable';
 import { isYardStation, isDarYardStation, YARD_STATION, YARD_DEFAULT_ORDER_OF } from '../utils/yardStations';
@@ -3487,12 +3487,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     return mode === 'regular';
   });
 
-  // Yard stations (Tanga Yard / Dar Yard) submit through a completely separate
-  // path: entries come from <YardEntriesTable/> (never formData.entries), the
-  // LPO is created via the regular lpoDocumentsAPI.create (skips checkpoint
-  // deduct server-side for yard stations), then any linked entries are
-  // bulk-linked to their fuel records via the tanga/dar yard API — mirrors
-  // TangaYardLPOForm's applyFuelLinks.
+  // Yard stations: create + fuel link are atomic on the server when yardLinkSelections
+  // is sent with the create payload (no separate bulk-link step).
   const handleYardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -3517,51 +3513,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
 
     const total = submission.entries.reduce((sum, entry) => sum + entry.amount, 0);
-    const submitData: Partial<LPOSummary> = {
+    const submitData = {
       ...formData,
       station: formData.station,
       orderOf: (formData.orderOf && formData.orderOf.trim()) || YARD_DEFAULT_ORDER_OF,
       entries: submission.entries as unknown as LPODetail[],
       total,
-    };
+      yardLinkSelections: submission.linkSelections,
+    } as Partial<LPOSummary> & { yardLinkSelections?: typeof submission.linkSelections };
 
     setIsSubmitting(true);
     try {
-      // Parent create closes the form; it returns the created LPO so we can
-      // bulk-link without a second fetch (and without racing unmount).
-      const createdLpo = await onSubmit(submitData);
-
-      if (submission.linkSelections.length > 0 && createdLpo) {
-        try {
-          const responseEntries = (createdLpo as any)?.entries || [];
-          const selections = submission.linkSelections
-            .map(sel => {
-              const respEntry = responseEntries[sel.index];
-              const entryId = respEntry?.id ?? respEntry?._id;
-              if (!entryId) return null;
-              return {
-                entryId: String(entryId),
-                fuelRecordId: sel.fuelRecordId,
-                topUp: sel.topUp,
-                ...(sel.dispenseLiters != null ? { dispenseLiters: sel.dispenseLiters } : {}),
-              };
-            })
-            .filter((s): s is { entryId: string; fuelRecordId: string; topUp: boolean; dispenseLiters?: number } => s != null);
-
-          if (selections.length > 0) {
-            const lpoId = String((createdLpo as any)?.id ?? (createdLpo as any)?._id ?? '');
-            const api = isDarYardStation(formData.station) ? darLPOAPI : tangaLPOAPI;
-            const linkResult = await api.bulkLink(lpoId, { selections });
-            const linked = (linkResult.results || []).filter((r: any) => r.status === 'linked' || r.status === 'topped_up').length;
-            const notFound = (linkResult.results || []).filter((r: any) => r.status === 'not_found').length;
-            if (linked > 0) toast.info(`${linked} ${linked === 1 ? 'entry' : 'entries'} linked to fuel record`);
-            if (notFound > 0) toast.warn(`${notFound} ${notFound === 1 ? 'entry' : 'entries'} could not be linked`);
-          }
-        } catch (linkErr) {
-          console.error('Yard bulk-link failed:', linkErr);
-          toast.warn('LPO created, but linking fuel records failed. Use manual link from the LPO sheet.');
-        }
-      }
+      await onSubmit(submitData);
 
       // Same as regular submit: clear in-memory state + localStorage so a pending
       // autosave debounce cannot rewrite the LPO we just created. Reopen then

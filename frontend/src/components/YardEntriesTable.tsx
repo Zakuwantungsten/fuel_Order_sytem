@@ -20,6 +20,7 @@ import {
 import type { YardKey } from '../services/yardLpoFetchService';
 import type { FuelRecord } from '../types';
 import { shouldOfferPendingGoingCreate } from '../utils/pendingDo';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 // ── Types exposed to the parent (LPODetailForm) ─────────────────────────────
 
@@ -103,6 +104,9 @@ function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
 }
 
+/** Standard T### XXX — matches regular LPODetailForm truck rows. */
+const normalizeTruckInput = (raw: string) => formatTruckNumber(raw).toUpperCase();
+
 /** Effective dispense = override or full billed liters. */
 function effectiveDispense(e: DraftEntry): number {
   return e.dispenseLiters != null ? e.dispenseLiters : e.liters;
@@ -167,6 +171,27 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
     setRows(prev => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   };
 
+  const handleTruckNoChange = (idx: number, raw: string) => {
+    const formatted = normalizeTruckInput(raw);
+    const prevFormatted = normalizeTruckInput(entries[idx]?.truckNo || '');
+    updateEntry(idx, 'truckNo', formatted);
+    // Re-fetch clears link; cosmetic spacing edits to the same truck do not.
+    if (formatted !== prevFormatted && rows[idx]?.fetched) {
+      updateRow(idx, {
+        fetched: false,
+        fuelRecord: null,
+        fuelRecordId: undefined,
+        linked: false,
+        warningType: null,
+        warningMessage: undefined,
+        allJourneys: { active: null, queued: [] },
+        selectedJourneyType: null,
+        selectedJourneyIndex: -1,
+        alreadyDispensed: 0,
+      });
+    }
+  };
+
   const applySelectedJourney = useCallback((
     idx: number,
     record: FuelRecord,
@@ -185,7 +210,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
         doNo,
         dest,
         ...(alsoSetTruck && record.truckNo
-          ? { truckNo: String(record.truckNo).toUpperCase() }
+          ? { truckNo: normalizeTruckInput(String(record.truckNo)) }
           : {}),
       };
     }));
@@ -280,8 +305,10 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
   };
 
   const fetchTruck = useCallback(async (idx: number, rawTruckNo: string) => {
-    const truckNo = rawTruckNo.trim();
+    const truckNo = normalizeTruckInput(rawTruckNo).trim();
     if (truckNo.length < 3) return;
+
+    updateEntry(idx, 'truckNo', truckNo);
 
     updateRow(idx, {
       autoFetching: true,
@@ -361,7 +388,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
   };
 
   const handleCreatePendingDo = async (idx: number) => {
-    const truckNo = (entries[idx]?.truckNo || '').trim().toUpperCase();
+    const truckNo = normalizeTruckInput(entries[idx]?.truckNo || '').trim();
     if (!truckNo || truckNo.length < 4) {
       toast.error('Enter a valid truck number first');
       return;
@@ -408,7 +435,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
 
   const handleTruckPaste = useCallback((idx: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData('text');
-    const lines = text.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+    const lines = text.split(/[\r\n]+/).map(l => normalizeTruckInput(l.trim())).filter(Boolean);
     if (lines.length <= 1) return;
     e.preventDefault();
     setEntries(prev => {
@@ -416,8 +443,8 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
       const next = [...prev];
       lines.forEach((line, i) => {
         const rowIdx = idx + i;
-        if (rowIdx < next.length) next[rowIdx] = { ...next[rowIdx], truckNo: line.toUpperCase() };
-        else next.push({ ...makeEmptyEntry(lastRate), truckNo: line.toUpperCase() });
+        if (rowIdx < next.length) next[rowIdx] = { ...next[rowIdx], truckNo: line };
+        else next.push({ ...makeEmptyEntry(lastRate), truckNo: line });
       });
       return next;
     });
@@ -494,7 +521,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
 
         return {
           doNo: e.doNo.trim() || 'NIL',
-          truckNo: e.truckNo.trim().toUpperCase(),
+          truckNo: normalizeTruckInput(e.truckNo).trim(),
           liters,
           rate: Number(e.rate) || 0,
           amount: +(liters * (Number(e.rate) || 0)).toFixed(2),
@@ -707,7 +734,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                     <input
                       type="text"
                       value={entry.truckNo}
-                      onChange={e => updateEntry(idx, 'truckNo', e.target.value.toUpperCase())}
+                      onChange={e => handleTruckNoChange(idx, e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); fetchTruck(idx, entry.truckNo); } }}
                       onPaste={e => handleTruckPaste(idx, e)}
                       placeholder="Truck"
@@ -930,7 +957,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                       <input
                         type="text"
                         value={entry.truckNo}
-                        onChange={e => updateEntry(idx, 'truckNo', e.target.value.toUpperCase())}
+                        onChange={e => handleTruckNoChange(idx, e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); fetchTruck(idx, entry.truckNo); } }}
                         onPaste={e => handleTruckPaste(idx, e)}
                         placeholder="T 000 XXX"

@@ -814,6 +814,7 @@ const LPOs = () => {
       // for the list view, so we don't need to create them separately here
       const createdLpo = await lpoDocumentsAPI.create(data);
       
+      // Close form only after create (+ atomic yard link when applicable) succeeds.
       setIsDetailFormOpen(false);
 
       // Reset month filter to current month so the newly created LPO is visible,

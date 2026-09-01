@@ -13,6 +13,7 @@ import {
   type YardFuelField,
 } from '../utils/yardStations';
 import { formatDONumber } from '../utils/doNumberFormatter';
+import { formatTruckNumber } from '../utils/formatters';
 import { ApiError } from '../middleware/errorHandler';
 
 export type YardKind = 'tanga' | 'dar';
@@ -107,7 +108,9 @@ export function normalizeYardEntriesForSummary(entries: any[]): any[] {
     ...e,
     doNo: e.doNo != null && String(e.doNo).trim() !== '' ? String(e.doNo).trim() : 'NIL',
     dest: e.dest != null && String(e.dest).trim() !== '' ? String(e.dest).trim() : '-',
-    truckNo: e.truckNo,
+    truckNo: e.truckNo != null && String(e.truckNo).trim() !== ''
+      ? formatTruckNumber(String(e.truckNo))
+      : e.truckNo,
     liters: e.liters,
     rate: e.rate,
     amount: e.amount != null ? e.amount : (e.liters || 0) * (e.rate || 0),

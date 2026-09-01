@@ -21,6 +21,7 @@ import {
 import type { TangaLPO, TangaLPOEntry, FuelRecord } from '../types';
 import { useGridNav } from '../hooks/useGridNav';
 import { shouldOfferPendingGoingCreate } from '../utils/pendingDo';
+import { formatTruckNumber } from '../utils/dataCleanup';
 
 interface Props {
   mode: 'new' | 'add-entries';
@@ -57,6 +58,8 @@ const makeEmptyRow = (): RowState => ({
 function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
 }
+
+const normalizeTruckInput = (raw: string) => formatTruckNumber(raw).toUpperCase();
 
 // Imported "Dar Yard LPO Form" design — table layout (Tanga uses a blue accent)
 const GRID_COLS = '34px 28px minmax(96px,1.4fr) minmax(104px,1.3fr) minmax(64px,1fr) minmax(48px,0.7fr) minmax(56px,0.8fr) minmax(48px,0.7fr) minmax(58px,0.9fr) minmax(72px,1.2fr) 60px';
@@ -125,9 +128,26 @@ export default function TangaYardLPOForm({
     setRows(prev => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   };
 
+  const handleTruckNoChange = (idx: number, raw: string) => {
+    const formatted = normalizeTruckInput(raw);
+    const prevFormatted = normalizeTruckInput(entries[idx]?.truckNo || '');
+    updateEntry(idx, 'truckNo', formatted);
+    if (formatted !== prevFormatted && rows[idx]?.fetched) {
+      updateRow(idx, {
+        fetched: false,
+        fuelRecord: null,
+        fuelRecordId: undefined,
+        linked: false,
+        warningType: null,
+        candidates: [],
+        alreadyDispensed: 0,
+      });
+    }
+  };
+
   const applyCandidate = useCallback((idx: number, record: FuelRecord, candidates: FuelRecord[]) => {
     const { doNo, dest } = recordDoDest(record);
-    const truckNo = (record.truckNo || '').toString().trim().toUpperCase();
+    const truckNo = record.truckNo ? normalizeTruckInput(String(record.truckNo)) : '';
     setEntries(prev => prev.map((e, i) => (i !== idx ? e : {
       ...e,
       doNo,
@@ -204,8 +224,10 @@ export default function TangaYardLPOForm({
   };
 
   const fetchTruck = useCallback(async (idx: number, rawTruckNo: string, _opts?: { openModalIfMany?: boolean }) => {
-    const truckNo = rawTruckNo.trim();
+    const truckNo = normalizeTruckInput(rawTruckNo).trim();
     if (truckNo.length < 3) return;
+
+    updateEntry(idx, 'truckNo', truckNo);
 
     updateRow(idx, {
       autoFetching: true, fetched: false, fuelRecord: null, fuelRecordId: undefined,
@@ -233,7 +255,7 @@ export default function TangaYardLPOForm({
   }, [applyCandidate]);
 
   const handleCreatePendingDo = async (idx: number) => {
-    const truckNo = (entries[idx]?.truckNo || '').trim().toUpperCase();
+    const truckNo = normalizeTruckInput(entries[idx]?.truckNo || '').trim();
     if (!truckNo || truckNo.length < 4) {
       toast.error('Enter a valid truck number first');
       return;
@@ -261,7 +283,7 @@ export default function TangaYardLPOForm({
 
   const handleTruckPaste = useCallback((idx: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData('text');
-    const lines = text.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+    const lines = text.split(/[\r\n]+/).map(l => normalizeTruckInput(l.trim())).filter(Boolean);
     if (lines.length <= 1) return;
     e.preventDefault();
     setEntries(prev => {
@@ -270,9 +292,9 @@ export default function TangaYardLPOForm({
       lines.forEach((line, i) => {
         const rowIdx = idx + i;
         if (rowIdx < next.length) {
-          next[rowIdx] = { ...next[rowIdx], truckNo: line.toUpperCase() };
+          next[rowIdx] = { ...next[rowIdx], truckNo: line };
         } else {
-          next.push({ ...makeEmptyEntry(lastRate), truckNo: line.toUpperCase() });
+          next.push({ ...makeEmptyEntry(lastRate), truckNo: line });
         }
       });
       return next;
@@ -533,23 +555,44 @@ export default function TangaYardLPOForm({
       // Manual DO/dest (never fetched) are preserved.
       const payloadEntries = validWithIdx.map(({ e, i }) => {
         const row = rows[i];
-        if (row?.linked) return e;
+        const base = { ...e, truckNo: normalizeTruckInput(e.truckNo).trim() };
+        if (row?.linked) return base;
         if (row?.fuelRecord || (row?.candidates?.length ?? 0) > 0) {
-          return { ...e, doNo: '', dest: '', dispenseLiters: null };
+          return { ...base, doNo: '', dest: '', dispenseLiters: null };
         }
-        return e;
+        return base;
       });
 
+      const linkSelections = validWithIdx
+        .map(({ e, i }, order) => {
+          const row = rows[i];
+          if (!row?.linked || row.fuelRecordId == null) return null;
+          const liters = Number(e.liters) || 0;
+          const disp =
+            e.dispenseLiters != null
+              ? Math.min(Math.max(0, Number(e.dispenseLiters) || 0), liters)
+              : liters;
+          return {
+            index: order,
+            fuelRecordId: String(row.fuelRecordId),
+            topUp: (row.alreadyDispensed ?? 0) > 0,
+            dispenseLiters: disp,
+          };
+        })
+        .filter((s): s is { index: number; fuelRecordId: string; topUp: boolean; dispenseLiters: number } => s != null);
+
       if (mode === 'new') {
-        const result = await tangaLPOAPI.create({ date, currency, notes: notes || undefined, entries: payloadEntries });
+        const result = await tangaLPOAPI.create({
+          date,
+          currency,
+          notes: notes || undefined,
+          entries: payloadEntries,
+          linkSelections: linkSelections.length > 0 ? linkSelections : undefined,
+        });
         if (result.warnings?.length) {
           result.warnings.forEach((w: string) => toast.warn(w, { autoClose: 6000 }));
         }
-        toast.success(`Tanga LPO ${result.data?.lpoNo ?? nextLpoNo} created`);
-        const lpoId = (result.data?._id ?? result.data?.id)?.toString();
-        if (lpoId) {
-          await applyFuelLinks(lpoId, result.data?.entries || [], validWithIdx);
-        }
+        toast.success(result.message || `Tanga LPO ${result.data?.lpoNo ?? nextLpoNo} created`);
         queryClient.invalidateQueries({ queryKey: tangaLPOKeys.all });
         onSuccess?.();
         onClose();
@@ -779,7 +822,7 @@ export default function TangaYardLPOForm({
                         <input
                           type="text"
                           value={entry.truckNo}
-                          onChange={e => updateEntry(idx, 'truckNo', e.target.value.toUpperCase())}
+                          onChange={e => handleTruckNoChange(idx, e.target.value)}
                           onKeyDown={e => { tangaNav.handleKeyDown(idx, 0, entries.length)(e); if (e.key === 'Enter') { e.preventDefault(); if (autoSearch) fetchTruck(idx, entry.truckNo); } }}
                           onPaste={e => handleTruckPaste(idx, e)}
                           ref={tangaNav.cellRef(idx, 0)}
@@ -1059,7 +1102,7 @@ export default function TangaYardLPOForm({
                     <input
                       type="text"
                       value={entry.truckNo}
-                      onChange={e => updateEntry(idx, 'truckNo', e.target.value.toUpperCase())}
+                      onChange={e => handleTruckNoChange(idx, e.target.value)}
                       onPaste={e => handleTruckPaste(idx, e)}
                       placeholder="Truck / Entity"
                       className="flex-1 px-2.5 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono focus:ring-1 focus:ring-blue-500"

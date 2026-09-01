@@ -36,6 +36,11 @@ import {
 } from '../utils/yardStations';
 import { normalizeYardEntriesForSummary } from '../services/yardUnifiedLpoService';
 import {
+  applyYardLinksOnSummaryCreate,
+  yardKindFromStation,
+  type YardCreateLinkSelection,
+} from '../services/yardBulkLinkService';
+import {
   buildLpoCheckpointAudit,
   commitFuelRecordAudits,
   queueFuelRecordAudit,
@@ -1196,6 +1201,11 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
     // applied later via explicit yard link (tangaYard / darYard + dispenseLiters).
     const yardStation = canonicalYardStation(data.station);
     const isYard = !!yardStation;
+    const yardLinkSelections: YardCreateLinkSelection[] | undefined =
+      isYard && Array.isArray(data.yardLinkSelections) ? data.yardLinkSelections : undefined;
+    if (yardLinkSelections) {
+      delete data.yardLinkSelections;
+    }
     if (isYard) {
       data.station = yardStation;
       if (!data.orderOf) data.orderOf = YARD_DEFAULT_ORDER_OF;
@@ -1352,6 +1362,24 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       await applyCreateDeductions(lpoSummary);
     }
 
+    // Yard stations: atomically link fuel when the client sent link selections.
+    let yardLinksApplied = 0;
+    if (isYard && yardLinkSelections?.length) {
+      const yardKind = yardKindFromStation(lpoSummary.station);
+      if (yardKind) {
+        const linkResults = await applyYardLinksOnSummaryCreate(
+          lpoSummary,
+          yardKind,
+          yardLinkSelections,
+          req.user?.username,
+        );
+        yardLinksApplied = linkResults.filter(
+          (r) => r.status === 'linked' || r.status === 'topped_up',
+        ).length;
+        lpoSummary = (await LPOSummary.findById(lpoSummary._id)) ?? lpoSummary;
+      }
+    }
+
     logger.info(`LPO document created: ${lpoSummary.lpoNo} for year ${year} by ${req.user?.username}`);
 
     await commitFuelRecordAudits(pendingFuelAudits);
@@ -1386,6 +1414,8 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       success: true,
       message: createDeductionsSkipped > 0
         ? 'LPO document created. Note: fuel-record deduct automation is disabled — adjust fuel records manually.'
+        : yardLinksApplied > 0
+        ? `LPO document created — ${yardLinksApplied} ${yardLinksApplied === 1 ? 'entry' : 'entries'} linked to fuel`
         : 'LPO document created successfully',
       data: { ...responseData, id: responseData._id },
     });
@@ -1402,7 +1432,7 @@ export const createLPOSummary = async (req: AuthRequest, res: Response): Promise
       }
     }
     // Atomic path already emitted per-record fuel updates above.
-    if (!needsAtomicDeduct) emitDataChange('fuel_records', 'update');
+    if (!needsAtomicDeduct || yardLinksApplied > 0) emitDataChange('fuel_records', 'update');
 
     createLPOCreatedNotification(lpoSummary, req.user?.username || 'system').catch(() => {});
   } catch (error: any) {

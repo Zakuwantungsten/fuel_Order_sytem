@@ -30,6 +30,12 @@ import {
   preserveYardEntryFuelFieldsOnUpdate,
   getYardMeta,
 } from '../services/yardUnifiedLpoService';
+import {
+  applyYardBulkLinksToLpo,
+  createYardLpoWithOptionalLinks,
+  type YardCreateLinkSelection,
+  type YardBulkLinkResult,
+} from '../services/yardBulkLinkService';
 import { YARD_STATION } from '../utils/yardStations';
 
 const YARD: 'tanga' = 'tanga';
@@ -293,16 +299,26 @@ export const getTangaWorkbookByYear = async (req: AuthRequest, res: Response): P
 
 export const createTangaLPO = async (req: AuthRequest, res: Response): Promise<void> => {
   const data = req.body;
+  const linkSelections = Array.isArray(data.linkSelections)
+    ? (data.linkSelections as YardCreateLinkSelection[])
+    : undefined;
 
-  const { lpo, lpoNo } = await createYardLpoOnSummary(YARD, {
-    date: data.date,
-    entries: data.entries,
-    currency: data.currency,
-    notes: data.notes,
-    total: data.total,
-    createdBy: req.user?.username || 'Unknown',
-    approvedBy: data.approvedBy,
-  });
+  const { lpo, lpoNo, linkResults } = await createYardLpoWithOptionalLinks(
+    YARD,
+    {
+      date: data.date,
+      entries: data.entries,
+      currency: data.currency,
+      notes: data.notes,
+      total: data.total,
+      createdBy: req.user?.username || 'Unknown',
+      approvedBy: data.approvedBy,
+    },
+    linkSelections,
+    req.user?.username,
+  );
+
+  const linked = linkResults.filter((r) => r.status === 'linked' || r.status === 'topped_up').length;
 
   await AuditService.log({
     userId: req.user?.userId,
@@ -310,7 +326,7 @@ export const createTangaLPO = async (req: AuthRequest, res: Response): Promise<v
     action: 'CREATE',
     resourceType: 'LPOSummary',
     resourceId: lpoNo,
-    details: `Tanga Yard LPO ${lpoNo} created on LPOSummary (${lpo.entries.length} entries) by ${req.user?.username}`,
+    details: `Tanga Yard LPO ${lpoNo} created on LPOSummary (${lpo.entries.length} entries${linked ? `, ${linked} fuel-linked` : ''}) by ${req.user?.username}`,
     ipAddress: req.ip,
     severity: 'medium',
   });
@@ -318,12 +334,16 @@ export const createTangaLPO = async (req: AuthRequest, res: Response): Promise<v
   const responseData = tagYardDoc(lpo, 'summary', YARD_STATION.TANGA);
   res.status(201).json({
     success: true,
-    message: 'Tanga LPO created successfully',
+    message: linked > 0
+      ? `Tanga LPO created — ${linked} ${linked === 1 ? 'entry' : 'entries'} linked to fuel`
+      : 'Tanga LPO created successfully',
     data: responseData,
+    linkResults,
   });
 
   emitDataChange('tanga_lpo_documents', 'create');
   emitDataChange('lpo_summaries', 'create', lpo.toObject(), YARD_STATION.TANGA);
+  if (linked > 0) emitDataChange('fuel_records', 'update');
 };
 
 export const updateTangaLPO = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -598,20 +618,8 @@ export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Pro
 
 // ── Bulk Auto-Link ─────────────────────────────────────────────────────────────
 
-type BulkLinkResult = {
-  entryId: string;
-  status: 'linked' | 'topped_up' | 'conflict' | 'not_found' | 'already_linked';
-  truckNo: string;
-  doNo: string;
-  liters: number;
-  dispenseLiters: number;
-  existingValue?: number;
-  fuelRecordId?: string;
-};
+type BulkLinkResult = YardBulkLinkResult;
 
-// One selection from the auto-link preview: the entry plus the specific fuel
-// record the user picked for it (auto-link matches many records per truck, so the
-// chosen record id is required — the server no longer re-resolves it).
 type BulkLinkSelection = {
   entryId: string;
   fuelRecordId: string;
@@ -662,60 +670,9 @@ export const bulkAutoLinkTangaEntries = async (req: AuthRequest, res: Response):
     throw new ApiError(400, 'selections or entryIds must be a non-empty array');
   }
 
-  const results: BulkLinkResult[] = [];
-  let didApply = false;
-
-  for (const sel of selections) {
-    const entryId = sel?.entryId;
-    const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
-    if (!entry || entry.isCancelled) continue;
-
-    if (sel.dispenseLiters != null && Number(sel.dispenseLiters) >= 0) {
-      entry.dispenseLiters = Number(sel.dispenseLiters);
-    }
-    const disp = dispenseAmount(entry);
-
-    if (entry.linkedFuelRecordId) {
-      results.push({ entryId, status: 'already_linked', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp });
-      continue;
-    }
-
-    const fr = sel.fuelRecordId
-      ? await FuelRecord.findOne({ _id: sel.fuelRecordId, isDeleted: false, isCancelled: { $ne: true } })
-      : null;
-    if (!fr) {
-      results.push({ entryId, status: 'not_found', truckNo: entry.truckNo, doNo: entry.doNo, liters: entry.liters, dispenseLiters: disp });
-      continue;
-    }
-
-    const existingValue: number = fr.tangaYard ?? 0;
-
-    if (existingValue > 0 && !sel.topUp) {
-      results.push({ entryId, status: 'conflict', truckNo: entry.truckNo, doNo: fr.goingDo || entry.doNo, liters: entry.liters, dispenseLiters: disp, existingValue, fuelRecordId: fr._id.toString() });
-      continue;
-    }
-
-    entry.linkedFuelRecordId = fr._id.toString();
-    if (fr.goingDo) entry.doNo = fr.goingDo;
-    if (fr.to) entry.dest = fr.to;
-    await applyTangaYardDelta(fr, disp);
-    didApply = true;
-    results.push({
-      entryId,
-      status: existingValue > 0 ? 'topped_up' : 'linked',
-      truckNo: entry.truckNo,
-      doNo: entry.doNo,
-      liters: entry.liters,
-      dispenseLiters: disp,
-      existingValue: existingValue > 0 ? existingValue : undefined,
-      fuelRecordId: fr._id.toString(),
-    });
-  }
-
-  if (didApply) {
-    lpo.markModified('entries');
-    await lpo.save();
-  }
+  const { results, didApply } = await applyYardBulkLinksToLpo(lpo, YARD, selections, {
+    username: req.user?.username,
+  });
 
   const linked = results.filter(r => r.status === 'linked' || r.status === 'topped_up').length;
   const conflicts = results.filter(r => r.status === 'conflict');
