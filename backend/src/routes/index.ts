@@ -66,6 +66,7 @@ import conditionalAccessRoutes from './conditionalAccessRoutes';
 import firewallRoutes from './firewallRoutes';
 import tangaLPORoutes from './tangaLPORoutes';
 import darLPORoutes from './darLPORoutes';
+import reconciliationRoutes from './reconciliationRoutes';
 
 const router = Router();
 
@@ -83,6 +84,7 @@ router.use(checkMaintenanceMode);
 
 router.use('/delivery-orders', deliveryOrderRoutes);
 router.use('/lpo-documents', lpoSummaryRoutes);
+router.use('/reconciliation', reconciliationRoutes);
 router.use('/fuel-records', fuelRecordRoutes);
 router.use('/resource-locks', resourceLockRoutes);
 router.use('/yard-fuel', yardFuelRoutes);

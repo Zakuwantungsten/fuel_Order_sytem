@@ -2,6 +2,12 @@
 export { User, IUserDocument } from './User';
 export { DeliveryOrder, IDeliveryOrderDocument } from './DeliveryOrder';
 export { LPOSummary, ILPOSummaryDocument } from './LPOSummary';
+export {
+  ReconciliationSession,
+  IReconciliationSession,
+  IReconciliationLine,
+  IStatementLine,
+} from './ReconciliationSession';
 export { LPOWorkbook, ILPOWorkbookDocument } from './LPOWorkbook';
 export { FuelRecord, IFuelRecordDocument } from './FuelRecord';
 export { YardFuelDispense, IYardFuelDispenseDocument } from './YardFuelDispense';

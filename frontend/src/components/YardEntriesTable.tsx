@@ -9,6 +9,7 @@ import { Plus, Trash2, Loader2, Search, Eye, CheckCircle, UserPlus } from 'lucid
 import { toast } from 'react-toastify';
 import { configAPI, fuelRecordsAPI } from '../services/api';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
+import { useGridNav } from '../hooks/useGridNav';
 import {
   fetchYardJourneysForTruck,
   fetchYardJourneyByDo,
@@ -147,6 +148,11 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
   const [pendingGoingConfirm, setPendingGoingConfirm] = useState<{
     open: boolean; index: number; truckNo: string; loading: boolean;
   }>({ open: false, index: -1, truckNo: '', loading: false });
+
+  // Desktop grid nav: 0=Truck 1=DO 2=Liters 3=Disp 4=Rate 5=Context 6=Dest
+  const _yardAddRowRef = useRef<() => void>(null!);
+  const yardNav = useGridNav(7, 6, () => _yardAddRowRef.current());
+  useEffect(() => { yardNav.flushPendingFocus(); }, [entries.length]);
 
   const accent = yard === 'darYard' ? '#16a34a' : '#1d6fc9';
 
@@ -460,6 +466,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
     setEntries(prev => [...prev, makeEmptyEntry(lastRate)]);
     setRows(prev => [...prev, makeEmptyRow()]);
   };
+  _yardAddRowRef.current = addRow;
 
   const removeRow = (idx: number) => {
     if (entries.length === 1) return;
@@ -737,28 +744,8 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                   : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
               }`}
             >
-              <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="mb-2">
                 <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">#{idx + 1}</span>
-                <div className="flex items-center gap-1">
-                  {row.fuelRecordId && (
-                    <button
-                      type="button"
-                      onClick={() => setInspectModal({ isOpen: true, fuelRecordId: row.fuelRecordId!, truckNumber: entry.truckNo })}
-                      className="p-1 text-blue-600"
-                      title="Inspect fuel record"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeRow(idx)}
-                    disabled={disabled || entries.length === 1}
-                    className="p-1 text-red-500 disabled:opacity-30"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-1.5 mb-2">
@@ -941,12 +928,44 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
               })()}
 
               {!(ok && row.linked) && (
-                <div className="flex items-center justify-end pt-2 mt-2 border-t border-gray-200 dark:border-gray-600">
+                <div className="flex items-center justify-end pt-1 mt-1">
                   <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">
                     Amt {entry.amount > 0 ? fmt(entry.amount) : '—'}
                   </span>
                 </div>
               )}
+
+              {/* Card actions — same bottom row pattern as other stations */}
+              <div className="flex items-center gap-2 pt-1.5 mt-1.5 border-t border-gray-200 dark:border-gray-600">
+                <button
+                  type="button"
+                  onClick={() => row.fuelRecordId && setInspectModal({
+                    isOpen: true,
+                    fuelRecordId: row.fuelRecordId,
+                    truckNumber: entry.truckNo,
+                  })}
+                  disabled={!row.fuelRecordId}
+                  title={row.fuelRecordId ? 'Inspect fuel record' : 'No fuel record linked'}
+                  className={`flex-1 px-3 py-1.5 text-[11px] font-medium rounded-lg inline-flex items-center justify-center gap-1 transition-colors ${
+                    row.fuelRecordId
+                      ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                      : 'text-blue-400 dark:text-blue-700 bg-blue-50/50 dark:bg-blue-900/10 opacity-40 cursor-not-allowed'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  Inspect
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeRow(idx)}
+                  disabled={disabled || entries.length === 1}
+                  title="Remove entry"
+                  className="flex-1 px-3 py-1.5 text-[11px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg inline-flex items-center justify-center gap-1 transition-colors disabled:opacity-40"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </div>
             </div>
           );
         })}
@@ -992,8 +1011,12 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                         type="text"
                         value={entry.truckNo}
                         onChange={e => handleTruckNoChange(idx, e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); fetchTruck(idx, entry.truckNo); } }}
+                        onKeyDown={e => {
+                          yardNav.handleKeyDown(idx, 0, entries.length)(e);
+                          if (e.key === 'Enter') { e.preventDefault(); fetchTruck(idx, entry.truckNo); }
+                        }}
                         onPaste={e => handleTruckPaste(idx, e)}
+                        ref={yardNav.cellRef(idx, 0)}
                         placeholder="T 000 XXX"
                         disabled={disabled}
                         className="cell-input mono min-w-0"
@@ -1018,12 +1041,14 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                       onChange={e => handleDoChange(idx, e.target.value)}
                       onPaste={e => handleDoPaste(idx, e)}
                       onKeyDown={e => {
+                        yardNav.handleKeyDown(idx, 1, entries.length)(e);
                         if (e.key === 'Enter') {
                           e.preventDefault();
                           if (doFetchTimers.current[idx]) clearTimeout(doFetchTimers.current[idx]);
                           fetchByDo(idx, entry.doNo, entry.truckNo);
                         }
                       }}
+                      ref={yardNav.cellRef(idx, 1)}
                       placeholder="DO #"
                       disabled={disabled}
                       className="cell-input mono min-w-0"
@@ -1044,6 +1069,8 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                       type="number"
                       value={entry.liters || ''}
                       onChange={e => updateEntry(idx, 'liters', parseFloat(e.target.value) || 0)}
+                      onKeyDown={yardNav.handleKeyDown(idx, 2, entries.length)}
+                      ref={yardNav.cellRef(idx, 2)}
                       placeholder="0" min={0.01} step="0.01"
                       disabled={disabled}
                       className="cell-input text-right min-w-0"
@@ -1061,6 +1088,8 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                           'dispenseLiters',
                           e.target.value === '' ? null : (parseFloat(e.target.value) || 0)
                         )}
+                        onKeyDown={yardNav.handleKeyDown(idx, 3, entries.length)}
+                        ref={yardNav.cellRef(idx, 3)}
                         placeholder={String(entry.liters || 0)}
                         min={0}
                         step="0.01"
@@ -1097,6 +1126,8 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                       type="number"
                       value={entry.rate || ''}
                       onChange={e => updateEntry(idx, 'rate', parseFloat(e.target.value) || 0)}
+                      onKeyDown={yardNav.handleKeyDown(idx, 4, entries.length)}
+                      ref={yardNav.cellRef(idx, 4)}
                       placeholder="0" min={0.01} step="0.01"
                       disabled={disabled}
                       className="cell-input text-right min-w-0"
@@ -1116,6 +1147,8 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                           type="text"
                           value={entry.context || ''}
                           onChange={e => updateEntry(idx, 'context', e.target.value || null)}
+                          onKeyDown={yardNav.handleKeyDown(idx, 5, entries.length)}
+                          ref={yardNav.cellRef(idx, 5)}
                           placeholder={contextRequired ? 'Required…' : 'Optional'}
                           disabled={disabled}
                           title={contextRequired ? 'Context is required when billed ≠ dispense' : 'Optional note for this entry'}
@@ -1133,6 +1166,8 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
                       type="text"
                       value={entry.dest}
                       onChange={e => updateEntry(idx, 'dest', e.target.value)}
+                      onKeyDown={yardNav.handleKeyDown(idx, 6, entries.length)}
+                      ref={yardNav.cellRef(idx, 6)}
                       placeholder="Dest"
                       disabled={disabled}
                       className="cell-input min-w-0"

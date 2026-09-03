@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Builder uses Alpine Chromium at runtime — skip Puppeteer's bundled Chrome download
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 # Install deps first (layer cache optimized)
 COPY package.json package-lock.json ./
 RUN npm ci

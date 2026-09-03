@@ -3477,4 +3477,494 @@ export const visaOverstayAPI = {
   },
 };
 
+export interface ReconciliationSummary {
+  totalLpoLines: number;
+  totalStatementLines: number;
+  matched: number;
+  matchedLpoLines?: number;
+  matchedStatementRows?: number;
+  pendingLpo: number;
+  pendingStatement: number;
+  exceptions: number;
+  stalePending: number;
+  literVarianceTotal: number;
+  statementTotalLiters?: number;
+  lpoTotalLiters?: number;
+  reconciledStatementLiters?: number;
+  reconciledLpoLiters?: number;
+  literDifference?: number;
+  literVarianceDetails?: Array<{
+    category: 'lpo_not_in_statement' | 'statement_not_in_lpo' | 'liter_mismatch';
+    truckNo: string;
+    station: string;
+    lpoLiters: number;
+    statementLiters: number;
+    difference: number;
+    reason: string;
+    statementRows?: string;
+    statementSn?: number;
+    lineId?: string;
+    originSessionId?: string;
+  }>;
+}
+
+export interface ReconciliationStatementRow {
+  statementLineIndex: number;
+  statementRowNumber: number;
+  sn?: number;
+  date: string;
+  station: string;
+  truckNo: string;
+  truckNoRaw?: string;
+  originalTruckNo?: string;
+  originalTruckNoRaw?: string;
+  liters: number;
+  amount?: number;
+  matchStatus: string;
+  exceptionCode?: string;
+  exceptionMessage?: string;
+  reconLineId?: string;
+  lpoLineIds: string[];
+  lpoTruckNo?: string;
+  lpoLiters?: number;
+  lpoStation?: string;
+  difference?: number;
+  selectable: boolean;
+  userDecision?: 'accept' | 'drop' | 'rectify';
+}
+
+export interface ReconciliationLine {
+  _id?: string;
+  lpoEntryId?: string;
+  lpoNo?: string;
+  lpoDate?: string;
+  lpoStation?: string;
+  lpoTruckNo?: string;
+  lpoTruckNoRaw?: string;
+  lpoLiters?: number;
+  lpoAmount?: number;
+  lpoDoNo?: string;
+  linkedLpoEntryIds?: string[];
+  source?: 'date_range' | 'pending_carry';
+  originSessionId?: string;
+  statementLineIndex?: number;
+  statementLineIndexes?: number[];
+  statementRowNumber?: number;
+  statementDate?: string;
+  statementStation?: string;
+  statementTruckNo?: string;
+  statementTruckNoRaw?: string;
+  originalStatementTruckNo?: string;
+  originalStatementTruckNoRaw?: string;
+  statementLiters?: number;
+  statementAmount?: number;
+  statementLpoNo?: string;
+  statementDoNo?: string;
+  matchType?: 'one_to_one' | 'split' | 'merge' | 'manual';
+  matchStatus: string;
+  exceptionCode?: string;
+  exceptionMessage?: string;
+  daysGap?: number;
+  userDecision?: 'accept' | 'drop' | 'rectify';
+  notes?: string;
+}
+
+export interface ReconciliationSession {
+  id?: string;
+  _id?: string;
+  sessionNo: string;
+  title?: string;
+  status: 'draft' | 'in_progress' | 'completed' | 'dropped';
+  stations: string[];
+  dateFrom: string;
+  dateTo: string;
+  pendingMode: 'none' | 'all' | 'date_range' | 'selected';
+  pendingDateFrom?: string;
+  pendingDateTo?: string;
+  selectedPendingEntryIds?: string[];
+  staleMatchThresholdDays: number;
+  statementFileName?: string;
+  statementUploadedAt?: string;
+  statementStationMappings?: Record<string, string>;
+  flaggedStatementStations?: string[];
+  lines: ReconciliationLine[];
+  summary: ReconciliationSummary;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+export interface PendingLpoEntry {
+  lpoEntryId: string;
+  lpoNo: string;
+  lpoDate: string;
+  lpoStation: string;
+  lpoTruckNo: string;
+  lpoLiters: number;
+  lpoAmount: number;
+  lpoDoNo: string;
+  source: 'pending_carry';
+  originSessionId?: string;
+  originSessionNo?: string;
+  originSessionTitle?: string;
+  originLineId?: string;
+  matchStatus?: string;
+  lpoTruckNoRaw?: string;
+  droppedAt?: string;
+  droppedBy?: string;
+}
+
+export interface StatementStationInFile {
+  statementStation: string;
+  normalized: string;
+  rowNumbers: number[];
+  lineCount: number;
+  litersTotal: number;
+  inSelectedScope: boolean;
+  isYard: boolean;
+  suggestedMatch?: string;
+}
+
+export interface StatementStationValidation {
+  selectedStations: string[];
+  lineCount: number;
+  inScopeRowCount: number;
+  outOfScopeRowCount: number;
+  yardRowCount: number;
+  unknownStations: string[];
+  stationsInFile: StatementStationInFile[];
+  allValid: boolean;
+}
+
+export interface StatementValidateResponse {
+  lineCount: number;
+  fileName: string;
+  selectedStations: string[];
+  stationValidation: StatementStationValidation;
+}
+
+export const reconciliationAPI = {
+  list: async (params?: {
+    status?: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+    stations?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+  }) => {
+    const { stations, ...rest } = params || {};
+    const response = await apiClient.get('/reconciliation', {
+      params: {
+        ...rest,
+        stations: stations?.length ? stations.join(',') : undefined,
+      },
+    });
+    return response.data as {
+      data: ReconciliationSession[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    };
+  },
+
+  get: async (id: string): Promise<ReconciliationSession> => {
+    const response = await apiClient.get(`/reconciliation/${id}`);
+    return response.data;
+  },
+
+  create: async (payload: Partial<ReconciliationSession>) => {
+    const response = await apiClient.post('/reconciliation', payload);
+    return response.data as ReconciliationSession;
+  },
+
+  update: async (id: string, payload: Partial<ReconciliationSession>) => {
+    const response = await apiClient.patch(`/reconciliation/${id}`, payload);
+    return response.data as ReconciliationSession;
+  },
+
+  loadLpo: async (id: string) => {
+    const response = await apiClient.post(`/reconciliation/${id}/load-lpo`);
+    return response.data as ReconciliationSession & { loadedLpoCount?: number };
+  },
+
+  getPending: async (params: {
+    stations: string[];
+    pendingMode?: string;
+    pendingDateFrom?: string;
+    pendingDateTo?: string;
+    excludeSessionId?: string;
+    view?: 'active' | 'dropped';
+    search?: string;
+    sortBy?: 'lpoDate' | 'lpoTruck' | 'station' | 'lpoLiters' | 'lpoNo';
+    sortDir?: 'asc' | 'desc';
+  }) => {
+    const response = await apiClient.get('/reconciliation/pending', {
+      params: {
+        stations: params.stations.join(','),
+        pendingMode: params.pendingMode,
+        pendingDateFrom: params.pendingDateFrom,
+        pendingDateTo: params.pendingDateTo,
+        excludeSessionId: params.excludeSessionId,
+        view: params.view || 'active',
+        search: params.search || undefined,
+        sortBy: params.sortBy,
+        sortDir: params.sortDir,
+      },
+    });
+    return (response.data.data || []) as PendingLpoEntry[];
+  },
+
+  getStationsInRange: async (dateFrom: string, dateTo: string): Promise<string[]> => {
+    const response = await apiClient.get('/reconciliation/stations-in-range', {
+      params: { dateFrom, dateTo },
+    });
+    return (response.data.data || []) as string[];
+  },
+
+  downloadTemplate: async (opts?: {
+    title?: string;
+    sessionNo?: string;
+  }): Promise<void> => {
+    const response = await apiClient.get('/reconciliation/template', { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    const rawName = (opts?.title || opts?.sessionNo || '').trim();
+    const safe = rawName
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .slice(0, 80);
+    const fileName = safe
+      ? `${safe}_Statement_Template.xlsx`
+      : 'Supplier_Statement_Template.xlsx';
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  uploadStatement: async (
+    id: string,
+    file: File,
+    opts?: {
+      stationMappings?: Record<string, string>;
+      flaggedStatementStations?: string[];
+      forceImport?: boolean;
+    }
+  ) => {
+    const formData = new FormData();
+    formData.append('statementFile', file);
+    if (opts?.stationMappings && Object.keys(opts.stationMappings).length > 0) {
+      formData.append('stationMappings', JSON.stringify(opts.stationMappings));
+    }
+    if (opts?.flaggedStatementStations?.length) {
+      formData.append('flaggedStatementStations', opts.flaggedStatementStations.join(','));
+    }
+    if (opts?.forceImport) {
+      formData.append('forceImport', 'true');
+    }
+    const response = await apiClient.post(`/reconciliation/${id}/upload-statement`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data as ReconciliationSession & { stationValidation?: StatementStationValidation };
+  },
+
+  validateStatement: async (id: string, file: File): Promise<StatementValidateResponse> => {
+    const formData = new FormData();
+    formData.append('statementFile', file);
+    const response = await apiClient.post(`/reconciliation/${id}/validate-statement`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data as StatementValidateResponse;
+  },
+
+  runMatch: async (id: string) => {
+    const response = await apiClient.post(`/reconciliation/${id}/match`);
+    return response.data as ReconciliationSession;
+  },
+
+  getSessionLines: async (
+    id: string,
+    params?: {
+      filter?: string;
+      search?: string;
+      truck?: string;
+      station?: string;
+      exceptionCode?: string;
+      side?: 'lpo' | 'statement' | 'all';
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      page?: number;
+      limit?: number;
+    }
+  ) => {
+    const response = await apiClient.get(`/reconciliation/${id}/lines`, { params });
+    return response.data as {
+      data: ReconciliationLine[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    };
+  },
+
+  getSessionLineFilterOptions: async (
+    id: string,
+    params?: { side?: 'lpo' | 'statement' | 'all' }
+  ) => {
+    const response = await apiClient.get(`/reconciliation/${id}/lines/filter-options`, { params });
+    return response.data as {
+      trucks: string[];
+      stations: string[];
+      exceptionCodes: Array<{ code: string; label: string; count: number }>;
+    };
+  },
+
+  getStatementRowFilterOptions: async (id: string) => {
+    const response = await apiClient.get(`/reconciliation/${id}/statement-rows/filter-options`);
+    return response.data as {
+      trucks: string[];
+      stations: string[];
+      details: Array<{ code: string; label: string; count: number }>;
+    };
+  },
+
+  getStatementRows: async (
+    id: string,
+    params?: {
+      filter?: string;
+      search?: string;
+      truck?: string;
+      station?: string;
+      detail?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      page?: number;
+      limit?: number;
+    }
+  ) => {
+    const response = await apiClient.get(`/reconciliation/${id}/statement-rows`, { params });
+    return response.data as {
+      data: ReconciliationStatementRow[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    };
+  },
+
+  getMatchCandidates: async (
+    id: string,
+    params: { side: 'lpo' | 'statement'; search?: string; limit?: number }
+  ) => {
+    const response = await apiClient.get(`/reconciliation/${id}/match-candidates`, { params });
+    return response.data as {
+      lpoLines: ReconciliationLine[];
+      statementRows: ReconciliationStatementRow[];
+    };
+  },
+
+  getVarianceDetails: async (
+    id: string,
+    params?: {
+      category?: string;
+      search?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      page?: number;
+      limit?: number;
+    }
+  ) => {
+    const response = await apiClient.get(`/reconciliation/${id}/variance-details`, { params });
+    return response.data as {
+      data: NonNullable<ReconciliationSummary['literVarianceDetails']>;
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    };
+  },
+
+  manualMatch: async (
+    id: string,
+    payload: {
+      lpoLineIds: string[];
+      statementLineIndexes: number[];
+      accept?: boolean;
+    }
+  ) => {
+    const response = await apiClient.post(`/reconciliation/${id}/manual-match`, payload);
+    return response.data as ReconciliationSession;
+  },
+
+  updateLine: async (
+    id: string,
+    lineId: string,
+    payload: {
+      userDecision?: 'accept' | 'drop' | 'rectify';
+      statementTruckNo?: string;
+      lpoTruckNo?: string;
+      statementLiters?: number;
+      statementStation?: string;
+      notes?: string;
+      rematch?: boolean;
+      reopen?: boolean;
+    }
+  ) => {
+    const response = await apiClient.patch(`/reconciliation/${id}/lines/${lineId}`, payload);
+    return response.data as ReconciliationSession & {
+      rematchOutcome?: {
+        matched: boolean;
+        matchStatus?: string;
+        exceptionCode?: string;
+        exceptionMessage?: string;
+        lineId?: string;
+      };
+    };
+  },
+
+  reopen: async (id: string) => {
+    const response = await apiClient.post(`/reconciliation/${id}/reopen`);
+    return response.data as ReconciliationSession;
+  },
+
+  addStations: async (id: string, stations: string[]) => {
+    const response = await apiClient.post(`/reconciliation/${id}/add-stations`, { stations });
+    return response.data as ReconciliationSession;
+  },
+
+  updateSessionStations: async (
+    id: string,
+    payload: { stations: string[]; dateFrom?: string; dateTo?: string }
+  ) => {
+    const response = await apiClient.post(`/reconciliation/${id}/update-stations`, payload);
+    return response.data as ReconciliationSession;
+  },
+
+  saveDraft: async (id: string, payload?: { title?: string }) => {
+    const response = await apiClient.post(`/reconciliation/${id}/save-draft`, payload || {});
+    return response.data as ReconciliationSession;
+  },
+
+  complete: async (id: string) => {
+    const response = await apiClient.post(`/reconciliation/${id}/complete`);
+    return response.data as ReconciliationSession;
+  },
+
+  drop: async (id: string) => {
+    const response = await apiClient.post(`/reconciliation/${id}/drop`);
+    return response.data as ReconciliationSession;
+  },
+
+  exportReport: async (id: string, sessionNo: string): Promise<void> => {
+    const response = await apiClient.get(`/reconciliation/${id}/export`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${sessionNo}_Reconciliation_Report.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  delete: async (id: string) => {
+    await apiClient.delete(`/reconciliation/${id}`);
+  },
+};
+
 export default apiClient;

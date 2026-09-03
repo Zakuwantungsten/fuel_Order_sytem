@@ -38,6 +38,8 @@
     "dr:list": "ts-node --transpile-only src/scripts/restoreFromR2.ts --list",
     "dr:restore": "ts-node --transpile-only src/scripts/restoreFromR2.ts",
     "dr:restore:local": "ts-node --transpile-only src/scripts/restoreFromR2.ts --latest --target-uri mongodb://localhost:27017/fuel-order",
+    "dr:restore:docker": "ts-node --transpile-only src/scripts/restoreToDockerMongo.ts --latest",
+    "dr:restore:docker:b2": "ts-node --transpile-only src/scripts/restoreToDockerMongo.ts --latest --secondary",
     "dr:dry-run": "ts-node --transpile-only src/scripts/restoreFromR2.ts --latest --dry-run",
     "dr:drill": "ts-node --transpile-only src/scripts/drDrill.ts",
     "dr:sync": "ts-node --transpile-only src/scripts/syncBackupCatalog.ts",

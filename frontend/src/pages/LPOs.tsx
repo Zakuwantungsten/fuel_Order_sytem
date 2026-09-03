@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2, Truck } from 'lucide-react';
+import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2, Truck, Scale } from 'lucide-react';
 import { useRealtimeSync, isOwnDataChange } from '../hooks/useRealtimeSync';
 import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
 import { NewRecordsPill } from '../components/NewRecordsPill';
@@ -18,6 +18,7 @@ import DarLPOWorkbook from '../components/DarLPOWorkbook';
 import LPOSummaryComponent from '../components/LPOSummary';
 import DriverAccountWorkbook from '../components/DriverAccountWorkbook';
 import ReferWorkbook from '../components/ReferWorkbook';
+import ReconciliationTab from '../components/ReconciliationTab';
 import { PermissionGuard } from '../components/ProtectedRoute';
 import { RESOURCES, ACTIONS } from '../utils/permissions';
 import { copyLPOImageToClipboard, downloadLPOImage, preloadLPOImageGenerator, isLPOMultiPage } from '../utils/lpoImageGenerator';
@@ -111,7 +112,7 @@ const LPOs = () => {
 
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [_searchParams] = useSearchParams();
-  const VIEW_MODES = ['list', 'workbook', 'summary', 'driver_account', 'refer', 'yard'] as const;
+  const VIEW_MODES = ['list', 'workbook', 'summary', 'reconciliation', 'driver_account', 'refer', 'yard'] as const;
   type ViewMode = typeof VIEW_MODES[number];
   const [viewMode, setViewMode] = usePersistedState<ViewMode>('lpo:viewMode', 'list');
   const [selectedWorkbookId, setSelectedWorkbookId] = usePersistedState<string | number | null>('lpo:selectedWorkbookId', null);
@@ -1078,6 +1079,66 @@ const LPOs = () => {
     );
   }
 
+  // Show reconciliation view if selected
+  if (viewMode === 'reconciliation') {
+    return (
+      <div>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Local Purchase Orders (LPOs)</h1>
+          </div>
+          <div className="mt-4 sm:mt-0">
+            <div className="inline-flex rounded-md shadow-sm overflow-hidden">
+              <button
+                onClick={() => setViewMode('list')}
+                className="px-2.5 py-1.5 text-sm font-medium rounded-l-md border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <List className="w-4 h-4 mr-1 inline" />
+                List
+              </button>
+              <button
+                onClick={() => setViewMode('summary' as ViewMode)}
+                className="px-2.5 py-1.5 text-sm font-medium border-t border-b bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <BarChart3 className="w-4 h-4 mr-1 inline" />
+                Summary
+              </button>
+              <button
+                onClick={() => setViewMode('reconciliation')}
+                className="px-2.5 py-1.5 text-sm font-medium border-t border-b bg-indigo-600 text-white border-indigo-600"
+              >
+                <Scale className="w-4 h-4 mr-1 inline" />
+                Reconcile
+              </button>
+              <button
+                onClick={() => setViewMode('workbook')}
+                className="px-2.5 py-1.5 text-sm font-medium border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <Grid className="w-4 h-4 mr-1 inline" />
+                Workbook
+              </button>
+              <button
+                onClick={() => setViewMode('driver_account')}
+                className="px-2.5 py-1.5 text-sm font-medium border-t border-b bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <Wallet className="w-4 h-4 mr-1 inline" />
+                Driver Acc
+              </button>
+              <button
+                onClick={() => setViewMode('refer')}
+                className="px-2.5 py-1.5 text-sm font-medium rounded-r-md border bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                <Truck className="w-4 h-4 mr-1 inline" />
+                Reefer
+              </button>
+            </div>
+          </div>
+        </div>
+        <ReconciliationTab />
+      </div>
+    );
+  }
+
   // Show refer workbook view if selected
   if (viewMode === 'refer') {
     return (
@@ -1287,6 +1348,17 @@ const LPOs = () => {
             >
               <BarChart3 className="w-4 h-4 mr-1 inline" />
               Summary
+            </button>
+            <button
+              onClick={() => setViewMode('reconciliation')}
+              className={`px-2.5 py-1.5 text-sm font-medium border-t border-b ${
+                (viewMode as ViewMode) === 'reconciliation'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+              }`}
+            >
+              <Scale className="w-4 h-4 mr-1 inline" />
+              Reconcile
             </button>
             <button
               onClick={() => setViewMode('workbook')}

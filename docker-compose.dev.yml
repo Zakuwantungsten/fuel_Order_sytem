@@ -4,6 +4,13 @@
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 #
+# Restore production backup into the Docker DB (from backend/):
+#   npm run dr:restore:docker
+#   npm run dr:restore:docker -- --secondary
+#
+# Compass / host tools connect on port 27018 (see docker-compose.dev.yml).
+# The backend container uses mongodb://mongo:27017/fuel-order-dev internally.
+#
 # This file EXTENDS docker-compose.yml — don't run it alone.
 
 services:
@@ -12,7 +19,8 @@ services:
   mongo:
     image: mongo:7
     ports:
-      - "27017:27017"
+      # 27018 on host avoids conflict with a local Windows MongoDB on 27017
+      - "27018:27017"
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped

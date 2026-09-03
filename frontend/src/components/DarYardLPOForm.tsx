@@ -1113,24 +1113,14 @@ export default function DarYardLPOForm({
 
               return (
                 <div key={idx} className={`bg-white dark:bg-gray-700 border rounded-xl p-3 ${borderCls} ${isSelected ? 'ring-1 ring-green-400 dark:ring-green-600' : ''}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectRow(idx)}
-                        className="w-4 h-4 accent-green-600"
-                      />
-                      <span className="text-xs font-bold text-gray-400 font-mono">#{String(idx + 1).padStart(2, '0')}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeRow(idx)}
-                      disabled={entries.length === 1}
-                      className="p-1 text-gray-400 hover:text-red-500 disabled:opacity-30 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelectRow(idx)}
+                      className="w-4 h-4 accent-green-600"
+                    />
+                    <span className="text-xs font-bold text-gray-400 font-mono">#{String(idx + 1).padStart(2, '0')}</span>
                   </div>
 
                   {/* Truck / Entity + Fetch */}
@@ -1157,25 +1147,11 @@ export default function DarYardLPOForm({
                   {/* Fetch result */}
                   {row.fetched && !row.warningType && row.fuelRecord && (
                     <div className="flex flex-col gap-1.5 mb-2 px-2.5 py-1.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-                          <span className="text-[11px] font-semibold text-green-700 dark:text-green-400">
-                            Dar Yard: {row.alreadyDispensed}L · Bal: {row.fuelRecord.balance}L
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          title="Inspect fuel record"
-                          onClick={() => setInspectModal({
-                            isOpen: true,
-                            fuelRecordId: row.fuelRecordId!,
-                            truckNumber: entry.truckNo,
-                          })}
-                          className="p-0.5 text-gray-400 hover:text-green-600 transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                        <span className="text-[11px] font-semibold text-green-700 dark:text-green-400">
+                          Dar Yard: {row.alreadyDispensed}L · Bal: {row.fuelRecord.balance}L
+                        </span>
                       </div>
                       {row.candidates.length > 1 && (
                         <div className="flex items-center gap-1 flex-wrap">
@@ -1338,6 +1314,38 @@ export default function DarYardLPOForm({
                         {entry.amount > 0 ? fmt(entry.amount) : <span className="text-gray-300 dark:text-gray-600">—</span>}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Card actions — same bottom row pattern as other stations */}
+                  <div className="flex items-center gap-2 pt-1.5 mt-2 border-t border-gray-200 dark:border-gray-600">
+                    <button
+                      type="button"
+                      onClick={() => row.fuelRecordId && setInspectModal({
+                        isOpen: true,
+                        fuelRecordId: row.fuelRecordId,
+                        truckNumber: entry.truckNo,
+                      })}
+                      disabled={!row.fuelRecordId}
+                      title={row.fuelRecordId ? 'Inspect fuel record' : 'No fuel record linked'}
+                      className={`flex-1 px-3 py-1.5 text-[11px] font-medium rounded-lg inline-flex items-center justify-center gap-1 transition-colors ${
+                        row.fuelRecordId
+                          ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                          : 'text-blue-400 dark:text-blue-700 bg-blue-50/50 dark:bg-blue-900/10 opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      Inspect
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeRow(idx)}
+                      disabled={entries.length === 1}
+                      title="Remove entry"
+                      className="flex-1 px-3 py-1.5 text-[11px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg inline-flex items-center justify-center gap-1 transition-colors disabled:opacity-40"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
                   </div>
                 </div>
               );

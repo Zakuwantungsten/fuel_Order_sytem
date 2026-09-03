@@ -184,6 +184,15 @@ export async function getAllLPOEntries(options: ExportOptions = {}): Promise<any
           cancelledAt: '$entries.cancelledAt',
           isDriverAccount: { $ifNull: ['$entries.isDriverAccount', false] },
           isRefer: { $ifNull: ['$entries.isRefer', false] },
+          isCustomStation: {
+            $or: [
+              { $eq: [{ $ifNull: ['$entries.isCustomStation', false] }, true] },
+              { $eq: [{ $toUpper: '$station' }, 'CUSTOM'] },
+            ],
+          },
+          customStationName: {
+            $ifNull: ['$entries.customStationName', '$customStationName'],
+          },
           originalLtrs: '$entries.originalLiters',
           amendedAt: '$entries.amendedAt',
           createdAt: 1,
