@@ -3296,7 +3296,7 @@ function ReconciliationTab() {
           onClick={() => switchSubTab('sessions')}
           className={`px-4 py-2 text-sm font-medium inline-flex items-center gap-1.5 ${
             subTab === 'sessions'
-              ? 'bg-primary-600 text-white'
+              ? 'bg-blue-600 text-white'
               : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
           }`}
         >
@@ -3307,7 +3307,7 @@ function ReconciliationTab() {
           onClick={() => switchSubTab('pending')}
           className={`px-4 py-2 text-sm font-medium inline-flex items-center gap-1.5 border-l dark:border-gray-600 ${
             subTab === 'pending'
-              ? 'bg-primary-600 text-white'
+              ? 'bg-blue-600 text-white'
               : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
           }`}
         >
@@ -3323,7 +3323,7 @@ function ReconciliationTab() {
           onClick={() => switchSubTab('dropped')}
           className={`px-4 py-2 text-sm font-medium inline-flex items-center gap-1.5 border-l dark:border-gray-600 ${
             subTab === 'dropped'
-              ? 'bg-primary-600 text-white'
+              ? 'bg-blue-600 text-white'
               : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
           }`}
         >
