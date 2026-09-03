@@ -1105,7 +1105,7 @@ const LPOs = () => {
               </button>
               <button
                 onClick={() => setViewMode('reconciliation')}
-                className="px-2.5 py-1.5 text-sm font-medium border-t border-b bg-indigo-600 text-white border-indigo-600"
+                className="px-2.5 py-1.5 text-sm font-medium border-t border-b bg-primary-600 text-white border-primary-600"
               >
                 <Scale className="w-4 h-4 mr-1 inline" />
                 Reconcile
@@ -1353,7 +1353,7 @@ const LPOs = () => {
               onClick={() => setViewMode('reconciliation')}
               className={`px-2.5 py-1.5 text-sm font-medium border-t border-b ${
                 (viewMode as ViewMode) === 'reconciliation'
-                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  ? 'bg-primary-600 text-white border-primary-600'
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
