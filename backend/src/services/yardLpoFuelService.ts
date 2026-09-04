@@ -108,3 +108,86 @@ export async function applyAmendYardDispense(
   await applyYardFieldDelta(fuelRecord, field, delta);
   return delta;
 }
+
+/** Clear linkage and reverse dispensed liters from the yard column. Row stays active. */
+export async function unlinkYardEntryFuel(
+  entry: any,
+  field: YardFuelField,
+  username = 'yard-system'
+): Promise<{ reversedLiters: number; oldFuelRecordId: string }> {
+  const oldFuelRecordId = String(entry.linkedFuelRecordId || '');
+  if (!oldFuelRecordId) {
+    throw new Error('Entry is not linked');
+  }
+  const reversedLiters = dispenseAmount(entry);
+  const fr = await FuelRecord.findById(oldFuelRecordId);
+  if (fr && reversedLiters > 0) {
+    await applyYardFieldDelta(fr, field, -reversedLiters, username);
+  }
+  entry.linkedFuelRecordId = '';
+  return { reversedLiters, oldFuelRecordId };
+}
+
+/**
+ * Linked DO/truck change: reverse dispense on the old fuel record, then add it on a
+ * matching new journey (or leave the row unlinked if none is found).
+ */
+export async function moveYardEntryLink(
+  entry: any,
+  field: YardFuelField,
+  newDoNo: string,
+  newTruckNo: string,
+  username = 'yard-system'
+): Promise<{
+  status: 'moved' | 'unlinked' | 'same';
+  dispenseLiters: number;
+  oldFuelRecordId: string;
+  newFuelRecordId?: string;
+}> {
+  const oldFuelRecordId = String(entry.linkedFuelRecordId || '');
+  if (!oldFuelRecordId) {
+    throw new Error('Entry is not linked');
+  }
+
+  const doNo = String(newDoNo || '').trim();
+  const truckNo = String(newTruckNo || '').trim();
+  if (!truckNo) {
+    throw new Error('Truck number is required');
+  }
+
+  const dispense = dispenseAmount(entry);
+  const oldFr = await FuelRecord.findById(oldFuelRecordId);
+  if (oldFr && dispense > 0) {
+    await applyYardFieldDelta(oldFr, field, -dispense, username);
+  }
+
+  entry.doNo = doNo;
+  entry.truckNo = truckNo;
+
+  const doUp = doNo.toUpperCase();
+  const isSpecial = !doNo || doUp === 'NIL' || doUp === 'N/A' || doUp === 'PENDING';
+  if (isSpecial) {
+    entry.linkedFuelRecordId = '';
+    return { status: 'unlinked', dispenseLiters: dispense, oldFuelRecordId };
+  }
+
+  const newFr = await findLinkedFuelRecord(doNo, truckNo);
+  if (!newFr) {
+    entry.linkedFuelRecordId = '';
+    return { status: 'unlinked', dispenseLiters: dispense, oldFuelRecordId };
+  }
+
+  const newId = String(newFr._id);
+  if (dispense > 0) {
+    await applyYardFieldDelta(newFr, field, dispense, username);
+  }
+  entry.linkedFuelRecordId = newId;
+  if (newFr.to) entry.dest = newFr.to;
+
+  return {
+    status: newId === oldFuelRecordId ? 'same' : 'moved',
+    dispenseLiters: dispense,
+    oldFuelRecordId,
+    newFuelRecordId: newId,
+  };
+}

@@ -541,6 +541,7 @@ export const getReportStats = async (req: AuthRequest, res: Response): Promise<v
       active: fuelRecords.filter(r => r.journeyStatus === 'active').length,
       queued: fuelRecords.filter(r => r.journeyStatus === 'queued').length,
       completed: fuelRecords.filter(r => r.journeyStatus === 'completed').length,
+      suspended: fuelRecords.filter(r => r.journeyStatus === 'suspended').length,
     };
 
     // Calculate on-time delivery (estimate based on completed journeys)
@@ -695,9 +696,12 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     // Calculate specific date ranges for each chart type
     const now = new Date();
     
-    // For LPO charts: Last 1 month
+    // For LPO charts: Last 1 month (kept for legacy stationDistribution totals)
     const lpoStartDate = new Date();
     lpoStartDate.setMonth(now.getMonth() - 1);
+
+    // Station LPO line chart: current calendar year (Jan 1 → today)
+    const stationTrendStart = new Date(now.getFullYear(), 0, 1);
 
     // For LPO sparkline: Last 6 months
     const lpoTrendsStartDate = new Date();
@@ -711,7 +715,7 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     const fuelStartDate = new Date();
     fuelStartDate.setMonth(now.getMonth() - 12);
 
-    const [fuelRecords, deliveryOrders, lpoEntries, activeStations, lpoTrendDocs] = await Promise.all([
+    const [fuelRecords, deliveryOrders, lpoEntries, stationTrendEntries, activeStations, lpoTrendDocs, liveJourneyCounts] = await Promise.all([
       FuelRecord.find({
         isDeleted: false,
         isCancelled: { $ne: true },
@@ -735,6 +739,17 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
         { $unwind: '$entries' },
         { $project: { _id: 0, date: 1, ltrs: '$entries.liters', dieselAt: '$station' } },
       ]),
+      // Full-year station litres for the multi-line Station LPO Distribution chart
+      LPOSummary.aggregate([
+        {
+          $match: {
+            isDeleted: false,
+            date: { $gte: toDateStr(stationTrendStart), $lte: toDateStr(now) },
+          },
+        },
+        { $unwind: '$entries' },
+        { $project: { _id: 0, date: 1, ltrs: '$entries.liters', dieselAt: '$station' } },
+      ]),
       // Current fuel price per litre for every active station (for the dashboard price chart)
       FuelStationConfig.find({ isActive: true })
         .select('stationName defaultRate currency')
@@ -750,6 +765,17 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
         },
         { $unwind: '$entries' },
         { $project: { _id: 0, date: 1 } },
+      ]),
+      // Live Active / Queued / Suspended counts (not limited to the fuel chart date window)
+      FuelRecord.aggregate([
+        {
+          $match: {
+            isDeleted: false,
+            isCancelled: { $ne: true },
+            journeyStatus: { $in: ['active', 'queued', 'suspended'] },
+          },
+        },
+        { $group: { _id: '$journeyStatus', count: { $sum: 1 } } },
       ]),
     ]);
 
@@ -794,7 +820,7 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
     const lpoTrends = Object.entries(lpoTrendsData)
       .map(([month, count]) => ({ month, count }));
 
-    // Station distribution
+    // Station distribution (last 1 month totals — legacy / fallback)
     const stationData: any = {};
     lpoEntries.forEach((lpo) => {
       const station = lpo.dieselAt || 'Unknown';
@@ -806,21 +832,85 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
       .sort((a: any, b: any) => b.value - a.value)
       .slice(0, 6);
 
-    // Journey status
-    const journeyStatus = [
-      { 
-        name: 'Active', 
-        value: fuelRecords.filter(f => f.journeyStatus === 'active').length 
-      },
-      { 
-        name: 'Completed', 
-        value: fuelRecords.filter(f => f.journeyStatus === 'completed').length 
-      },
-      { 
-        name: 'Queued', 
-        value: fuelRecords.filter(f => f.journeyStatus === 'queued').length 
+    // Station LPO multi-line trend (current year): top stations by volume, monthly + daily series
+    const stationTotals: Record<string, number> = {};
+    const monthlyByStation: Record<string, Record<string, number>> = {};
+    const dailyByStation: Record<string, Record<string, number>> = {};
+    const monthStartThis = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    for (const row of stationTrendEntries as any[]) {
+      const station = String(row.dieselAt || 'Unknown').trim() || 'Unknown';
+      const liters = Number(row.ltrs) || 0;
+      if (!liters) continue;
+      const d = row.date && !isNaN(new Date(row.date).getTime()) ? new Date(row.date) : null;
+      if (!d) continue;
+
+      stationTotals[station] = (stationTotals[station] || 0) + liters;
+
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyByStation[monthKey]) monthlyByStation[monthKey] = {};
+      monthlyByStation[monthKey][station] = (monthlyByStation[monthKey][station] || 0) + liters;
+
+      if (d >= monthStartThis) {
+        const dayKey = toDateStr(d);
+        if (!dailyByStation[dayKey]) dailyByStation[dayKey] = {};
+        dailyByStation[dayKey][station] = (dailyByStation[dayKey][station] || 0) + liters;
       }
-    ].filter(item => item.value > 0);
+    }
+
+    const topStations = Object.entries(stationTotals)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name]) => name);
+
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const stationLpoMonthly: Array<Record<string, string | number>> = [];
+    for (let m = 0; m <= now.getMonth(); m++) {
+      const monthKey = `${now.getFullYear()}-${String(m + 1).padStart(2, '0')}`;
+      const point: Record<string, string | number> = {
+        key: monthKey,
+        label: monthLabels[m],
+      };
+      for (const station of topStations) {
+        point[station] = Math.round(monthlyByStation[monthKey]?.[station] || 0);
+      }
+      stationLpoMonthly.push(point);
+    }
+
+    const stationLpoDaily: Array<Record<string, string | number>> = [];
+    const daysInMonth = now.getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), day);
+      const dayKey = toDateStr(d);
+      const point: Record<string, string | number> = {
+        key: dayKey,
+        label: String(day),
+      };
+      for (const station of topStations) {
+        point[station] = Math.round(dailyByStation[dayKey]?.[station] || 0);
+      }
+      stationLpoDaily.push(point);
+    }
+
+    const stationLpoTrend = {
+      year: now.getFullYear(),
+      stations: topStations,
+      monthly: stationLpoMonthly,
+      daily: stationLpoDaily,
+    };
+
+    // Journey status — live Active/Queued/Suspended; Completed from the fuel chart window.
+    // Always include Suspended so the overview tile is visible even at 0.
+    const liveByStatus: Record<string, number> = {};
+    for (const row of liveJourneyCounts as Array<{ _id: string; count: number }>) {
+      liveByStatus[row._id] = row.count || 0;
+    }
+    const journeyStatus = [
+      { name: 'Active', value: liveByStatus.active || 0 },
+      { name: 'Completed', value: fuelRecords.filter(f => f.journeyStatus === 'completed').length },
+      { name: 'Queued', value: liveByStatus.queued || 0 },
+      { name: 'Suspended', value: liveByStatus.suspended || 0 },
+    ].filter(item => item.name === 'Suspended' || item.value > 0);
 
     // Fuel price per litre — one entry per active station, with its currency.
     // Stations are priced in different currencies (USD for Zambia, TZS for
@@ -912,6 +1002,7 @@ export const getChartData = async (req: AuthRequest, res: Response): Promise<voi
       lpoTrends,
       tonnageTrends,
       stationDistribution,
+      stationLpoTrend,
       journeyStatus,
       stationPrices,
       fuelPriceTrend,

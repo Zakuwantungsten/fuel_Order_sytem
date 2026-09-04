@@ -68,6 +68,16 @@ router.post('/manual-link',
   asyncHandler(tangaLPOController.manualLinkTangaEntry)
 );
 
+router.post('/unlink-entry',
+  authorize(...WRITE_ROLES),
+  asyncHandler(tangaLPOController.unlinkTangaEntry)
+);
+
+router.post('/relink-identity',
+  authorize(...WRITE_ROLES),
+  asyncHandler(tangaLPOController.relinkTangaEntryIdentity)
+);
+
 router.post('/preview-manual-link',
   authorize(...WRITE_ROLES),
   asyncHandler(tangaLPOController.previewManualLinkTangaEntry)

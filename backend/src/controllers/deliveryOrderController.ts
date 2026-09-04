@@ -5360,6 +5360,7 @@ const findExportLinkCandidates = async (truckNo: string): Promise<any[]> => {
     truckNo: { $regex: new RegExp(pattern, 'i') },
     isDeleted: false,
     isCancelled: { $ne: true },
+    journeyStatus: { $ne: 'suspended' },
     $and: [returnDoOpenFilter()],
   })
     .sort({ date: -1 })
@@ -5484,6 +5485,9 @@ export const confirmExportLink = async (req: AuthRequest, res: Response): Promis
     });
     if (!fuelRecord) {
       throw new ApiError(404, 'Selected fuel record not found or is cancelled');
+    }
+    if (fuelRecord.journeyStatus === 'suspended') {
+      throw new ApiError(409, 'Cannot link EXPORT to a suspended fuel journey — unsuspend it first');
     }
     if (fuelRecord.returnDo && String(fuelRecord.returnDo).trim() !== '' && !isReturnDoOpen(fuelRecord.returnDo, fuelRecord.isPendingReturn)) {
       throw new ApiError(400, `Selected fuel record already has a return DO (${fuelRecord.returnDo})`);

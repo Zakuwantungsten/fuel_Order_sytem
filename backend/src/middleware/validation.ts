@@ -345,7 +345,7 @@ export const fuelRecordValidation = {
     body('to').optional().isString().trim(),
     body('totalLts').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Total liters must be a non-negative number'),
     body('extra').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Extra fuel must be a non-negative number'),
-    body('journeyStatus').optional().isIn(['queued', 'active', 'completed', 'cancelled']).withMessage('Invalid journey status'),
+    body('journeyStatus').optional().isIn(['queued', 'active', 'completed', 'cancelled', 'suspended']).withMessage('Invalid journey status'),
     body('queueOrder').optional().isInt({ min: 1 }).withMessage('Queue order must be a positive integer'),
     body('mmsaYard').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('MMSA yard fuel must be non-negative'),
     body('tangaYard').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Tanga yard fuel must be non-negative'),

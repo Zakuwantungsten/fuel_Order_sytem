@@ -512,7 +512,7 @@ export interface ILPOWorkbook {
 }
 
 // Fuel Record Types
-export type JourneyStatus = 'queued' | 'active' | 'completed' | 'cancelled';
+export type JourneyStatus = 'queued' | 'active' | 'completed' | 'cancelled' | 'suspended';
 
 export interface IFuelRecord {
   date: string;
@@ -538,6 +538,11 @@ export interface IFuelRecord {
   cancelledFromJourneyStatus?: 'active' | 'queued';
   cancelledFromQueueOrder?: number;
   cancelPromotedSuccessorId?: string;
+  suspendedFromJourneyStatus?: 'active' | 'queued';
+  suspendedFromQueueOrder?: number;
+  suspendPromotedSuccessorId?: string;
+  suspendedAt?: Date;
+  suspendedBy?: string;
   estimatedStartDate?: string;
   previousJourneyId?: string;
   // Lock status for pending configurations

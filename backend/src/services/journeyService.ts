@@ -9,6 +9,8 @@
  *     darYard / darGoing / moroGoing) is filled on a queued journey. Filling those
  *     origin-leg columns means the truck has physically begun that new trip.
  *   - Cancelling an active journey completes it and promotes the next queued (FIFO).
+ *   - Suspending an active journey marks it suspended and promotes the next queued (FIFO);
+ *     suspending a queued journey removes it from the queue. Unsuspend restores prior state.
  *   - Manually marking an active journey complete (without cancelling) does the same
  *     promote/renumber, and can be undone if it was a mistake.
  *   - Changing truckNo on a live journey re-places it on the target truck (append
@@ -1010,6 +1012,199 @@ export async function restoreJourneyOnFuelRecordUncancel(
 
   await emitFuelRecordUpdates(affectedIds);
   return { record, affectedIds: [...affectedIds] };
+}
+
+export interface SuspendJourneyResult {
+  record: any;
+  affectedIds: string[];
+  promotedId: string | null;
+}
+
+/**
+ * Suspend an active or queued journey.
+ * Active: mark suspended and promote next queued (like cancel, without isCancelled).
+ * Queued: mark suspended and renumber remaining queue.
+ * Stores snapshots so unsuspend can restore.
+ */
+export async function suspendJourney(
+  recordId: string,
+  username: string
+): Promise<SuspendJourneyResult> {
+  const affectedIds = new Set<string>([recordId]);
+  let promotedId: string | null = null;
+
+  await runWithOptionalTransaction(async (session) => {
+    const record = await FuelRecord.findById(recordId).session(sessionQuery(session));
+    if (!record || record.isDeleted) {
+      throw new ApiError(404, 'Fuel record not found');
+    }
+    if (record.isCancelled) {
+      throw new ApiError(409, 'Cannot suspend a cancelled fuel record');
+    }
+    if (record.journeyStatus === 'suspended') {
+      throw new ApiError(409, 'Fuel record is already suspended');
+    }
+    if (record.journeyStatus !== 'active' && record.journeyStatus !== 'queued') {
+      throw new ApiError(409, 'Only active or queued journeys can be suspended');
+    }
+
+    const truckNo = record.truckNo;
+    const wasActive = record.journeyStatus === 'active';
+    const wasQueued = record.journeyStatus === 'queued';
+
+    record.suspendedFromJourneyStatus = wasActive ? 'active' : 'queued';
+    if (wasQueued && record.queueOrder != null) {
+      record.suspendedFromQueueOrder = record.queueOrder;
+    } else {
+      record.suspendedFromQueueOrder = undefined;
+    }
+    record.suspendPromotedSuccessorId = undefined;
+    record.journeyStatus = 'suspended';
+    record.suspendedAt = new Date();
+    record.suspendedBy = username;
+    record.queueOrder = undefined;
+    await record.save(sessionWrite(session));
+
+    if (wasActive) {
+      const stillActive = await FuelRecord.findOne(activeJourneyFilter(truckNo, recordId)).session(
+        sessionQuery(session)
+      );
+      if (!stillActive) {
+        promotedId = await promoteNextQueuedJourney(truckNo, username, session);
+        if (promotedId) {
+          affectedIds.add(promotedId);
+          record.suspendPromotedSuccessorId = promotedId;
+          await record.save(sessionWrite(session));
+        }
+      }
+    }
+
+    for (const id of await renumberQueuedJourneys(truckNo, session)) {
+      affectedIds.add(id);
+    }
+
+    logger.info(
+      `Journey ${record.goingDo} (truck ${truckNo}) suspended from ${wasActive ? 'active' : 'queued'} by ${username}` +
+        (promotedId ? `; promoted successor ${promotedId}` : '')
+    );
+  });
+
+  const record = await FuelRecord.findById(recordId);
+  if (!record) throw new ApiError(404, 'Fuel record not found');
+
+  await emitFuelRecordUpdates(affectedIds);
+  return { record, affectedIds: [...affectedIds], promotedId };
+}
+
+/**
+ * Undo suspend: restore prior active/queued status and reverse any promote done at suspend.
+ */
+export async function restoreSuspendedJourney(
+  recordId: string,
+  username: string
+): Promise<SuspendJourneyResult> {
+  const affectedIds = new Set<string>([recordId]);
+
+  await runWithOptionalTransaction(async (session) => {
+    const record = await FuelRecord.findById(recordId).session(sessionQuery(session));
+    if (!record || record.isDeleted) {
+      throw new ApiError(404, 'Fuel record not found');
+    }
+    if (record.isCancelled) {
+      throw new ApiError(409, 'Cannot unsuspend a cancelled fuel record');
+    }
+    if (record.journeyStatus !== 'suspended') {
+      throw new ApiError(409, 'Fuel record is not suspended');
+    }
+
+    const fromStatus = record.suspendedFromJourneyStatus;
+    const fromQueueOrder = record.suspendedFromQueueOrder;
+    const successorId = record.suspendPromotedSuccessorId
+      ? String(record.suspendPromotedSuccessorId)
+      : null;
+    const truckNo = record.truckNo;
+
+    if (!fromStatus) {
+      throw new ApiError(409, 'Cannot unsuspend — missing suspend restore snapshot');
+    }
+
+    if (fromStatus === 'active') {
+      const currentActive = await FuelRecord.findOne(activeJourneyFilter(truckNo, recordId)).session(
+        sessionQuery(session)
+      );
+
+      if (currentActive) {
+        if (!successorId || currentActive._id.toString() !== successorId) {
+          throw new ApiError(409, 'Cannot unsuspend — another journey is now active for this truck');
+        }
+
+        currentActive.journeyStatus = 'queued';
+        currentActive.queueOrder = 0;
+        await currentActive.save(sessionWrite(session));
+        affectedIds.add(currentActive._id.toString());
+      } else if (successorId) {
+        const successor = await FuelRecord.findById(successorId).session(sessionQuery(session));
+        if (successor && !successor.isDeleted && !successor.isCancelled) {
+          if (successor.journeyStatus === 'completed') {
+            throw new ApiError(409, 'Cannot unsuspend — a later journey has already been completed');
+          }
+          if (successor.journeyStatus === 'suspended') {
+            throw new ApiError(409, 'Cannot unsuspend — the promoted successor is also suspended');
+          }
+          if (successor.journeyStatus === 'active') {
+            successor.journeyStatus = 'queued';
+            successor.queueOrder = 0;
+            await successor.save(sessionWrite(session));
+            affectedIds.add(successor._id.toString());
+          }
+        }
+      }
+
+      record.journeyStatus = 'active';
+      record.activatedAt = record.activatedAt || new Date();
+      record.queueOrder = undefined;
+      record.suspendedFromJourneyStatus = undefined;
+      record.suspendedFromQueueOrder = undefined;
+      record.suspendPromotedSuccessorId = undefined;
+      record.suspendedAt = undefined;
+      record.suspendedBy = undefined;
+      await record.save(sessionWrite(session));
+
+      for (const id of await renumberQueuedJourneys(truckNo, session)) {
+        affectedIds.add(id);
+      }
+
+      logger.info(
+        `Suspended active journey ${record.goingDo} (truck ${truckNo}) restored on unsuspend by ${username}`
+      );
+      return;
+    }
+
+    if (fromStatus === 'queued') {
+      record.journeyStatus = 'queued';
+      record.queueOrder = fromQueueOrder && fromQueueOrder > 0 ? fromQueueOrder : undefined;
+      record.suspendedFromJourneyStatus = undefined;
+      record.suspendedFromQueueOrder = undefined;
+      record.suspendPromotedSuccessorId = undefined;
+      record.suspendedAt = undefined;
+      record.suspendedBy = undefined;
+      await record.save(sessionWrite(session));
+
+      for (const id of await renumberQueuedJourneys(truckNo, session)) {
+        affectedIds.add(id);
+      }
+
+      logger.info(
+        `Suspended queued journey ${record.goingDo} (truck ${truckNo}) restored on unsuspend by ${username}`
+      );
+    }
+  });
+
+  const record = await FuelRecord.findById(recordId);
+  if (!record) throw new ApiError(404, 'Fuel record not found');
+
+  await emitFuelRecordUpdates(affectedIds);
+  return { record, affectedIds: [...affectedIds], promotedId: null };
 }
 
 /**

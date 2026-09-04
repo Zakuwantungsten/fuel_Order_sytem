@@ -12,7 +12,7 @@ import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
 import { logFuelRecordChange, snapshotFuelRecord } from '../utils/fuelRecordAudit';
-import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled, healCancelledQueuedJourneys, completeJourneyManually, reopenManuallyCompletedJourney, restoreJourneyOnFuelRecordUncancel } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled, healCancelledQueuedJourneys, completeJourneyManually, reopenManuallyCompletedJourney, restoreJourneyOnFuelRecordUncancel, suspendJourney, restoreSuspendedJourney } from '../services/journeyService';
 import type { JourneyStatus } from '../types';
 import { isYardStation, isDarYardStation, isTangaYardStation, YARD_STATION } from '../utils/yardStations';
 
@@ -214,7 +214,7 @@ export const getAvailableJourneyStatuses = async (req: AuthRequest, res: Respons
       FuelRecord.distinct('queueOrder', { ...filter, journeyStatus: 'queued', queueOrder: { $type: 'number', $gte: 1 } }),
     ]);
 
-    const validStatuses: JourneyStatus[] = ['queued', 'active', 'completed', 'cancelled'];
+    const validStatuses: JourneyStatus[] = ['queued', 'active', 'completed', 'cancelled', 'suspended'];
     const orderedStatuses = validStatuses.filter((s) => statuses.includes(s));
     const orderedQueueOrders = (queueOrders as number[])
       .filter((n) => typeof n === 'number' && Number.isFinite(n) && n >= 1)
@@ -260,7 +260,7 @@ export const getAllFuelRecords = async (req: AuthRequest, res: Response): Promis
     }
 
     // Journey status filter (separate from cancelled/active record status)
-    const validJourneyStatuses = ['queued', 'active', 'completed', 'cancelled'];
+    const validJourneyStatuses = ['queued', 'active', 'completed', 'cancelled', 'suspended'];
     if (typeof journeyStatus === 'string' && validJourneyStatuses.includes(journeyStatus)) {
       filter.journeyStatus = journeyStatus;
       if (journeyStatus === 'queued' && queueOrder !== undefined && queueOrder !== '') {
@@ -1041,6 +1041,7 @@ export const cancelFuelRecord = async (req: AuthRequest, res: Response): Promise
 
     const wasActive = existingRecord.journeyStatus === 'active';
     const wasQueued = existingRecord.journeyStatus === 'queued';
+    const wasSuspended = existingRecord.journeyStatus === 'suspended';
 
     // Cancel flag + complete/promote/renumber must commit together (all-or-nothing).
     const session = await mongoose.startSession();
@@ -1056,13 +1057,24 @@ export const cancelFuelRecord = async (req: AuthRequest, res: Response): Promise
 
         if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
 
-        const sideEffects = await afterJourneyCancelled(id, username, {
-          session,
-          wasActive,
-          wasQueued,
-        });
-        cancelAffectedIds = sideEffects.affectedIds || [];
-        fuelRecord = await FuelRecord.findById(id).session(session);
+        if (wasSuspended) {
+          // Already left the live queue at suspend time — just mark cancelled permanently.
+          fuelRecord.journeyStatus = 'cancelled';
+          fuelRecord.queueOrder = undefined;
+          fuelRecord.suspendedFromJourneyStatus = undefined;
+          fuelRecord.suspendedFromQueueOrder = undefined;
+          fuelRecord.suspendPromotedSuccessorId = undefined;
+          await fuelRecord.save({ session });
+          cancelAffectedIds = [fuelRecord._id.toString()];
+        } else {
+          const sideEffects = await afterJourneyCancelled(id, username, {
+            session,
+            wasActive,
+            wasQueued,
+          });
+          cancelAffectedIds = sideEffects.affectedIds || [];
+          fuelRecord = await FuelRecord.findById(id).session(session);
+        }
       });
     } finally {
       await session.endSession();
@@ -1225,6 +1237,96 @@ export const uncancelFuelRecord = async (req: AuthRequest, res: Response): Promi
     res.status(200).json({
       success: true,
       message: 'Fuel record uncancelled successfully',
+      data: fuelRecord,
+    });
+
+    const emitIds = new Set<string>([fuelRecord._id.toString(), ...affectedIds]);
+    for (const emitId of emitIds) {
+      const fresh = emitId === fuelRecord._id.toString()
+        ? fuelRecord
+        : await FuelRecord.findById(emitId);
+      if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+    }
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+export const suspendFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const existingRecord = await FuelRecord.findOne({ _id: id, isDeleted: false });
+    if (!existingRecord) throw new ApiError(404, 'Fuel record not found');
+
+    const { record: fuelRecord, affectedIds } = await suspendJourney(id, username);
+    if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
+
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: fuelRecord._id.toString(),
+      username,
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existingRecord),
+      next: snapshotFuelRecord(fuelRecord),
+      source: 'manual',
+      tags: ['suspend-journey'],
+      severity: 'medium',
+    });
+
+    logger.info(`Fuel record ${id} suspended by ${username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Journey suspended successfully',
+      data: fuelRecord,
+    });
+
+    const emitIds = new Set<string>([fuelRecord._id.toString(), ...affectedIds]);
+    for (const emitId of emitIds) {
+      const fresh = emitId === fuelRecord._id.toString()
+        ? fuelRecord
+        : await FuelRecord.findById(emitId);
+      if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+    }
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+export const unsuspendFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const existingRecord = await FuelRecord.findOne({ _id: id, isDeleted: false });
+    if (!existingRecord) throw new ApiError(404, 'Fuel record not found');
+
+    const { record: fuelRecord, affectedIds } = await restoreSuspendedJourney(id, username);
+    if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
+
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: fuelRecord._id.toString(),
+      username,
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existingRecord),
+      next: snapshotFuelRecord(fuelRecord),
+      source: 'manual',
+      tags: ['unsuspend-journey'],
+      severity: 'medium',
+    });
+
+    logger.info(`Fuel record ${id} unsuspended by ${username}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Journey unsuspended successfully',
       data: fuelRecord,
     });
 

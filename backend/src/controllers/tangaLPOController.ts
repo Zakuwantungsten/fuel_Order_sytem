@@ -16,6 +16,8 @@ import {
   dispenseAmount,
   applyYardFieldDelta,
   applyAmendYardDispense,
+  unlinkYardEntryFuel,
+  moveYardEntryLink,
 } from '../services/yardLpoFuelService';
 import {
   allocateSharedLpoNo,
@@ -580,7 +582,7 @@ export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Pro
   const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
   if (!entry) throw new ApiError(404, 'Entry not found');
   if (entry.isCancelled) throw new ApiError(400, 'Cannot link a cancelled entry');
-  if (entry.linkedFuelRecordId) throw new ApiError(400, 'Entry is already linked — cancel and re-create to re-link');
+  if (entry.linkedFuelRecordId) throw new ApiError(400, 'Entry is already linked — unlink first, then re-link');
 
   const fr = await findLinkedFuelRecord(doNo as string, entry.truckNo);
   if (!fr) throw new ApiError(404, `No FuelRecord found for DO ${doNo} / truck ${entry.truckNo}`);
@@ -610,6 +612,115 @@ export const manualLinkTangaEntry = async (req: AuthRequest, res: Response): Pro
     success: true,
     message: 'Entry manually linked to FuelRecord successfully',
     data: tagYardDoc(lpo, resolved.source, resolved.station),
+  });
+
+  emitYardChange(resolved, 'update');
+  emitDataChange('fuel_records', 'update');
+};
+
+/** Reverse dispensed liters from the linked fuel record and clear linkage (row stays active). */
+export const unlinkTangaEntry = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { lpoId, entryId } = req.body;
+  if (!lpoId || !entryId) throw new ApiError(400, 'lpoId and entryId are required');
+
+  const resolved = await findYardLpoById(YARD, lpoId);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc;
+
+  const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
+  if (!entry) throw new ApiError(404, 'Entry not found');
+  if (entry.isCancelled) throw new ApiError(400, 'Cannot unlink a cancelled entry');
+  if (!entry.linkedFuelRecordId) throw new ApiError(400, 'Entry is not linked');
+
+  const username = req.user?.username || 'system';
+  const result = await unlinkYardEntryFuel(entry, YARD_FUEL_FIELD, username);
+
+  lpo.markModified('entries');
+  await lpo.save();
+
+  await AuditService.log({
+    userId: req.user?.userId,
+    username,
+    action: 'UPDATE',
+    resourceType: resolved.source === 'legacy' ? 'TangaLPODocument' : 'LPOSummary',
+    resourceId: lpo.lpoNo,
+    details: `Entry ${entryId} in Tanga LPO ${lpo.lpoNo} unlinked — reversed ${result.reversedLiters}L from FuelRecord ${result.oldFuelRecordId} by ${username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `Entry unlinked — ${result.reversedLiters}L reversed from tangaYard`,
+    data: tagYardDoc(lpo, resolved.source, resolved.station),
+    meta: result,
+  });
+
+  emitYardChange(resolved, 'update');
+  emitDataChange('fuel_records', 'update');
+};
+
+/**
+ * Linked DO/truck change with fuel move: revert dispense on old FR, add on new FR (or unlink if none).
+ * Optional rate/dest updates for the same save.
+ */
+export const relinkTangaEntryIdentity = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { lpoId, entryId, doNo, truckNo, rate, dest } = req.body;
+  if (!lpoId || !entryId) throw new ApiError(400, 'lpoId and entryId are required');
+  if (truckNo == null || !String(truckNo).trim()) throw new ApiError(400, 'truckNo is required');
+
+  const resolved = await findYardLpoById(YARD, lpoId);
+  if (!resolved) throw new ApiError(404, 'Tanga LPO not found');
+  const lpo = resolved.doc;
+
+  const entry = (lpo.entries as any[]).find((e: any) => e._id.toString() === entryId);
+  if (!entry) throw new ApiError(404, 'Entry not found');
+  if (entry.isCancelled) throw new ApiError(400, 'Cannot relink a cancelled entry');
+  if (!entry.linkedFuelRecordId) throw new ApiError(400, 'Entry is not linked — use Edit or Manual Link instead');
+
+  const nextDo = String(doNo ?? entry.doNo ?? '').trim();
+  const nextTruck = String(truckNo).trim();
+  const doChanged = nextDo.toUpperCase() !== String(entry.doNo || '').trim().toUpperCase();
+  const truckChanged = nextTruck.toUpperCase() !== String(entry.truckNo || '').trim().toUpperCase();
+  if (!doChanged && !truckChanged) {
+    throw new ApiError(400, 'DO and truck are unchanged — nothing to relink');
+  }
+
+  const username = req.user?.username || 'system';
+  const move = await moveYardEntryLink(entry, YARD_FUEL_FIELD, nextDo, nextTruck, username);
+
+  if (rate != null && Number(rate) > 0) {
+    entry.rate = Number(rate);
+    entry.amount = +(entry.liters * entry.rate).toFixed(2);
+  }
+  if (dest != null) {
+    entry.dest = String(dest).trim();
+  }
+
+  lpo.markModified('entries');
+  await lpo.save();
+
+  const msg =
+    move.status === 'unlinked'
+      ? `Identity updated — ${move.dispenseLiters}L reversed from old journey; no matching fuel record (now unlinked)`
+      : `Identity updated — moved ${move.dispenseLiters}L to the new journey`;
+
+  await AuditService.log({
+    userId: req.user?.userId,
+    username,
+    action: 'UPDATE',
+    resourceType: resolved.source === 'legacy' ? 'TangaLPODocument' : 'LPOSummary',
+    resourceId: lpo.lpoNo,
+    details: `Entry ${entryId} in Tanga LPO ${lpo.lpoNo} identity relink (${move.status}) DO/truck → ${nextDo}/${nextTruck} by ${username}`,
+    ipAddress: req.ip,
+    severity: 'medium',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: msg,
+    data: tagYardDoc(lpo, resolved.source, resolved.station),
+    meta: move,
   });
 
   emitYardChange(resolved, 'update');

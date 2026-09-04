@@ -112,6 +112,22 @@ router.post(
   asyncHandler(fuelRecordController.uncompleteFuelRecord)
 );
 
+// Suspend / unsuspend — same roles as complete (operational hold, not permanent cancel)
+router.post(
+  '/:id/suspend',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'boss'),
+  validate,
+  asyncHandler(fuelRecordController.suspendFuelRecord)
+);
+router.post(
+  '/:id/unsuspend',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'boss'),
+  validate,
+  asyncHandler(fuelRecordController.unsuspendFuelRecord)
+);
+
 // Edit lock routes (same roles as update)
 const fuelLock = createEditLockHandlers(FuelRecord, 'fuel_records');
 router.post('/:id/lock', commonValidation.mongoId, authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'driver', 'fuel_order_maker', 'boss', 'yard_personnel', 'fuel_attendant', 'station_manager', 'payment_manager'), validate, asyncHandler(fuelLock.acquireEditLock));

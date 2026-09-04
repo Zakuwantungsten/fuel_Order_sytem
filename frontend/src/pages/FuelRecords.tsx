@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, XCircle, RotateCcw, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check, Clock, MoreVertical, CheckCircle2, Undo2 } from 'lucide-react';
+import { Search, Plus, Download, Edit, XCircle, RotateCcw, BarChart3, List, ChevronLeft, ChevronRight, ChevronDown, Check, Clock, MoreVertical, CheckCircle2, Undo2, PauseCircle, PlayCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { FuelRecord } from '../types';
 import { fuelRecordsAPI, configAPI, StandardAllocations } from '../services/api';
@@ -174,6 +174,8 @@ const FuelRecords = () => {
   const [uncancelPending, setUncancelPending] = useState<string | number | null>(null);
   const [completePending, setCompletePending] = useState<string | number | null>(null);
   const [uncompletePending, setUncompletePending] = useState<string | number | null>(null);
+  const [suspendPending, setSuspendPending] = useState<string | number | null>(null);
+  const [unsuspendPending, setUnsuspendPending] = useState<string | number | null>(null);
   const [actionsRecord, setActionsRecord] = useState<FuelRecord | null>(null);
   const [actionsMenuPosition, setActionsMenuPosition] = useState<FuelRecordActionsPosition | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -233,8 +235,8 @@ const FuelRecords = () => {
       ? undefined
       : journeyFilter.startsWith('queued:')
         ? ('queued' as const)
-        : (['active', 'completed', 'queued', 'cancelled'].includes(journeyFilter)
-            ? (journeyFilter as 'active' | 'completed' | 'queued' | 'cancelled')
+        : (['active', 'completed', 'queued', 'cancelled', 'suspended'].includes(journeyFilter)
+            ? (journeyFilter as 'active' | 'completed' | 'queued' | 'cancelled' | 'suspended')
             : undefined);
   const queueOrderParam =
     journeyFilter.startsWith('queued:')
@@ -888,6 +890,48 @@ const FuelRecords = () => {
     }
   };
 
+  const handleSuspend = (id: string | number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSuspendPending(id);
+  };
+
+  const executeSuspend = async () => {
+    if (!suspendPending) return;
+    setIsActionLoading(true);
+    try {
+      await fuelRecordsAPI.suspend(suspendPending);
+      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+      toast.success('Journey suspended');
+    } catch (error: any) {
+      console.error('Error suspending journey:', error);
+      toast.error(error.response?.data?.message || 'Failed to suspend journey');
+    } finally {
+      setIsActionLoading(false);
+      setSuspendPending(null);
+    }
+  };
+
+  const handleUnsuspend = (id: string | number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setUnsuspendPending(id);
+  };
+
+  const executeUnsuspend = async () => {
+    if (!unsuspendPending) return;
+    setIsActionLoading(true);
+    try {
+      await fuelRecordsAPI.unsuspend(unsuspendPending);
+      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+      toast.success('Journey unsuspended');
+    } catch (error: any) {
+      console.error('Error unsuspending journey:', error);
+      toast.error(error.response?.data?.message || 'Failed to unsuspend journey');
+    } finally {
+      setIsActionLoading(false);
+      setUnsuspendPending(null);
+    }
+  };
+
   const recordIdOf = (record: FuelRecord) => record.id || (record as any)._id;
 
   const closeActionsMenu = () => {
@@ -1195,12 +1239,13 @@ const FuelRecords = () => {
     if (journeyFilter === 'active') return 'Active';
     if (journeyFilter === 'completed') return 'Completed';
     if (journeyFilter === 'cancelled') return 'Cancelled';
+    if (journeyFilter === 'suspended') return 'Suspended';
     return 'All Journeys';
   })();
 
   const journeyFilterOptions: Array<{ value: string; label: string }> = [
     { value: 'all', label: 'All Journeys' },
-    ...(['active', 'completed', 'cancelled'] as const)
+    ...(['active', 'completed', 'cancelled', 'suspended'] as const)
       .filter((s) => availableJourneyStatuses.includes(s))
       .map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) })),
     ...(availableJourneyStatuses.includes('queued') || availableQueueOrders.length > 0
@@ -1530,7 +1575,7 @@ const FuelRecords = () => {
               </div>
             )}
           </div>
-          {/* Journey status filter (active / completed / queued / Queued #N) */}
+          {/* Journey status filter (active / completed / queued / Queued #N / suspended) */}
           <div className="relative" ref={journeyDropdownRef}>
             <button
               type="button"
@@ -1750,15 +1795,15 @@ const FuelRecords = () => {
                       )}
                     </div>
 
-                    {/* Actions */}
+                    {/* Actions — Edit / Cancel / Suspend|Unsuspend / Complete|Undo */}
                     {!isCancelled && (
-                      <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
+                      <div className="grid grid-cols-4 gap-1.5 pt-3 border-t border-gray-200 dark:border-gray-600">
                         <button
                           onClick={(e) => handleEdit(record, e)}
-                          className="px-2 py-2 text-xs font-medium rounded-lg inline-flex items-center justify-center"
+                          className="px-1.5 py-2 text-[11px] font-medium rounded-lg inline-flex items-center justify-center"
                           style={{ color: isDark ? '#93C5FD' : '#2563EB', background: isDark ? 'rgba(37,99,235,0.2)' : '#EFF6FF' }}
                         >
-                          <Edit className="w-3.5 h-3.5 mr-1" />
+                          <Edit className="w-3.5 h-3.5 mr-0.5 shrink-0" />
                           Edit
                         </button>
                         <button
@@ -1766,20 +1811,53 @@ const FuelRecords = () => {
                             const id = recordIdOf(record);
                             if (id) handleCancel(id, e);
                           }}
-                          className="px-2 py-2 text-xs font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 inline-flex items-center justify-center"
+                          className="px-1.5 py-2 text-[11px] font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 inline-flex items-center justify-center"
                         >
-                          <XCircle className="w-3.5 h-3.5 mr-1" />
+                          <XCircle className="w-3.5 h-3.5 mr-0.5 shrink-0" />
                           Cancel
                         </button>
+                        {record.journeyStatus === 'suspended' ? (
+                          <button
+                            onClick={(e) => {
+                              const id = recordIdOf(record);
+                              if (id) handleUnsuspend(id, e);
+                            }}
+                            className="px-1.5 py-2 text-[11px] font-medium text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/20 rounded-lg hover:bg-sky-100 dark:hover:bg-sky-900/30 inline-flex items-center justify-center"
+                          >
+                            <PlayCircle className="w-3.5 h-3.5 mr-0.5 shrink-0" />
+                            Unsuspend
+                          </button>
+                        ) : (record.journeyStatus === 'active' || record.journeyStatus === 'queued') ? (
+                          <button
+                            onClick={(e) => {
+                              const id = recordIdOf(record);
+                              if (id) handleSuspend(id, e);
+                            }}
+                            className="px-1.5 py-2 text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 inline-flex items-center justify-center"
+                          >
+                            <PauseCircle className="w-3.5 h-3.5 mr-0.5 shrink-0" />
+                            Suspend
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            title="Only active or queued journeys can be suspended"
+                            className="px-1.5 py-2 text-[11px] font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700/50 rounded-lg inline-flex items-center justify-center cursor-not-allowed"
+                          >
+                            <PauseCircle className="w-3.5 h-3.5 mr-0.5 shrink-0" />
+                            Suspend
+                          </button>
+                        )}
                         {record.journeyStatus === 'active' ? (
                           <button
                             onClick={(e) => {
                               const id = recordIdOf(record);
                               if (id) handleComplete(id, e);
                             }}
-                            className="px-2 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 inline-flex items-center justify-center"
+                            className="px-1.5 py-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 inline-flex items-center justify-center"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-0.5 shrink-0" />
                             Complete
                           </button>
                         ) : record.manuallyCompleted && record.journeyStatus === 'completed' ? (
@@ -1788,9 +1866,9 @@ const FuelRecords = () => {
                               const id = recordIdOf(record);
                               if (id) handleUncomplete(id, e);
                             }}
-                            className="px-2 py-2 text-xs font-medium text-violet-700 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-900/30 inline-flex items-center justify-center"
+                            className="px-1.5 py-2 text-[11px] font-medium text-violet-700 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-900/30 inline-flex items-center justify-center"
                           >
-                            <Undo2 className="w-3.5 h-3.5 mr-1" />
+                            <Undo2 className="w-3.5 h-3.5 mr-0.5 shrink-0" />
                             Undo
                           </button>
                         ) : (
@@ -1798,9 +1876,9 @@ const FuelRecords = () => {
                             type="button"
                             disabled
                             title="Only an active journey can be marked complete"
-                            className="px-2 py-2 text-xs font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700/50 rounded-lg inline-flex items-center justify-center cursor-not-allowed"
+                            className="px-1.5 py-2 text-[11px] font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700/50 rounded-lg inline-flex items-center justify-center cursor-not-allowed"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-0.5 shrink-0" />
                             Complete
                           </button>
                         )}
@@ -2062,6 +2140,16 @@ const FuelRecords = () => {
           closeActionsMenu();
           if (id) handleUncancel(id);
         }}
+        onSuspend={(record) => {
+          const id = recordIdOf(record);
+          closeActionsMenu();
+          if (id) handleSuspend(id);
+        }}
+        onUnsuspend={(record) => {
+          const id = recordIdOf(record);
+          closeActionsMenu();
+          if (id) handleUnsuspend(id);
+        }}
       />
 
       <PendingDoFollowUpModal
@@ -2218,6 +2306,28 @@ const FuelRecords = () => {
         loading={isActionLoading}
         onConfirm={executeUncomplete}
         onCancel={() => setUncompletePending(null)}
+      />
+      <ConfirmModal
+        open={suspendPending !== null}
+        title="Suspend Journey"
+        message="This will suspend the journey so it cannot be linked to EXPORT DOs. If it is active, the next queued journey will be promoted. You can unsuspend later to restore."
+        confirmLabel="Suspend"
+        cancelLabel="Keep"
+        variant="warning"
+        loading={isActionLoading}
+        onConfirm={executeSuspend}
+        onCancel={() => setSuspendPending(null)}
+      />
+      <ConfirmModal
+        open={unsuspendPending !== null}
+        title="Unsuspend Journey"
+        message="This will restore the journey to its previous status (active or queued) and undo the queue promotion if it is still safe to do so."
+        confirmLabel="Unsuspend"
+        cancelLabel="Keep Suspended"
+        variant="info"
+        loading={isActionLoading}
+        onConfirm={executeUnsuspend}
+        onCancel={() => setUnsuspendPending(null)}
       />
     </div>
   );

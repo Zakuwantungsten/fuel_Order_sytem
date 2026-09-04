@@ -360,7 +360,7 @@ function mapToFuelRecord(
   // Normalise journeyStatus to allowed enum values
   if (doc.journeyStatus) {
     const s = String(doc.journeyStatus).toLowerCase();
-    doc.journeyStatus = ['queued', 'active', 'completed', 'cancelled'].includes(s)
+    doc.journeyStatus = ['queued', 'active', 'completed', 'cancelled', 'suspended'].includes(s)
       ? s
       : 'completed';
   }

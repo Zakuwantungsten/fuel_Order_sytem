@@ -1522,6 +1522,16 @@ export const fuelRecordsAPI = {
     return response.data.data;
   },
 
+  suspend: async (id: string | number): Promise<FuelRecord> => {
+    const response = await apiClient.post(`/fuel-records/${id}/suspend`);
+    return response.data.data;
+  },
+
+  unsuspend: async (id: string | number): Promise<FuelRecord> => {
+    const response = await apiClient.post(`/fuel-records/${id}/unsuspend`);
+    return response.data.data;
+  },
+
   // Edit lock management
   acquireLock: async (id: string | number): Promise<{ lockedUntil: string }> => {
     const response = await apiClient.post(`/fuel-records/${id}/lock`);
@@ -3064,6 +3074,21 @@ export const tangaLPOAPI = {
     const response = await apiClient.post('/tanga-lpo/manual-link', data);
     return response.data.data;
   },
+  unlinkEntry: async (data: { lpoId: string; entryId: string }) => {
+    const response = await apiClient.post('/tanga-lpo/unlink-entry', data);
+    return response.data.data;
+  },
+  relinkIdentity: async (data: {
+    lpoId: string;
+    entryId: string;
+    doNo: string;
+    truckNo: string;
+    rate?: number;
+    dest?: string;
+  }) => {
+    const response = await apiClient.post('/tanga-lpo/relink-identity', data);
+    return { data: response.data.data, message: response.data.message as string | undefined, meta: response.data.meta };
+  },
   previewManualLink: async (data: { lpoId: string; entryId: string; doNo: string }) => {
     const response = await apiClient.post('/tanga-lpo/preview-manual-link', data);
     return response.data.data;
@@ -3221,6 +3246,21 @@ export const darLPOAPI = {
   manualLink: async (data: { lpoId: string; entryId: string; doNo: string; dispenseLiters?: number }) => {
     const response = await apiClient.post('/dar-lpo/manual-link', data);
     return response.data.data;
+  },
+  unlinkEntry: async (data: { lpoId: string; entryId: string }) => {
+    const response = await apiClient.post('/dar-lpo/unlink-entry', data);
+    return response.data.data;
+  },
+  relinkIdentity: async (data: {
+    lpoId: string;
+    entryId: string;
+    doNo: string;
+    truckNo: string;
+    rate?: number;
+    dest?: string;
+  }) => {
+    const response = await apiClient.post('/dar-lpo/relink-identity', data);
+    return { data: response.data.data, message: response.data.message as string | undefined, meta: response.data.meta };
   },
   previewManualLink: async (data: { lpoId: string; entryId: string; doNo: string }) => {
     const response = await apiClient.post('/dar-lpo/preview-manual-link', data);

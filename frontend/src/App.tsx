@@ -184,7 +184,7 @@ function AppContent() {
   // adding a truck-batch suffix unlocks a fuel record, or a bulk DO create — so the
   // affected lists are fresh the moment you open them, with no manual refresh.
   useRealtimeSync(
-    ['fuel_records', 'delivery_orders', 'lpo_summaries', 'truck_batches'],
+    ['fuel_records', 'delivery_orders', 'lpo_summaries', 'truck_batches', 'reconciliation_sessions'],
     () => {},
     'app-global'
   );

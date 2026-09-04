@@ -1,6 +1,6 @@
 // Delivery Order (DO) Types
 export type DOStatus = 'active' | 'cancelled';
-export type JourneyStatus = 'queued' | 'active' | 'completed' | 'cancelled';
+export type JourneyStatus = 'queued' | 'active' | 'completed' | 'cancelled' | 'suspended';
 
 export interface DeliveryOrderEditHistory {
   editedAt: string;

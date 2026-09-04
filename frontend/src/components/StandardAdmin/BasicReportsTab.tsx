@@ -384,6 +384,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
             { label: 'Active Journeys',          value: o.journeyStatus?.active    ?? 0, numFmt: NUM_FMT_COUNT },
             { label: 'Queued Journeys',          value: o.journeyStatus?.queued    ?? 0, numFmt: NUM_FMT_COUNT },
             { label: 'Completed Journeys',       value: o.journeyStatus?.completed ?? 0, numFmt: NUM_FMT_COUNT },
+            { label: 'Suspended Journeys',       value: o.journeyStatus?.suspended ?? 0, numFmt: NUM_FMT_COUNT },
           ]},
           { heading: 'Fuel Consumption', rows: [
             { label: 'Total Fuel Consumed',      value: fc.total ?? 0, numFmt: NUM_FMT_LITRES },
@@ -575,6 +576,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
               { label: 'Active Journeys',     value: o.journeyStatus?.active    ?? 0, numFmt: NUM_FMT_COUNT },
               { label: 'Queued Journeys',     value: o.journeyStatus?.queued    ?? 0, numFmt: NUM_FMT_COUNT },
               { label: 'Completed Journeys',  value: o.journeyStatus?.completed ?? 0, numFmt: NUM_FMT_COUNT },
+              { label: 'Suspended Journeys',  value: o.journeyStatus?.suspended ?? 0, numFmt: NUM_FMT_COUNT },
             ]}]);
           XLSXStyle.writeFile(wb, `fuel_analysis_${dateRange}_${dateStr}.xlsx`);
           showMessage('success', 'Fuel Analysis exported');
@@ -599,6 +601,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
                 { label: 'Active Journeys',    value: o.journeyStatus?.active    ?? 0, numFmt: NUM_FMT_COUNT },
                 { label: 'Queued Journeys',    value: o.journeyStatus?.queued    ?? 0, numFmt: NUM_FMT_COUNT },
                 { label: 'Completed Journeys', value: o.journeyStatus?.completed ?? 0, numFmt: NUM_FMT_COUNT },
+                { label: 'Suspended Journeys', value: o.journeyStatus?.suspended ?? 0, numFmt: NUM_FMT_COUNT },
               ]},
             ],
           );
@@ -810,7 +813,7 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
         {/* Journey Status */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-5">
           <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100 mb-4">Journey Status Breakdown</h3>
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
               <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{journeyStatus.queued ?? 0}</p>
               <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">Queued</p>
@@ -822,6 +825,10 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
             <div className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-4">
               <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">{journeyStatus.completed ?? 0}</p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Completed</p>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{journeyStatus.suspended ?? 0}</p>
+              <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">Suspended</p>
             </div>
           </div>
         </div>
@@ -868,6 +875,10 @@ export default function BasicReportsTab({ showMessage }: BasicReportsTabProps) {
               <div className="flex justify-between py-2 border-b dark:border-gray-700">
                 <span className="text-gray-600 dark:text-gray-400">Active journeys</span>
                 <span className="font-medium text-gray-900 dark:text-gray-100">{o.journeyStatus?.active ?? 0}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b dark:border-gray-700">
+                <span className="text-gray-600 dark:text-gray-400">Suspended journeys</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">{o.journeyStatus?.suspended ?? 0}</span>
               </div>
               <div className="flex justify-between py-2">
                 <span className="text-gray-600 dark:text-gray-400">Completed journeys</span>

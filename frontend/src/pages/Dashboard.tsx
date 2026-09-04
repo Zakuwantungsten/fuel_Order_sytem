@@ -26,7 +26,7 @@ import {
   BellRing,
   DollarSign,
 } from 'lucide-react';
-import { BarChart, Bar, LabelList, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, LabelList, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { dashboardAPI, deliveryOrdersAPI, lposAPI, fuelRecordsAPI } from '../services/api';
 import { FuelRecord } from '../types';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -35,8 +35,21 @@ import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import QueryErrorState from '../components/QueryErrorState';
 import { formatSearchCardDate, parseStoredRecordDate } from '../utils/timezone';
 
-// Colors for charts — aligned with design system palette
-const CHART_COLORS = ['#2563EB', '#16A34A', '#F97316', '#8B5CF6', '#0891B2', '#EC4899'];
+/** Station LPO multi-line palette (matches fuel-consumption style). */
+const STATION_LINE_COLORS = ['#1e3a5f', '#3b82f6', '#f97316', '#8b5cf6', '#22c55e', '#0891b2'];
+
+const formatLitersAxis = (v: number) => {
+  if (!Number.isFinite(v) || v === 0) return '0';
+  if (Math.abs(v) >= 1_000_000) {
+    const m = v / 1_000_000;
+    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
+  }
+  if (Math.abs(v) >= 1_000) {
+    const k = v / 1_000;
+    return `${Number.isInteger(k) ? k : k.toFixed(k >= 100 ? 0 : 1)}k`;
+  }
+  return String(Math.round(v));
+};
 
 interface SearchResult {
   id: string;
@@ -52,7 +65,17 @@ interface DashboardProps {
   onNavigate?: (tab: string, highlight?: string) => void;
 }
 
-const DEFAULT_CHART_DATA = { monthlyFuel: [], doTrends: [], lpoTrends: [], tonnageTrends: [], stationDistribution: [], journeyStatus: [], stationPrices: [], fuelPriceTrend: [] };
+const DEFAULT_CHART_DATA = {
+  monthlyFuel: [],
+  doTrends: [],
+  lpoTrends: [],
+  tonnageTrends: [],
+  stationDistribution: [],
+  stationLpoTrend: { year: new Date().getFullYear(), stations: [], monthly: [], daily: [] },
+  journeyStatus: [],
+  stationPrices: [],
+  fuelPriceTrend: [],
+};
 
 // ── Design tokens (matched to Fuel Dashboard design) ──────────────────────
 const CARD =
@@ -102,6 +125,8 @@ const JOURNEY_CAT = (name: string) => {
   const n = (name || '').toLowerCase();
   if (n.includes('active')) return { tile: 'bg-blue-50/70 dark:bg-blue-900/15 border-blue-100 dark:border-blue-800/50', dot: 'bg-blue-500 shadow-[0_0_0_4px_rgba(37,99,235,0.14)]' };
   if (n.includes('complet')) return { tile: 'bg-emerald-50/70 dark:bg-emerald-900/15 border-emerald-100 dark:border-emerald-800/50', dot: 'bg-emerald-500 shadow-[0_0_0_4px_rgba(22,163,74,0.14)]' };
+  if (n.includes('queue')) return { tile: 'bg-yellow-50/70 dark:bg-yellow-900/15 border-yellow-100 dark:border-yellow-800/50', dot: 'bg-yellow-500 shadow-[0_0_0_4px_rgba(234,179,8,0.16)]' };
+  if (n.includes('suspend')) return { tile: 'bg-amber-50/70 dark:bg-amber-900/15 border-amber-100 dark:border-amber-800/50', dot: 'bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.16)]' };
   if (n.includes('pend')) return { tile: 'bg-amber-50/70 dark:bg-amber-900/15 border-amber-100 dark:border-amber-800/50', dot: 'bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.16)]' };
   if (n.includes('cancel')) return { tile: 'bg-red-50/70 dark:bg-red-900/15 border-red-100 dark:border-red-800/50', dot: 'bg-red-500 shadow-[0_0_0_4px_rgba(220,38,38,0.14)]' };
   return { tile: 'bg-primary-50/70 dark:bg-primary-900/15 border-primary-100 dark:border-primary-800/50', dot: 'bg-primary-500 shadow-[0_0_0_4px_rgba(2,132,199,0.14)]' };
@@ -161,6 +186,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   });
   const [searching, setSearching] = useState(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [stationLpoRange, setStationLpoRange] = useState<'month' | '3months' | 'year'>('year');
 
   // Persist search state to sessionStorage whenever it changes
   useEffect(() => {
@@ -847,44 +873,131 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           )}
         </div>
 
-        {/* Station-wise LPO Distribution */}
+        {/* Station-wise LPO Distribution — multi-line litres by station */}
         <div className={`${CARD} p-5`}>
-          <div className="flex items-center gap-2.5 mb-4">
-            <span className="w-7 h-7 rounded-lg bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-300 flex items-center justify-center"><MapPin className="w-4 h-4" /></span>
-            <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Station LPO Distribution</h3>
-          </div>
-          {chartData.stationDistribution.length > 0 ? (() => {
-            const total = chartData.stationDistribution.reduce((s: number, d: any) => s + d.value, 0);
-            return (
-              <div className="space-y-3">
-                {[...chartData.stationDistribution]
-                  .sort((a: any, b: any) => b.value - a.value)
-                  .map((station: any, i: number) => {
-                    const pct = total > 0 ? Math.round((station.value / total) * 100) : 0;
-                    return (
-                      <div key={station.name}>
-                        <div className="flex justify-between items-center text-xs mb-1">
-                          <span className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 font-medium">
-                            <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
-                            {station.name}
-                          </span>
-                          <span className="text-gray-500 dark:text-gray-400">
-                            {station.value.toLocaleString()} L
-                            <span className="text-gray-400 dark:text-gray-500 ml-1">({pct}%)</span>
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
-                          <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 text-right pt-1">Total: {total.toLocaleString()} L</p>
-              </div>
+          {(() => {
+            const trend = chartData.stationLpoTrend || DEFAULT_CHART_DATA.stationLpoTrend;
+            const stations: string[] = Array.isArray(trend.stations) ? trend.stations : [];
+            const monthly: any[] = Array.isArray(trend.monthly) ? trend.monthly : [];
+            const daily: any[] = Array.isArray(trend.daily) ? trend.daily : [];
+            const year = trend.year || new Date().getFullYear();
+
+            let series: any[] = [];
+            let subtitle = '';
+            if (stationLpoRange === 'month') {
+              series = daily;
+              const monthName = new Date().toLocaleDateString('en-US', { month: 'short' });
+              subtitle = `Litres by day, ${monthName} ${year}`;
+            } else if (stationLpoRange === '3months') {
+              series = monthly.slice(-3);
+              const from = series[0]?.label || '';
+              const to = series[series.length - 1]?.label || '';
+              subtitle = from && to ? `Litres by month, ${from} to ${to} ${year}` : `Litres by month · ${year}`;
+            } else {
+              series = monthly;
+              const from = series[0]?.label || 'Jan';
+              const to = series[series.length - 1]?.label || '';
+              subtitle = `Litres by month, ${from} to ${to} ${year}`;
+            }
+
+            const hasData = stations.length > 0 && series.some((row) =>
+              stations.some((s) => Number(row[s]) > 0)
             );
-          })() : (
-            <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data available</div>
-          )}
+
+            return (
+              <>
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-7 h-7 rounded-lg bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-300 flex items-center justify-center">
+                        <MapPin className="w-4 h-4" />
+                      </span>
+                      <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Station LPO Distribution</h3>
+                    </div>
+                    <p className="mt-1 ml-9 text-[12px] font-medium text-gray-400 dark:text-gray-500">{subtitle}</p>
+                  </div>
+                  <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden bg-gray-50 dark:bg-gray-800/80">
+                    {([
+                      { id: 'month' as const, label: 'Month' },
+                      { id: '3months' as const, label: '3 months' },
+                      { id: 'year' as const, label: 'Year' },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setStationLpoRange(opt.id)}
+                        className={`px-3 py-1.5 text-[11.5px] font-semibold transition-colors ${
+                          stationLpoRange === opt.id
+                            ? 'bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900'
+                            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {hasData ? (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={series} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#374151' : '#eef1f6'} />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 11 }}
+                        stroke={isDark ? '#9ca3af' : '#94a3b8'}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        stroke={isDark ? '#9ca3af' : '#94a3b8'}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={formatLitersAxis}
+                        width={42}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: isDark ? '#1f2937' : '#0f1729',
+                          border: 'none',
+                          borderRadius: '10px',
+                          color: '#fff',
+                        }}
+                        labelStyle={{ color: '#9ca3af' }}
+                        formatter={(v: any, name: any) => [`${Number(v).toLocaleString()} L`, name]}
+                      />
+                      <Legend
+                        verticalAlign="bottom"
+                        align="left"
+                        iconType="circle"
+                        iconSize={8}
+                        wrapperStyle={{ paddingTop: 12, fontSize: 12 }}
+                      />
+                      {stations.map((station, i) => (
+                        <Line
+                          key={station}
+                          type="monotone"
+                          dataKey={station}
+                          name={station}
+                          stroke={STATION_LINE_COLORS[i % STATION_LINE_COLORS.length]}
+                          strokeWidth={2}
+                          dot={{
+                            r: 3.5,
+                            fill: STATION_LINE_COLORS[i % STATION_LINE_COLORS.length],
+                            strokeWidth: 0,
+                          }}
+                          activeDot={{ r: 5 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data available</div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Journey Status */}

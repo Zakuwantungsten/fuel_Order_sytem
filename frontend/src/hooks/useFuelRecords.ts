@@ -35,7 +35,7 @@ export interface FuelRecordFilters {
   order?: 'asc' | 'desc';
   status?: 'all' | 'active' | 'cancelled';
   /** Journey lifecycle filter — separate from cancelled/active record status */
-  journeyStatus?: 'queued' | 'active' | 'completed' | 'cancelled';
+  journeyStatus?: 'queued' | 'active' | 'completed' | 'cancelled' | 'suspended';
   /** When journeyStatus is queued, optionally pin to a specific queue position */
   queueOrder?: number;
 }

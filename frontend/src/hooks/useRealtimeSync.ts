@@ -9,6 +9,7 @@ import { tangaLPOKeys } from './useTangaLPOs';
 import { darLPOKeys } from './useDarLPOs';
 import { journeyConfigKey } from './useJourneyConfig';
 import { fuelStationKeys } from './useFuelStations';
+import { reconciliationKeys } from './useReconciliation';
 import { cleanDeliveryOrder } from '../utils/dataCleanup';
 
 /**
@@ -78,6 +79,7 @@ const COLLECTION_QUERY_KEYS: Record<string, () => ReadonlyArray<ReadonlyArray<un
   dar_lpo_documents:    () => [darLPOKeys.lists(), [...darLPOKeys.all, 'workbook'] as const, darLPOKeys.years()],
   journey_config:       () => [[...journeyConfigKey]],
   fuel_stations:        () => [fuelStationKeys.all, fuelStationKeys.active],
+  reconciliation_sessions: () => [reconciliationKeys.all],
 };
 
 /** Map collection name → the detail-level React Query key for a specific record id. */

@@ -43,9 +43,15 @@ const JourneyStatusBadge: React.FC<JourneyStatusBadgeProps> = ({
       text: 'text-red-800 dark:text-red-300',
       border: 'border-red-300 dark:border-red-700',
     },
+    suspended: {
+      label: 'SUSPENDED',
+      bg: 'bg-amber-100 dark:bg-amber-900/30',
+      text: 'text-amber-800 dark:text-amber-300',
+      border: 'border-amber-300 dark:border-amber-700',
+    },
   };
 
-  const config = statusConfig[status];
+  const config = statusConfig[status] || statusConfig.active;
 
   return (
     <span

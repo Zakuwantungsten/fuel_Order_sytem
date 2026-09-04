@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import {
   Plus, Edit2, X, Ban, Copy, ChevronDown, Check,
-  Loader2, XCircle, Search, AlertTriangle, Lock, Scissors, Link2,
+  Loader2, XCircle, Search, AlertTriangle, Lock, Scissors, Link2, Unlink2,
   MessageSquare, FileDown, Printer, ArrowLeft, Eye,
 } from 'lucide-react';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
@@ -300,6 +300,9 @@ function CancelEntryModal({
 }) {
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
+  const isLinked = !!entry.linkedFuelRecordId;
+  const billed = entry.liters;
+  const dispensed = entry.dispenseLiters ?? entry.liters;
 
   const handleConfirm = async () => {
     setSaving(true);
@@ -324,13 +327,24 @@ function CancelEntryModal({
           <div>
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">Cancel Entry</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {entry.truckNo} · {entry.liters}L · {fmt(entry.amount)}
+              {entry.truckNo} · billed {billed}L · dispensed {dispensed}L · {fmt(entry.amount)}
             </p>
           </div>
         </div>
         <div className="p-4 space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            This will reverse <strong>{entry.liters}L</strong> from the linked fuel record's <span className="font-mono text-blue-600 dark:text-blue-400">tangaYard</span> field and recalculate the balance.
+            {isLinked ? (
+              <>
+                This will reverse <strong>{dispensed}L dispensed</strong> from the linked fuel record&apos;s{' '}
+                <span className="font-mono text-blue-600 dark:text-blue-400">tangaYard</span> field
+                (billed was <strong>{billed}L</strong>) and recalculate the balance.
+              </>
+            ) : (
+              <>
+                This entry is unlinked — cancel will mark it void on the sheet only.
+                No fuel record change (billed <strong>{billed}L</strong>, dispense <strong>{dispensed}L</strong>).
+              </>
+            )}
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -401,7 +415,8 @@ function CancelAllModal({
             </div>
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            All active entries will be cancelled and their liters reversed on the linked fuel records. This cannot be undone in bulk.
+            All active entries will be cancelled. Linked rows reverse their <strong>dispensed</strong> liters
+            (not billed) on the fuel record. This cannot be undone in bulk.
           </p>
           <div className="flex gap-2 pt-1">
             <button onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">
@@ -410,6 +425,124 @@ function CancelAllModal({
             <button onClick={handleConfirm} disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
               Cancel All
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Unlink Entry Modal ─────────────────────────────────────────────────────────
+function UnlinkEntryModal({
+  entry, lpoId, onDone, onClose,
+}: {
+  entry: TangaLPOEntry; lpoId: string; onDone: (updatedLpo: TangaLPO) => void; onClose: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const billed = entry.liters;
+  const dispensed = entry.dispenseLiters ?? entry.liters;
+
+  const handleConfirm = async () => {
+    setSaving(true);
+    try {
+      const updated = await tangaLPOAPI.unlinkEntry({ lpoId, entryId: entry._id! });
+      toast.success(`Unlinked — ${dispensed}L reversed from tangaYard`);
+      onDone(updated);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to unlink entry');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center gap-3 p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+            <Unlink2 className="w-5 h-5 text-amber-700 dark:text-amber-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Unlink Entry</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {entry.truckNo} · billed {billed}L · dispensed {dispensed}L
+            </p>
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            This will reverse <strong>{dispensed}L dispensed</strong> from{' '}
+            <span className="font-mono text-blue-600 dark:text-blue-400">tangaYard</span>{' '}
+            (billed <strong>{billed}L</strong>) and clear the fuel link. The sheet row stays active and unlinked.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors">Back</button>
+            <button onClick={handleConfirm} disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlink2 className="w-3.5 h-3.5" />}
+              Unlink
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Linked identity move confirm ───────────────────────────────────────────────
+function IdentityMoveConfirmModal({
+  entry,
+  pending,
+  yardField,
+  saving,
+  onConfirm,
+  onClose,
+}: {
+  entry: TangaLPOEntry;
+  pending: Omit<TangaLPOEntry, '_id'>;
+  yardField: string;
+  saving: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const dispensed = entry.dispenseLiters ?? entry.liters;
+  const billed = entry.liters;
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center gap-3 p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+            <AlertTriangle className="w-5 h-5 text-amber-700 dark:text-amber-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Move linked fuel?</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">DO or truck changed on a linked entry</p>
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            This will move <strong>{dispensed}L dispensed</strong> from the current journey to the new DO/truck
+            on <span className="font-mono text-blue-600 dark:text-blue-400">{yardField}</span>
+            {' '}(billed <strong>{billed}L</strong>).
+          </p>
+          <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-750 px-3 py-2 text-xs space-y-1">
+            <div className="flex justify-between gap-2">
+              <span className="text-gray-500">From</span>
+              <span className="font-medium text-gray-900 dark:text-gray-100">{entry.doNo || '—'} · {entry.truckNo}</span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span className="text-gray-500">To</span>
+              <span className="font-medium text-gray-900 dark:text-gray-100">{pending.doNo || '—'} · {pending.truckNo}</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            If no matching fuel record is found, dispensed liters are reversed and the entry becomes unlinked.
+          </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50">Back</button>
+            <button type="button" onClick={onConfirm} disabled={saving} className="flex-1 px-3 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+              Move {dispensed}L
             </button>
           </div>
         </div>
@@ -926,6 +1059,8 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
   const [amendingEntry, setAmendingEntry] = useState<TangaLPOEntry | null>(null);
   const [cancellingEntry, setCancellingEntry] = useState<TangaLPOEntry | null>(null);
   const [linkingEntry, setLinkingEntry] = useState<TangaLPOEntry | null>(null);
+  const [unlinkingEntry, setUnlinkingEntry] = useState<TangaLPOEntry | null>(null);
+  const [pendingIdentityMove, setPendingIdentityMove] = useState<Omit<TangaLPOEntry, '_id'> | null>(null);
   const [showCancelAll, setShowCancelAll] = useState(false);
 
   // Bulk link state
@@ -1039,6 +1174,7 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
     if (entryLockId) {
       await tangaLPOAPI.releaseLock(lpoId, { entryId: entryLockId }).catch(() => {});
     }
+    setPendingIdentityMove(null);
     setEditingEntry(null);
     setEntryLockId(null);
     setEntryLockUntil(null);
@@ -1073,6 +1209,18 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
       originalLiters: editingEntry.entry.originalLiters,
       amendedAt: editingEntry.entry.amendedAt,
     };
+
+    const orig = editingEntry.entry;
+    const identityChanged =
+      !!orig.linkedFuelRecordId &&
+      ((String(safeEntry.doNo || '').trim().toUpperCase() !== String(orig.doNo || '').trim().toUpperCase()) ||
+        (String(safeEntry.truckNo || '').trim().toUpperCase() !== String(orig.truckNo || '').trim().toUpperCase()));
+
+    if (identityChanged) {
+      setPendingIdentityMove(safeEntry);
+      return;
+    }
+
     setIsSaving(true);
     try {
       const eid = entryLockId || (editingEntry.entry._id ? String(editingEntry.entry._id) : undefined);
@@ -1109,6 +1257,33 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
       } else {
         toast.error(err?.response?.data?.message || 'Failed to update entry');
       }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const confirmIdentityMove = async () => {
+    if (!editingEntry || !pendingIdentityMove || !editingEntry.entry._id) return;
+    setIsSaving(true);
+    try {
+      const eid = entryLockId || String(editingEntry.entry._id);
+      const res = await tangaLPOAPI.relinkIdentity({
+        lpoId,
+        entryId: String(editingEntry.entry._id),
+        doNo: pendingIdentityMove.doNo || '',
+        truckNo: pendingIdentityMove.truckNo,
+        rate: pendingIdentityMove.rate,
+        dest: pendingIdentityMove.dest,
+      });
+      toast.success(res.message || 'Identity updated');
+      handleMutationResult(res.data as TangaLPO);
+      setPendingIdentityMove(null);
+      setEditingEntry(null);
+      setEntryLockId(null);
+      setEntryLockUntil(null);
+      await tangaLPOAPI.releaseLock(lpoId, { entryId: eid }).catch(() => {});
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to move linked fuel');
     } finally {
       setIsSaving(false);
     }
@@ -1655,6 +1830,15 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
                                 <Link2 className="w-3.5 h-3.5" /> Link
                               </button>
                             )}
+                            {!!entry.linkedFuelRecordId && (
+                              <button
+                                onClick={() => setUnlinkingEntry(entry)}
+                                disabled={isSaving}
+                                className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-[10px] border border-[#fde9c0] bg-[#fffbeb] text-[#b45309] text-[12px] font-bold disabled:opacity-50"
+                              >
+                                <Unlink2 className="w-3.5 h-3.5" /> Unlink
+                              </button>
+                            )}
                             <button
                               onClick={() => startEntryEdit(realIdx, entry)}
                               disabled={isSaving}
@@ -1855,6 +2039,16 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
                             <Link2 className="w-3.5 h-3.5" />
                           </button>
                         )}
+                        {!!entry.linkedFuelRecordId && (
+                          <button
+                            onClick={() => setUnlinkingEntry(entry)}
+                            disabled={isSaving}
+                            className="p-1 text-amber-600 hover:text-amber-800 dark:text-amber-400 disabled:opacity-40"
+                            title="Unlink (reverse dispensed liters)"
+                          >
+                            <Unlink2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => startEntryEdit(realIdx, entry)}
                           disabled={isSaving}
@@ -2015,6 +2209,26 @@ export default function TangaLPOSheetView({ lpo: initialLpo, onUpdated, onBack, 
           lpoId={lpoId}
           onDone={updated => { setLinkingEntry(null); handleMutationResult(updated); }}
           onClose={() => setLinkingEntry(null)}
+        />
+      )}
+
+      {unlinkingEntry && (
+        <UnlinkEntryModal
+          entry={unlinkingEntry}
+          lpoId={lpoId}
+          onDone={updated => { setUnlinkingEntry(null); handleMutationResult(updated); }}
+          onClose={() => setUnlinkingEntry(null)}
+        />
+      )}
+
+      {pendingIdentityMove && editingEntry && (
+        <IdentityMoveConfirmModal
+          entry={editingEntry.entry}
+          pending={pendingIdentityMove}
+          yardField="tangaYard"
+          saving={isSaving}
+          onConfirm={() => { void confirmIdentityMove(); }}
+          onClose={() => setPendingIdentityMove(null)}
         />
       )}
 

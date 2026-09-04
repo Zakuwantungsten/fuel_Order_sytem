@@ -94,7 +94,7 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
     // Journey status and queue management
     journeyStatus: {
       type: String,
-      enum: ['queued', 'active', 'completed', 'cancelled'],
+      enum: ['queued', 'active', 'completed', 'cancelled', 'suspended'],
       default: 'active',
       required: true,
     },
@@ -139,6 +139,30 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
     cancelPromotedSuccessorId: {
       type: String,
       required: false,
+    },
+    /** Journey status before suspend side-effects (for unsuspend restore). */
+    suspendedFromJourneyStatus: {
+      type: String,
+      enum: ['active', 'queued'],
+      required: false,
+    },
+    /** Queue slot before a queued journey was suspended. */
+    suspendedFromQueueOrder: {
+      type: Number,
+      required: false,
+    },
+    /** Journey promoted when an active journey was suspended (undo on unsuspend). */
+    suspendPromotedSuccessorId: {
+      type: String,
+      required: false,
+    },
+    suspendedAt: {
+      type: Date,
+      required: false,
+    },
+    suspendedBy: {
+      type: String,
+      trim: true,
     },
     estimatedStartDate: {
       type: String,

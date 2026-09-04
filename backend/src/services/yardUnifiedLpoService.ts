@@ -161,10 +161,29 @@ export function preserveYardEntryFuelFieldsOnUpdate(
       );
     }
 
+    // Linked identity must move yard fuel via the dedicated relink endpoint — never silent PUT.
+    if (prev.linkedFuelRecordId) {
+      const doChanged =
+        String(incoming.doNo || '').trim().toUpperCase() !==
+        String(prev.doNo || '').trim().toUpperCase();
+      const truckChanged =
+        String(incoming.truckNo || '').trim().toUpperCase() !==
+        String(prev.truckNo || '').trim().toUpperCase();
+      if (doChanged || truckChanged) {
+        throw new ApiError(
+          400,
+          'Use Relink to change DO/truck on a linked entry (moves dispensed liters to the new journey)',
+        );
+      }
+    }
+
     const rate = incoming.rate != null ? Number(incoming.rate) : Number(prev.rate);
     const liters = prevLiters;
     return {
       ...incoming,
+      // Keep prior identity when linked (already validated equal above); allow DO/truck edits when unlinked.
+      doNo: prev.linkedFuelRecordId ? prev.doNo : incoming.doNo,
+      truckNo: prev.linkedFuelRecordId ? prev.truckNo : incoming.truckNo,
       liters,
       rate: Number.isFinite(rate) ? rate : prev.rate,
       amount: +(liters * (Number.isFinite(rate) ? rate : Number(prev.rate) || 0)).toFixed(2),

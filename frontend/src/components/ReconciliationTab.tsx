@@ -20,7 +20,9 @@ import {
 import { toast } from 'react-toastify';
 import { useActiveFuelStations } from '../hooks/useFuelStations';
 import usePersistedState from '../hooks/usePersistedState';
+import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import {
+  reconciliationKeys,
   useReconciliationMutations,
   useReconciliationSession,
   useReconciliationSessionLines,
@@ -32,6 +34,7 @@ import {
   usePendingLpoEntries,
   useReconciliationStationsInRange,
 } from '../hooks/useReconciliation';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   reconciliationAPI,
   PendingLpoEntry,
@@ -1033,6 +1036,7 @@ function StatementStationImportModal({
 }
 
 function ReconciliationTab() {
+  const queryClient = useQueryClient();
   const [subTab, setSubTab] = usePersistedState<ReconcileSubTab>('lpo:reconcileSubTab', 'sessions');
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [lineFilter, setLineFilter] = useState<LineFilter>('all');
@@ -1281,6 +1285,15 @@ function ReconciliationTab() {
   ]);
 
   const mutations = useReconciliationMutations();
+
+  // Other users' match/complete/drop/etc. → refetch list + open session immediately
+  useRealtimeSync(
+    'reconciliation_sessions',
+    () => {
+      queryClient.invalidateQueries({ queryKey: reconciliationKeys.all });
+    },
+    'rt-reconciliation-tab'
+  );
 
   const sessionBusy =
     exporting ||

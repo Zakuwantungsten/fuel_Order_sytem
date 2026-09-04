@@ -8,6 +8,7 @@ import {
 import {
   reconciliationService,
 } from '../services/reconciliationService';
+import { emitDataChange } from '../services/websocket';
 
 function parseStations(raw: unknown): string[] {
   if (Array.isArray(raw)) {
@@ -25,6 +26,17 @@ function escapeRegex(value: string): string {
 
 function actorId(req: AuthRequest): string {
   return req.user?.username || req.user?.userId || 'unknown';
+}
+
+/** Broadcast so other clients invalidate React Query caches immediately. */
+function emitReconciliationChange(
+  req: AuthRequest,
+  action: 'create' | 'update' | 'delete'
+): void {
+  emitDataChange('reconciliation_sessions', action, undefined, undefined, undefined, {
+    id: req.user?.userId,
+    username: req.user?.username || actorId(req),
+  });
 }
 
 function sessionToJson(session: any) {
@@ -190,6 +202,7 @@ export const createSession = async (req: AuthRequest, res: Response): Promise<vo
     createdBy: actorId(req),
   });
 
+  emitReconciliationChange(req, 'create');
   res.status(201).json(sessionToJson(session));
 };
 
@@ -232,6 +245,7 @@ export const updateSession = async (req: AuthRequest, res: Response): Promise<vo
   session.updatedBy = actorId(req);
   if (session.status === 'draft') session.status = 'in_progress';
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json(sessionToJson(session));
 };
 
@@ -294,6 +308,7 @@ export const loadLpoLines = async (req: AuthRequest, res: Response): Promise<voi
   session.updatedBy = actorId(req);
   await session.save();
 
+  emitReconciliationChange(req, 'update');
   res.json({
     ...sessionToJson(session),
     loadedLpoCount: lpoEntries.length,
@@ -551,6 +566,7 @@ export const manualMatch = async (req: AuthRequest, res: Response): Promise<void
   );
   session.updatedBy = actorId(req);
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json(sessionToJson(session));
 };
 
@@ -641,6 +657,7 @@ export const uploadStatement = async (req: AuthRequest, res: Response): Promise<
   session.updatedBy = actorId(req);
   await session.save();
 
+  emitReconciliationChange(req, 'update');
   res.json({
     ...sessionToJson(session),
     stationValidation,
@@ -701,6 +718,7 @@ export const runMatch = async (req: AuthRequest, res: Response): Promise<void> =
   );
   session.updatedBy = actorId(req);
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json(sessionToJson(session));
 };
 
@@ -841,6 +859,7 @@ export const updateLine = async (req: AuthRequest, res: Response): Promise<void>
   session.summary = reconciliationService.computeSummary(session.lines, session.statementLines || []);
   session.updatedBy = userId;
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json({
     ...sessionToJson(session),
     rematchOutcome,
@@ -856,6 +875,7 @@ export const reopenSession = async (req: AuthRequest, res: Response): Promise<vo
   session.completedBy = undefined;
   session.updatedBy = actorId(req);
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json(sessionToJson(session));
 };
 
@@ -873,6 +893,7 @@ export const addStations = async (req: AuthRequest, res: Response): Promise<void
 
   await reloadSessionLpoLines(session);
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json(sessionToJson(session));
 };
 
@@ -903,6 +924,7 @@ export const updateSessionStations = async (req: AuthRequest, res: Response): Pr
 
   await reloadSessionLpoLines(session);
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json(sessionToJson(session));
 };
 
@@ -916,6 +938,7 @@ export const saveDraft = async (req: AuthRequest, res: Response): Promise<void> 
   if (req.body.title != null) session.title = String(req.body.title).trim();
   session.updatedBy = actorId(req);
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json(sessionToJson(session));
 };
 
@@ -944,6 +967,7 @@ export const completeSession = async (req: AuthRequest, res: Response): Promise<
     session.statementLines || []
   );
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json(sessionToJson(session));
 };
 
@@ -958,6 +982,7 @@ export const dropSession = async (req: AuthRequest, res: Response): Promise<void
   session.droppedAt = new Date();
   session.updatedBy = actorId(req);
   await session.save();
+  emitReconciliationChange(req, 'update');
   res.json(sessionToJson(session));
 };
 
@@ -982,5 +1007,6 @@ export const deleteSession = async (req: AuthRequest, res: Response): Promise<vo
     throw new ApiError(400, 'Completed reconciliations cannot be deleted');
   }
   await session.deleteOne();
+  emitReconciliationChange(req, 'delete');
   res.json({ success: true });
 };

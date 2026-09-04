@@ -1,6 +1,8 @@
 import ExcelJS from 'exceljs';
+import mongoose from 'mongoose';
 import { Counter } from '../models/Counter';
 import { FuelStationConfig } from '../models/FuelStationConfig';
+import { LPOSummary } from '../models/LPOSummary';
 import {
   IReconciliationLine,
   IReconciliationSession,
@@ -989,8 +991,213 @@ export async function releaseCarriedForwardForSession(targetSessionId: string): 
   }
 }
 
+const EXPORT_THIN_BORDER: Partial<ExcelJS.Borders> = {
+  top: { style: 'thin' },
+  left: { style: 'thin' },
+  bottom: { style: 'thin' },
+  right: { style: 'thin' },
+};
+
+const EXPORT_CENTER_ALIGN: Partial<ExcelJS.Alignment> = {
+  horizontal: 'center',
+  vertical: 'middle',
+};
+
+/** LPO-entry layout for Reconciled / Pending trucks sheets (matches LPO summary style). */
+const LPO_ENTRY_EXPORT_HEADERS = [
+  'S/N',
+  'Date',
+  'LPO No.',
+  'Diesel At',
+  'DO/SDO',
+  'Truck No.',
+  'Liters',
+  'Price per Liter',
+  'Total Amount',
+  'Destinations',
+] as const;
+
+interface LpoEntryExportEnrichment {
+  doNo: string;
+  rate: number;
+  destination: string;
+  liters?: number;
+  amount?: number;
+  lpoNo?: string;
+  date?: string;
+  station?: string;
+  truckNo?: string;
+}
+
+function collectLineLpoEntryIds(line: IReconciliationLine): string[] {
+  if (line.linkedLpoEntryIds?.length) {
+    return [...new Set(line.linkedLpoEntryIds.filter(Boolean))];
+  }
+  return line.lpoEntryId ? [line.lpoEntryId] : [];
+}
+
+async function loadLpoEntryEnrichmentMap(
+  entryIds: string[]
+): Promise<Map<string, LpoEntryExportEnrichment>> {
+  const map = new Map<string, LpoEntryExportEnrichment>();
+  const unique = [...new Set(entryIds.filter(Boolean))];
+  if (unique.length === 0) return map;
+
+  const objectIds = unique
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  if (objectIds.length === 0) return map;
+
+  const rows = await LPOSummary.aggregate([
+    { $match: { isDeleted: { $ne: true }, 'entries._id': { $in: objectIds } } },
+    { $unwind: '$entries' },
+    { $match: { 'entries._id': { $in: objectIds } } },
+    {
+      $project: {
+        _id: '$entries._id',
+        lpoNo: 1,
+        date: 1,
+        station: '$station',
+        customStationName: 1,
+        doNo: '$entries.doNo',
+        truckNo: '$entries.truckNo',
+        liters: '$entries.liters',
+        rate: '$entries.rate',
+        amount: '$entries.amount',
+        dest: '$entries.dest',
+        isCustomStation: '$entries.isCustomStation',
+        entryCustomStationName: '$entries.customStationName',
+      },
+    },
+  ]);
+
+  for (const row of rows) {
+    const id = String(row._id);
+    const station = resolveLpoEntryStation({
+      dieselAt: row.station,
+      station: row.station,
+      isCustomStation: row.isCustomStation,
+      customStationName: row.entryCustomStationName || row.customStationName,
+    });
+    const liters = Number(row.liters ?? 0);
+    const rate = Number(row.rate ?? 0);
+    const amount =
+      row.amount != null && !Number.isNaN(Number(row.amount))
+        ? Number(row.amount)
+        : Number((liters * rate).toFixed(4));
+    map.set(id, {
+      doNo: String(row.doNo || ''),
+      rate,
+      destination: String(row.dest || ''),
+      liters,
+      amount,
+      lpoNo: String(row.lpoNo || ''),
+      date: parseDateOnly(row.date),
+      station,
+      truckNo: displayTruckNo(String(row.truckNo || '')),
+    });
+  }
+
+  return map;
+}
+
+function styleExportHeaderRow(row: ExcelJS.Row, colCount: number): void {
+  row.font = { bold: true };
+  row.alignment = EXPORT_CENTER_ALIGN;
+  row.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFE0E0E0' },
+  };
+  for (let col = 1; col <= colCount; col++) {
+    row.getCell(col).border = EXPORT_THIN_BORDER;
+  }
+}
+
+function styleExportDataRow(row: ExcelJS.Row, colCount: number): void {
+  for (let col = 1; col <= colCount; col++) {
+    const cell = row.getCell(col);
+    cell.alignment = EXPORT_CENTER_ALIGN;
+    cell.border = EXPORT_THIN_BORDER;
+  }
+}
+
+function buildLpoEntryExportValues(
+  sn: number,
+  line: IReconciliationLine,
+  entryId: string | undefined,
+  enrichment: LpoEntryExportEnrichment | undefined
+): (string | number)[] {
+  const liters =
+    enrichment?.liters ??
+    (line.lpoLiters != null ? Number(line.lpoLiters) : 0);
+  const rate =
+    enrichment?.rate ??
+    (liters > 0 && line.lpoAmount != null
+      ? Number((Number(line.lpoAmount) / liters).toFixed(4))
+      : 0);
+  const amount =
+    enrichment?.amount ??
+    (line.lpoAmount != null ? Number(line.lpoAmount) : Number((liters * rate).toFixed(4)));
+
+  return [
+    sn,
+    enrichment?.date || line.lpoDate || '',
+    enrichment?.lpoNo || line.lpoNo || '',
+    enrichment?.station || line.lpoStation || '',
+    enrichment?.doNo || line.lpoDoNo || '',
+    enrichment?.truckNo || line.lpoTruckNoRaw || displayTruckNo(line.lpoTruckNo) || '',
+    liters,
+    rate,
+    amount,
+    enrichment?.destination || '',
+  ];
+}
+
+function addLpoEntryExportSheet(
+  workbook: ExcelJS.Workbook,
+  sheetName: string,
+  lines: IReconciliationLine[],
+  enrichmentMap: Map<string, LpoEntryExportEnrichment>
+): void {
+  const sheet = workbook.addWorksheet(sheetName);
+  sheet.columns = [
+    { width: 8 },
+    { width: 14 },
+    { width: 12 },
+    { width: 20 },
+    { width: 14 },
+    { width: 14 },
+    { width: 10 },
+    { width: 14 },
+    { width: 14 },
+    { width: 14 },
+  ];
+
+  const headerRow = sheet.getRow(1);
+  headerRow.values = [...LPO_ENTRY_EXPORT_HEADERS];
+  styleExportHeaderRow(headerRow, LPO_ENTRY_EXPORT_HEADERS.length);
+
+  let sn = 1;
+  for (const line of lines) {
+    const entryIds = collectLineLpoEntryIds(line);
+    if (entryIds.length === 0) {
+      // Statement-only lines never belong on these LPO sheets
+      continue;
+    }
+    for (const entryId of entryIds) {
+      const row = sheet.getRow(sn + 1);
+      row.values = buildLpoEntryExportValues(sn, line, entryId, enrichmentMap.get(entryId));
+      styleExportDataRow(row, LPO_ENTRY_EXPORT_HEADERS.length);
+      sn += 1;
+    }
+  }
+}
+
 export async function exportSessionReportWorkbook(session: IReconciliationSession): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
+  const lines = session.lines || [];
+
   const summarySheet = workbook.addWorksheet('Summary');
   summarySheet.addRow(['Reconciliation Report']);
   summarySheet.addRow(['Session No', session.sessionNo]);
@@ -1024,7 +1231,7 @@ export async function exportSessionReportWorkbook(session: IReconciliationSessio
   ]);
   detail.getRow(1).font = { bold: true };
 
-  for (const line of session.lines || []) {
+  for (const line of lines) {
     detail.addRow([
       line.matchStatus,
       line.lpoDate || '',
@@ -1060,11 +1267,11 @@ export async function exportSessionReportWorkbook(session: IReconciliationSessio
   ]);
   droppedSheet.getRow(1).font = { bold: true };
 
-  const droppedRows = buildStatementRows(session.lines || [], session.statementLines || []).filter(
+  const droppedRows = buildStatementRows(lines, session.statementLines || []).filter(
     (r) => r.matchStatus === 'dropped'
   );
   for (const row of droppedRows) {
-    const linked = (session.lines || []).find(
+    const linked = lines.find(
       (l) => String((l as { _id?: unknown })._id || '') === row.reconLineId
     );
     droppedSheet.addRow([
@@ -1083,6 +1290,37 @@ export async function exportSessionReportWorkbook(session: IReconciliationSessio
       linked?.notes || '',
     ]);
   }
+
+  const reconciledLines = lines
+    .filter((l) => isReconciledMatchStatus(l.matchStatus) && !!l.lpoEntryId)
+    .sort((a, b) => {
+      const d = (a.lpoDate || '').localeCompare(b.lpoDate || '');
+      if (d !== 0) return d;
+      return (a.lpoTruckNo || '').localeCompare(b.lpoTruckNo || '');
+    });
+
+  const pendingTruckLines = lines
+    .filter(
+      (l) =>
+        !!l.lpoEntryId &&
+        (l.matchStatus === 'unmatched_lpo' ||
+          l.matchStatus === 'liter_mismatch' ||
+          (l.matchStatus === 'stale_pending' && l.userDecision !== 'drop'))
+    )
+    .sort((a, b) => {
+      const d = (a.lpoDate || '').localeCompare(b.lpoDate || '');
+      if (d !== 0) return d;
+      return (a.lpoTruckNo || '').localeCompare(b.lpoTruckNo || '');
+    });
+
+  const enrichmentIds = [
+    ...reconciledLines.flatMap(collectLineLpoEntryIds),
+    ...pendingTruckLines.flatMap(collectLineLpoEntryIds),
+  ];
+  const enrichmentMap = await loadLpoEntryEnrichmentMap(enrichmentIds);
+
+  addLpoEntryExportSheet(workbook, 'Reconciled', reconciledLines, enrichmentMap);
+  addLpoEntryExportSheet(workbook, 'Pending trucks', pendingTruckLines, enrichmentMap);
 
   return workbook;
 }

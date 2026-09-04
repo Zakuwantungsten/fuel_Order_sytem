@@ -68,6 +68,16 @@ router.post('/manual-link',
   asyncHandler(darLPOController.manualLinkDarEntry)
 );
 
+router.post('/unlink-entry',
+  authorize(...WRITE_ROLES),
+  asyncHandler(darLPOController.unlinkDarEntry)
+);
+
+router.post('/relink-identity',
+  authorize(...WRITE_ROLES),
+  asyncHandler(darLPOController.relinkDarEntryIdentity)
+);
+
 router.post('/preview-manual-link',
   authorize(...WRITE_ROLES),
   asyncHandler(darLPOController.previewManualLinkDarEntry)

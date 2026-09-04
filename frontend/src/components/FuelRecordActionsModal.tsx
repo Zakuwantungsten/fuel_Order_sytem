@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, Edit, Undo2, XCircle, RotateCcw } from 'lucide-react';
+import { CheckCircle2, Edit, Undo2, XCircle, RotateCcw, PauseCircle, PlayCircle } from 'lucide-react';
 import type { FuelRecord } from '../types';
 
 export type FuelRecordActionsPosition = {
@@ -19,11 +19,13 @@ interface FuelRecordActionsModalProps {
   onComplete: (record: FuelRecord) => void;
   onUncomplete: (record: FuelRecord) => void;
   onUncancel: (record: FuelRecord) => void;
+  onSuspend: (record: FuelRecord) => void;
+  onUnsuspend: (record: FuelRecord) => void;
 }
 
 export function actionsMenuPositionFromEvent(event: React.MouseEvent<HTMLButtonElement>): FuelRecordActionsPosition {
   const rect = event.currentTarget.getBoundingClientRect();
-  const DROPDOWN_HEIGHT = 220;
+  const DROPDOWN_HEIGHT = 280;
   const DROPDOWN_WIDTH = 224;
   const left = Math.max(10, Math.min(rect.right - DROPDOWN_WIDTH, window.innerWidth - DROPDOWN_WIDTH - 10));
   const spaceBelow = window.innerHeight - rect.bottom;
@@ -43,10 +45,15 @@ export default function FuelRecordActionsModal({
   onComplete,
   onUncomplete,
   onUncancel,
+  onSuspend,
+  onUnsuspend,
 }: FuelRecordActionsModalProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const isCancelled = record?.isCancelled === true;
+  const isSuspended = !isCancelled && record?.journeyStatus === 'suspended';
   const isActive = !isCancelled && record?.journeyStatus === 'active';
+  const isQueued = !isCancelled && record?.journeyStatus === 'queued';
+  const canSuspend = isActive || isQueued;
   const canUndoComplete =
     !isCancelled && record?.journeyStatus === 'completed' && record?.manuallyCompleted === true;
 
@@ -112,6 +119,28 @@ export default function FuelRecordActionsModal({
               <XCircle className="w-4 h-4 mr-2" />
               Cancel
             </button>
+            {canSuspend && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => onSuspend(record)}
+                className="flex items-center w-full px-4 py-2 text-left text-sm text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+              >
+                <PauseCircle className="w-4 h-4 mr-2" />
+                Suspend
+              </button>
+            )}
+            {isSuspended && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => onUnsuspend(record)}
+                className="flex items-center w-full px-4 py-2 text-left text-sm text-sky-700 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20"
+              >
+                <PlayCircle className="w-4 h-4 mr-2" />
+                Unsuspend
+              </button>
+            )}
             {isActive && (
               <button
                 type="button"
