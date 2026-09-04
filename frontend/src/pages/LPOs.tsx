@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Calendar, Check, Loader2, Truck, Scale } from 'lucide-react';
+import { Plus, Download, FileSpreadsheet, List, Grid, BarChart3, Copy, MessageSquare, Image, ChevronDown, FileDown, Wallet, Check, Loader2, Truck, Scale, Search } from 'lucide-react';
 import { useRealtimeSync, isOwnDataChange } from '../hooks/useRealtimeSync';
 import { useNewRecordsPill } from '../hooks/useNewRecordsPill';
 import { NewRecordsPill } from '../components/NewRecordsPill';
@@ -142,11 +142,14 @@ const LPOs = () => {
   // Filter dropdown states
   const [showWorkbookYearDropdown, setShowWorkbookYearDropdown] = useState(false);
   const [showStationDropdown, setShowStationDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
 
   // Refs for click-outside detection
   const workbookYearDropdownRef = useRef<HTMLDivElement>(null);
   const stationDropdownRef = useRef<HTMLDivElement>(null);
   const monthDropdownRef = useRef<HTMLDivElement>(null);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
   
   // Ref to track if we've processed a highlight
   const highlightProcessedRef = useRef<string | null>(null);
@@ -216,6 +219,12 @@ const LPOs = () => {
       if (stationDropdownRef.current && !stationDropdownRef.current.contains(event.target as Node)) {
         setShowStationDropdown(false);
       }
+      if (monthDropdownRef.current && !monthDropdownRef.current.contains(event.target as Node)) {
+        setShowMonthDropdown(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setShowStatusDropdown(false);
+      }
     };
 
     const handleScroll = (event: Event) => {
@@ -223,11 +232,13 @@ const LPOs = () => {
       if (
         monthDropdownRef.current?.contains(target) ||
         workbookYearDropdownRef.current?.contains(target) ||
-        stationDropdownRef.current?.contains(target)
+        stationDropdownRef.current?.contains(target) ||
+        statusDropdownRef.current?.contains(target)
       ) return;
       setShowMonthDropdown(false);
       setShowWorkbookYearDropdown(false);
       setShowStationDropdown(false);
+      setShowStatusDropdown(false);
     };
 
     const scrollEl = document.getElementById('main-scroll-container');
@@ -1571,29 +1582,29 @@ const LPOs = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-3 mb-6 transition-colors">
+      <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/30 rounded-lg p-3 mb-6 transition-colors">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="col-span-2 md:col-span-1">
+          <div className="relative col-span-2 md:col-span-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
             <input
               type="text"
               placeholder="Search by LPO#, Truck, DO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+              className="pl-10 w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 dashboard-search-input"
+              style={{ paddingLeft: '2.5rem' }}
             />
           </div>
           
-          {/* Month Multi-Select Dropdown */}
+          {/* Month Multi-Select Dropdown — same button layout as Fuel Records */}
           <div ref={monthDropdownRef} className="month-dropdown-container relative">
             <button
+              type="button"
               onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-              className="w-full flex items-center justify-between px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600"
+              className="w-full flex items-center justify-between gap-2 px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 overflow-hidden"
             >
-              <span className="flex items-center">
-                <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                {getPeriodsDisplayText()}
-              </span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
+              <span className="truncate min-w-0">{getPeriodsDisplayText()}</span>
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
             </button>
             
             {showMonthDropdown && (
@@ -1602,6 +1613,7 @@ const LPOs = () => {
                 <div className="p-2 border-b border-gray-200 dark:border-gray-600">
                   {availablePeriods.some(p => p.year === new Date().getFullYear() && p.month === new Date().getMonth() + 1) && (
                     <button
+                      type="button"
                       onClick={() => {
                         setSelectedPeriods([{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
                         setShowMonthDropdown(false);
@@ -1612,6 +1624,7 @@ const LPOs = () => {
                     </button>
                   )}
                   <button
+                    type="button"
                     onClick={() => {
                       setSelectedPeriods(availablePeriods.length > 0 ? [...availablePeriods] : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }]);
                       setShowMonthDropdown(false);
@@ -1665,14 +1678,14 @@ const LPOs = () => {
             <button
               type="button"
               onClick={() => setShowStationDropdown(!showStationDropdown)}
-              className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 flex items-center justify-between gap-2"
+              className="w-full flex items-center justify-between gap-2 px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 overflow-hidden"
             >
-              <span>
+              <span className="truncate min-w-0">
                 {selectedStations.length === 0
                   ? 'All Stations'
                   : `${selectedStations.length} Station${selectedStations.length === 1 ? '' : 's'}`}
               </span>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform ${showStationDropdown ? 'rotate-180' : ''}`} />
             </button>
             {showStationDropdown && (
               <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
@@ -1707,23 +1720,51 @@ const LPOs = () => {
               </div>
             )}
           </div>
+
           <input
+            ref={dateInputRef}
             type="date"
             value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }}
+            className="w-full h-[34px] px-3 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-600 focus:border-transparent [color-scheme:light] dark:[color-scheme:dark]"
+            title={dateFilter || 'Filter by date'}
           />
+
           {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-            className="w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+          <div className="relative" ref={statusDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+              className="w-full flex items-center justify-between gap-2 px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 overflow-hidden"
+            >
+              <span className="truncate min-w-0">
+                {statusFilter === 'all' ? 'All Status' : statusFilter === 'active' ? 'Active' : 'Cancelled'}
+              </span>
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showStatusDropdown && (
+              <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+                {([{ value: 'all', label: 'All Status' }, { value: 'active', label: 'Active' }, { value: 'cancelled', label: 'Cancelled' }] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter(option.value);
+                      setCurrentPage(1);
+                      setShowStatusDropdown(false);
+                    }}
+                    className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 flex items-center justify-between"
+                  >
+                    <span>{option.label}</span>
+                    {statusFilter === option.value && <Check className="w-4 h-4 text-blue-600" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button
+            type="button"
             onClick={() => {
               setSearchTerm('');
               setSelectedStations([]);
