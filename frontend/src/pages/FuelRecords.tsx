@@ -1398,7 +1398,7 @@ const FuelRecords = () => {
               placeholder="Search by Truck, DO..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm dashboard-search-input"
+              className="pl-10 w-full px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 dashboard-search-input"
               style={{ paddingLeft: '2.5rem' }}
             />
           </div>
@@ -1406,10 +1406,12 @@ const FuelRecords = () => {
             <button
               type="button"
               onClick={() => setShowRouteTypeDropdown(!showRouteTypeDropdown)}
-              className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
+              className="w-full flex items-center justify-between gap-2 px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 overflow-hidden"
             >
-              <span>{routeTypeFilter === 'IMPORT' ? 'Import (Going)' : 'Export (Return)'}</span>
-              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRouteTypeDropdown ? 'rotate-180' : ''}`} />
+              <span className="truncate min-w-0">
+                {routeTypeFilter === 'IMPORT' ? 'Import (Going)' : 'Export (Return)'}
+              </span>
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform ${showRouteTypeDropdown ? 'rotate-180' : ''}`} />
             </button>
             {showRouteTypeDropdown && (
               <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
@@ -1448,12 +1450,12 @@ const FuelRecords = () => {
             <button
               type="button"
               onClick={() => setShowRouteDropdown(!showRouteDropdown)}
-              className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
+              className="w-full flex items-center justify-between gap-2 px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 overflow-hidden"
             >
-              <span className={!routeFilter ? 'text-gray-400' : ''}>
+              <span className={`truncate min-w-0 ${!routeFilter ? 'text-gray-400' : ''}`}>
                 {routeFilter ? routeFilter.replace('-', ' → ') : 'All Routes'}
               </span>
-              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRouteDropdown ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform ${showRouteDropdown ? 'rotate-180' : ''}`} />
             </button>
             {showRouteDropdown && (
               <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
@@ -1497,7 +1499,7 @@ const FuelRecords = () => {
             <button
               onClick={goToPreviousMonth}
               disabled={!canGoToPreviousMonth()}
-              className={`hidden md:inline-flex items-center justify-center h-9 w-9 flex-shrink-0 rounded-md transition-colors ${
+              className={`hidden md:inline-flex items-center justify-center h-[34px] w-[34px] flex-shrink-0 rounded-md transition-colors ${
                 canGoToPreviousMonth()
                   ? 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
                   : 'opacity-40 cursor-not-allowed'
@@ -1506,14 +1508,14 @@ const FuelRecords = () => {
             >
               <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
-            <div className="relative flex-1" ref={monthDropdownRef}>
+            <div className="relative flex-1 min-w-0" ref={monthDropdownRef}>
               <button
                 type="button"
                 onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-                className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm flex items-center justify-between gap-2"
+                className="w-full flex items-center justify-between gap-2 px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 overflow-hidden"
               >
-                <span>{getMonthName(selectedMonth)}</span>
-                <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
+                <span className="truncate min-w-0">{getMonthName(selectedMonth)}</span>
+                <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
               </button>
               {showMonthDropdown && (
                 <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
@@ -1539,7 +1541,7 @@ const FuelRecords = () => {
             <button
               onClick={goToNextMonth}
               disabled={!canGoToNextMonth()}
-              className={`hidden md:inline-flex items-center justify-center h-9 w-9 flex-shrink-0 rounded-md transition-colors ${
+              className={`hidden md:inline-flex items-center justify-center h-[34px] w-[34px] flex-shrink-0 rounded-md transition-colors ${
                 canGoToNextMonth()
                   ? 'hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer'
                   : 'opacity-40 cursor-not-allowed'
@@ -1554,10 +1556,12 @@ const FuelRecords = () => {
             <button
               type="button"
               onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-              className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
+              className="w-full flex items-center justify-between gap-2 px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 overflow-hidden"
             >
-              <span>{statusFilter === 'active' ? 'Active' : statusFilter === 'cancelled' ? 'Cancelled' : 'All Status'}</span>
-              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+              <span className="truncate min-w-0">
+                {statusFilter === 'active' ? 'Active' : statusFilter === 'cancelled' ? 'Cancelled' : 'All Status'}
+              </span>
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
             </button>
             {showStatusDropdown && (
               <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
@@ -1580,11 +1584,11 @@ const FuelRecords = () => {
             <button
               type="button"
               onClick={() => setShowJourneyDropdown(!showJourneyDropdown)}
-              className="w-full h-9 px-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left text-sm flex items-center justify-between"
+              className="w-full flex items-center justify-between gap-2 px-3 h-[34px] text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 overflow-hidden"
               title="Filter by journey status"
             >
-              <span className="truncate">{journeyFilterLabel}</span>
-              <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showJourneyDropdown ? 'rotate-180' : ''}`} />
+              <span className="truncate min-w-0">{journeyFilterLabel}</span>
+              <ChevronDown className={`w-4 h-4 flex-shrink-0 text-gray-400 transition-transform ${showJourneyDropdown ? 'rotate-180' : ''}`} />
             </button>
             {showJourneyDropdown && (
               <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
@@ -1605,7 +1609,7 @@ const FuelRecords = () => {
           <button
             onClick={handleClearFilters}
             disabled={!isAnyFilterActive()}
-            className={`col-span-2 md:col-span-1 w-full h-9 inline-flex items-center justify-center px-3 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium transition-colors ${
+            className={`w-full h-[34px] inline-flex items-center justify-center px-3 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium transition-colors ${
               isAnyFilterActive()
                 ? 'text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer'
                 : 'text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 opacity-60 cursor-not-allowed'
