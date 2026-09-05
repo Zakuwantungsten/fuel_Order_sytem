@@ -12,6 +12,7 @@ import {
 } from '../models/ReconciliationSession';
 import unifiedExportService from './unifiedExportService';
 import { isYardStation } from '../utils/yardStations';
+import { createUniqueWorksheetName } from '../utils/excelWorksheetName';
 
 export const STATEMENT_TEMPLATE_HEADERS = [
   'S/N (optional)',
@@ -1209,6 +1210,86 @@ function addLpoEntryExportSheet(
   }
 }
 
+function statementFileSheetBaseName(fileName?: string): string {
+  const raw = String(fileName || '').trim();
+  if (!raw) return 'Statement';
+  return raw.replace(/\.[^.\\/]+$/, '').trim() || 'Statement';
+}
+
+function buildStatementRowActions(stmt: IStatementLine): string {
+  const actions: string[] = [];
+  const origTruck = (stmt.originalTruckNoRaw || stmt.originalTruckNo || '').trim();
+  const currTruck = (stmt.truckNoRaw || stmt.truckNo || '').trim();
+  if (origTruck && currTruck && origTruck !== currTruck) {
+    actions.push(`Truck fixed: ${origTruck} → ${currTruck}`);
+  }
+  if (
+    stmt.originalLiters != null &&
+    Number.isFinite(Number(stmt.originalLiters)) &&
+    Number(stmt.originalLiters) !== Number(stmt.liters)
+  ) {
+    actions.push(`Liters amended: ${stmt.originalLiters} → ${stmt.liters}`);
+  }
+  return actions.join('; ');
+}
+
+function addStatementExportSheet(
+  workbook: ExcelJS.Workbook,
+  session: IReconciliationSession
+): void {
+  const usedNames = new Set(
+    workbook.worksheets.map((ws) => ws.name.toLowerCase())
+  );
+  const sheetName = createUniqueWorksheetName(
+    statementFileSheetBaseName(session.statementFileName),
+    usedNames,
+    'Statement'
+  );
+  const sheet = workbook.addWorksheet(sheetName);
+  const headers = [
+    'S/N',
+    'Stmt Row',
+    'Date',
+    'Station',
+    'Truck No',
+    'Original Truck',
+    'Liters',
+    'Original Liters',
+    'Amount',
+    'LPO No',
+    'DO No',
+    'Notes',
+    'ACTIONS',
+  ] as const;
+  sheet.columns = headers.map((header) => ({
+    width: header === 'ACTIONS' ? 42 : Math.min(28, Math.max(12, header.length + 2)),
+  }));
+  const headerRow = sheet.addRow([...headers]);
+  styleExportHeaderRow(headerRow, headers.length);
+
+  const stmts = [...(session.statementLines || [])].sort(
+    (a, b) => (a.rowNumber ?? a.lineIndex) - (b.rowNumber ?? b.lineIndex)
+  );
+  for (const stmt of stmts) {
+    const row = sheet.addRow([
+      stmt.sn ?? '',
+      stmt.rowNumber ?? stmt.lineIndex + 2,
+      stmt.date || '',
+      stmt.station || '',
+      stmt.truckNoRaw || stmt.truckNo || '',
+      stmt.originalTruckNoRaw || stmt.originalTruckNo || '',
+      stmt.liters ?? '',
+      stmt.originalLiters ?? '',
+      stmt.amount ?? '',
+      stmt.lpoNo || '',
+      stmt.doNo || '',
+      stmt.notes || '',
+      buildStatementRowActions(stmt),
+    ]);
+    styleExportDataRow(row, headers.length);
+  }
+}
+
 export async function exportSessionReportWorkbook(session: IReconciliationSession): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   const lines = session.lines || [];
@@ -1263,6 +1344,64 @@ export async function exportSessionReportWorkbook(session: IReconciliationSessio
       line.notes || '',
     ]);
   }
+
+  const issuesHeaders = [
+    'Match Status',
+    'Exception Code',
+    'Details',
+    'Stmt Row',
+    'S/N',
+    'Date',
+    'Statement Station',
+    'Statement Truck',
+    'Statement Liters',
+    'LPO Station',
+    'LPO Truck',
+    'LPO Liters',
+    'LPO No',
+    'DO No',
+    'Days Gap',
+    'Decision',
+    'Notes',
+  ] as const;
+  const issuesSheet = workbook.addWorksheet('ISSUES');
+  issuesSheet.columns = issuesHeaders.map((header) => ({
+    width: Math.min(36, Math.max(12, header.length + 2)),
+  }));
+  const issuesHeaderRow = issuesSheet.addRow([...issuesHeaders]);
+  styleExportHeaderRow(issuesHeaderRow, issuesHeaders.length);
+
+  const issueLines = lines.filter(
+    (line) => line.matchStatus !== 'dropped' && lineMatchesFilter(line, 'exceptions')
+  );
+  for (const line of issueLines) {
+    const stmtIndexes = lineStatementIndexes(line);
+    const stmtSn = stmtIndexes
+      .map((idx) => (session.statementLines || []).find((s) => s.lineIndex === idx)?.sn)
+      .find((sn) => sn != null);
+    const row = issuesSheet.addRow([
+      line.matchStatus,
+      line.exceptionCode || '',
+      line.exceptionMessage || line.exceptionCode || '',
+      line.statementRowNumber ?? '',
+      stmtSn ?? '',
+      line.statementDate || line.lpoDate || '',
+      line.statementStation || '',
+      line.statementTruckNoRaw || line.statementTruckNo || '',
+      line.statementLiters ?? '',
+      line.lpoStation || '',
+      line.lpoTruckNoRaw || line.lpoTruckNo || '',
+      line.lpoLiters ?? '',
+      line.lpoNo || '',
+      line.lpoDoNo || '',
+      line.daysGap ?? '',
+      line.userDecision || '',
+      line.notes || '',
+    ]);
+    styleExportDataRow(row, issuesHeaders.length);
+  }
+
+  addStatementExportSheet(workbook, session);
 
   const droppedSheet = workbook.addWorksheet('Dropped trucks');
   droppedSheet.addRow([
@@ -2098,10 +2237,16 @@ function lineUsesLpoEntry(line: IReconciliationLine, entryId: string): boolean {
 export function applyStatementCorrection(
   session: IReconciliationSession,
   line: IReconciliationLine,
-  opts: { statementTruckNo?: string; statementStation?: string }
-): { truckChanged: boolean; stationChanged: boolean; targetIndexes: number[] } {
+  opts: { statementTruckNo?: string; statementStation?: string; statementLiters?: number }
+): {
+  truckChanged: boolean;
+  stationChanged: boolean;
+  litersChanged: boolean;
+  targetIndexes: number[];
+} {
   let truckChanged = false;
   let stationChanged = false;
+  let litersChanged = false;
 
   const newTruckRaw =
     opts.statementTruckNo != null
@@ -2115,6 +2260,8 @@ export function applyStatementCorrection(
     opts.statementStation != null
       ? String(opts.statementStation).trim()
       : line.statementStation || '';
+  const newLiters =
+    opts.statementLiters != null ? Number(opts.statementLiters) : Number(line.statementLiters ?? NaN);
 
   if (opts.statementTruckNo != null) {
     const prevRaw = line.statementTruckNoRaw || '';
@@ -2123,6 +2270,9 @@ export function applyStatementCorrection(
   }
   if (opts.statementStation != null) {
     stationChanged = newStation !== (line.statementStation || '');
+  }
+  if (opts.statementLiters != null && Number.isFinite(newLiters)) {
+    litersChanged = Number(line.statementLiters ?? NaN) !== newLiters;
   }
 
   // Resolve which statement row(s) this fix applies to
@@ -2170,8 +2320,26 @@ export function applyStatementCorrection(
   if (opts.statementStation != null) {
     line.statementStation = newStation;
   }
+  if (opts.statementLiters != null && Number.isFinite(newLiters)) {
+    if (litersChanged) {
+      const prevLineLiters = Number(line.statementLiters);
+      if (
+        line.statementAmount != null &&
+        Number.isFinite(prevLineLiters) &&
+        prevLineLiters > 0
+      ) {
+        line.statementAmount = Number(
+          ((Number(line.statementAmount) / prevLineLiters) * newLiters).toFixed(4)
+        );
+      }
+      line.notes = line.notes
+        ? `${line.notes}; Statement liters amended to ${newLiters}`
+        : `Statement liters amended to ${newLiters}`;
+    }
+    line.statementLiters = newLiters;
+  }
 
-  // Apply to underlying statementLines so rematch uses the correction
+  // Apply to underlying statementLines so rematch / totals use the correction
   for (const idx of targetIndexes) {
     const stmt = session.statementLines.find((s) => s.lineIndex === idx);
     if (!stmt) continue;
@@ -2186,9 +2354,19 @@ export function applyStatementCorrection(
     if (opts.statementStation != null && stationChanged) {
       stmt.station = newStation;
     }
+    if (opts.statementLiters != null && litersChanged && Number.isFinite(newLiters)) {
+      const prevLiters = Number(stmt.liters);
+      if (stmt.originalLiters == null && Number.isFinite(prevLiters)) {
+        stmt.originalLiters = prevLiters;
+      }
+      if (stmt.amount != null && prevLiters > 0) {
+        stmt.amount = Number(((Number(stmt.amount) / prevLiters) * newLiters).toFixed(4));
+      }
+      stmt.liters = newLiters;
+    }
   }
 
-  return { truckChanged, stationChanged, targetIndexes };
+  return { truckChanged, stationChanged, litersChanged, targetIndexes };
 }
 
 export function findLineMatchOutcome(

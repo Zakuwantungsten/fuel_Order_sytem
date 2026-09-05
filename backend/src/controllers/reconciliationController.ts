@@ -769,9 +769,15 @@ export const updateLine = async (req: AuthRequest, res: Response): Promise<void>
   const lineIdBefore = String((line as any)._id);
   let truckChanged = false;
   let stationChanged = false;
+  let litersChanged = false;
   let correctionIndexes: number[] = [];
 
-  if (req.body.statementTruckNo != null || req.body.statementStation != null) {
+  const hasStatementCorrection =
+    req.body.statementTruckNo != null ||
+    req.body.statementStation != null ||
+    req.body.statementLiters != null;
+
+  if (hasStatementCorrection) {
     if (req.body.statementStation != null) {
       const station = String(req.body.statementStation).trim();
       const allowed = new Set(session.stations.map((s) => s.toUpperCase()));
@@ -779,30 +785,36 @@ export const updateLine = async (req: AuthRequest, res: Response): Promise<void>
         throw new ApiError(400, 'Station must be one of the session selected stations');
       }
     }
+    let statementLiters: number | undefined;
+    if (req.body.statementLiters != null) {
+      statementLiters = Number(req.body.statementLiters);
+      if (!Number.isFinite(statementLiters) || statementLiters <= 0) {
+        throw new ApiError(400, 'Statement liters must be a positive number');
+      }
+    }
     const result = reconciliationService.applyStatementCorrection(session, line, {
       statementTruckNo:
         req.body.statementTruckNo != null ? String(req.body.statementTruckNo) : undefined,
       statementStation:
         req.body.statementStation != null ? String(req.body.statementStation) : undefined,
+      statementLiters,
     });
     truckChanged = result.truckChanged;
     stationChanged = result.stationChanged;
+    litersChanged = result.litersChanged;
     correctionIndexes = result.targetIndexes;
   }
   if (req.body.lpoTruckNo != null) {
     line.lpoTruckNoRaw = reconciliationService.displayTruckNo(req.body.lpoTruckNo);
     line.lpoTruckNo = reconciliationService.normalizeTruckNo(req.body.lpoTruckNo);
   }
-  if (req.body.statementLiters != null) {
-    line.statementLiters = Number(req.body.statementLiters);
-  }
   if (req.body.notes != null) {
     line.notes = String(req.body.notes).trim();
   }
 
   if (req.body.rematch === true) {
-    if (!truckChanged && !stationChanged) {
-      throw new ApiError(400, 'Change the statement truck or station before re-matching');
+    if (!truckChanged && !stationChanged && !litersChanged) {
+      throw new ApiError(400, 'Change the statement truck, station, or liters before re-matching');
     }
     if (!session.statementLines?.length) {
       throw new ApiError(400, 'Upload a statement before re-matching');
@@ -858,6 +870,10 @@ export const updateLine = async (req: AuthRequest, res: Response): Promise<void>
 
   session.summary = reconciliationService.computeSummary(session.lines, session.statementLines || []);
   session.updatedBy = userId;
+  if (truckChanged || stationChanged || litersChanged) {
+    session.markModified('statementLines');
+    session.markModified('lines');
+  }
   await session.save();
   emitReconciliationChange(req, 'update');
   res.json({

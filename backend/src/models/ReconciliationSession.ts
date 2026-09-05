@@ -31,6 +31,8 @@ export interface IStatementLine {
   originalTruckNo?: string;
   originalTruckNoRaw?: string;
   liters: number;
+  /** First liters as uploaded (before Fix amend). */
+  originalLiters?: number;
   amount?: number;
   lpoNo?: string;
   doNo?: string;
@@ -148,6 +150,7 @@ const statementLineSchema = new Schema<IStatementLine>(
     originalTruckNo: { type: String, trim: true },
     originalTruckNoRaw: { type: String, trim: true },
     liters: { type: Number, required: true, min: 0 },
+    originalLiters: { type: Number, min: 0 },
     amount: { type: Number, min: 0 },
     lpoNo: { type: String, trim: true },
     doNo: { type: String, trim: true },

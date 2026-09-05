@@ -1051,6 +1051,7 @@ function ReconciliationTab() {
   const [fixLineModal, setFixLineModal] = useState<ReconciliationLine | null>(null);
   const [fixTruck, setFixTruck] = useState('');
   const [fixStation, setFixStation] = useState('');
+  const [fixLiters, setFixLiters] = useState('');
   const [pendingSortBy, setPendingSortBy] = useState<PendingSortKey>('lpoDate');
   const [pendingSortDir, setPendingSortDir] = useState<'asc' | 'desc'>('asc');
   const [stmtFilter, setStmtFilter] = useState<StmtFilter>('all');
@@ -1588,6 +1589,7 @@ function ReconciliationTab() {
     setFixTruck(row.truckNoRaw || row.truckNo || '');
     const station = row.station || '';
     setFixStation(station);
+    setFixLiters(row.liters != null ? String(row.liters) : '');
   };
 
   const fixLineChanged = useMemo(() => {
@@ -1602,8 +1604,14 @@ function ReconciliationTab() {
       ''
     ).trim();
     const origStation = (fixLineModal.statementStation || fixLineModal.lpoStation || '').trim();
-    return truck !== origTruck || station !== origStation;
-  }, [fixLineModal, fixTruck, fixStation]);
+    const origLiters = Number(fixLineModal.statementLiters ?? NaN);
+    const nextLiters = Number(fixLiters.trim());
+    const litersChanged =
+      Number.isFinite(nextLiters) &&
+      nextLiters > 0 &&
+      (!Number.isFinite(origLiters) || nextLiters !== origLiters);
+    return truck !== origTruck || station !== origStation || litersChanged;
+  }, [fixLineModal, fixTruck, fixStation, fixLiters]);
 
   const needsLeaveGuard = useCallback(
     (targetSessionId?: string | null) => {
@@ -1821,11 +1829,16 @@ function ReconciliationTab() {
   const submitFixLine = async () => {
     if (!fixLineModal?._id || !activeSessionId || mutations.updateLine.isPending) return;
     if (!fixLineChanged) {
-      toast.error('Change the statement truck or station before re-matching');
+      toast.error('Change the statement truck, station, or liters before re-matching');
       return;
     }
     if (!fixStation.trim()) {
       toast.error('Select a station');
+      return;
+    }
+    const litersNum = Number(fixLiters.trim());
+    if (!Number.isFinite(litersNum) || litersNum <= 0) {
+      toast.error('Enter a valid positive liters amount');
       return;
     }
     const wasDropped = fixLineModal.matchStatus === 'dropped';
@@ -1836,6 +1849,7 @@ function ReconciliationTab() {
         payload: {
           statementTruckNo: fixTruck.trim() || undefined,
           statementStation: fixStation.trim() || undefined,
+          statementLiters: litersNum,
           rematch: true,
         },
       });
@@ -2568,14 +2582,18 @@ function ReconciliationTab() {
                               text={row.matchStatus.replace(/_/g, ' ')}
                               className={`font-medium ${MATCH_COLORS[row.matchStatus] || ''}`}
                             />
-                            <TruncateTd
-                              text={
+                            <td
+                              className="px-3 py-1 h-8 leading-5 align-middle whitespace-nowrap text-xs font-mono text-gray-900 dark:text-gray-100 min-w-[6.5rem]"
+                              title={
                                 row.sn != null
                                   ? `#${row.sn} · Row ${row.statementRowNumber}`
                                   : `Row ${row.statementRowNumber}`
                               }
-                              className="font-mono text-gray-900 dark:text-gray-100"
-                            />
+                            >
+                              {row.sn != null
+                                ? `#${row.sn} · Row ${row.statementRowNumber}`
+                                : `Row ${row.statementRowNumber}`}
+                            </td>
                             <TruncateTd
                               text={row.truckNoRaw || row.truckNo}
                               className="font-mono text-blue-600 dark:text-blue-400"
@@ -3145,7 +3163,8 @@ function ReconciliationTab() {
               </h3>
               <p className="text-xs text-gray-500 mt-1">
                 {fixLineModal.matchStatus.replace(/_/g, ' ')} ·{' '}
-                {fixLineModal.exceptionMessage || 'Correct the statement truck/station to match our LPO'}
+                {fixLineModal.exceptionMessage ||
+                  'Correct the statement truck, station, or liters to match our LPO'}
               </p>
               {(fixLineModal.originalStatementTruckNoRaw ||
                 fixLineModal.originalStatementTruckNo ||
@@ -3203,9 +3222,27 @@ function ReconciliationTab() {
                       ) && <option value={fixStation}>{fixStation} (current)</option>}
                   </select>
                 </label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400">
+                  Statement liters
+                  <input
+                    type="number"
+                    min={1}
+                    step="any"
+                    value={fixLiters}
+                    onChange={(e) => setFixLiters(e.target.value)}
+                    disabled={mutations.updateLine.isPending}
+                    className="mt-1 w-full px-3 py-2 text-sm border rounded-md dark:border-gray-600 dark:bg-gray-700 disabled:opacity-50"
+                  />
+                </label>
+                {fixLineModal.lpoLiters != null && (
+                  <p className="text-xs text-gray-500">
+                    Our LPO liters for reference: <span className="font-mono">{fixLineModal.lpoLiters}</span>
+                  </p>
+                )}
                 {!fixLineChanged && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">
-                    Edit the truck or station above before re-matching against LPO lines in the session date range.
+                    Edit the truck, station, or liters above before re-matching against LPO lines in the
+                    session date range.
                   </p>
                 )}
               </div>
