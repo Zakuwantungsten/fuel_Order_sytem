@@ -262,10 +262,41 @@ const TOOLBAR_BTN_GREEN =
 const TOOLBAR_BTN_RED =
   'inline-flex items-center px-3 py-1.5 text-sm rounded-md text-white bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed';
 
+function formatLiters(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  const n = Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatSplitMergeHint(summary?: ReconciliationSession['summary']): string {
+  if (!summary) return '';
+  const parts: string[] = [];
+  if (summary.splitLinks) parts.push(`${summary.splitLinks} split`);
+  if (summary.mergeLinks) parts.push(`${summary.mergeLinks} merge`);
+  return parts.join(' · ');
+}
+
+/** Statement-row coverage: matched statement rows / total statement rows. */
 function formatMatchedRatio(summary?: ReconciliationSession['summary']): string {
   if (!summary) return '—';
+  const matched =
+    summary.matchedStatementRows ??
+    summary.matchedLpoLines ??
+    summary.matched ??
+    0;
+  const total = summary.totalStatementLines ?? 0;
+  const ratio = `${matched}/${total}`;
+  const hint = formatSplitMergeHint(summary);
+  return hint ? `${ratio} · ${hint}` : ratio;
+}
+
+function formatLpoCoverage(summary?: ReconciliationSession['summary']): string {
+  if (!summary) return '—';
   const matched = summary.matchedLpoLines ?? summary.matched ?? 0;
-  const total = summary.totalStatementLines ?? summary.totalLpoLines ?? 0;
+  const total = summary.totalLpoEntries ?? summary.totalLpoLines ?? 0;
   return `${matched}/${total}`;
 }
 
@@ -2196,20 +2227,28 @@ function ReconciliationTab() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
             {[
-              ['Stmt total L', summary?.statementTotalLiters ?? 0, 'text-gray-800 dark:text-gray-200'],
-              ['Reconciled L', summary?.reconciledStatementLiters ?? 0, 'text-green-600'],
-              ['Difference L', summary?.literDifference ?? 0, 'text-red-600'],
-              ['LPO total L', summary?.lpoTotalLiters ?? 0, 'text-gray-800 dark:text-gray-200'],
+              ['Stmt total L', formatLiters(summary?.statementTotalLiters ?? 0), 'text-gray-800 dark:text-gray-200'],
+              ['Reconciled L', formatLiters(summary?.reconciledStatementLiters ?? 0), 'text-green-600'],
+              ['Difference L', formatLiters(summary?.literDifference ?? 0), 'text-red-600'],
+              ['LPO total L', formatLiters(summary?.lpoTotalLiters ?? 0), 'text-gray-800 dark:text-gray-200'],
               [
-                'Matched LPO / Stmt',
-                `${summary?.matchedLpoLines ?? summary?.matched ?? 0} / ${summary?.totalStatementLines ?? 0}`,
+                'Stmt coverage',
+                `${summary?.matchedStatementRows ?? summary?.matched ?? 0} / ${summary?.totalStatementLines ?? 0}`,
                 'text-green-600',
               ],
+              ['LPO coverage', formatLpoCoverage(summary), 'text-green-600'],
               ['Pending LPO', summary?.pendingLpo ?? 0, 'text-amber-600'],
               ['Pending Stmt', summary?.pendingStatement ?? 0, 'text-orange-600'],
               ['Exceptions', summary?.exceptions ?? 0, 'text-red-600'],
+              [
+                'Split / Merge',
+                formatSplitMergeHint(summary) || '—',
+                (summary?.splitLinks || summary?.mergeLinks)
+                  ? 'text-indigo-600 dark:text-indigo-400'
+                  : 'text-gray-500',
+              ],
             ].map(([label, value, color]) => (
               <div key={String(label)} className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-2.5">
                 <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
@@ -2600,14 +2639,14 @@ function ReconciliationTab() {
                             />
                             <TruncateTd text={row.station} className="text-gray-900 dark:text-gray-100" />
                             <td className="px-3 py-1 h-8 leading-5 align-middle whitespace-nowrap text-xs text-right text-gray-900 dark:text-gray-100">
-                              {row.liters}
+                              {formatLiters(row.liters)}
                             </td>
                             <TruncateTd
                               text={row.lpoTruckNo}
                               className="font-mono text-blue-600 dark:text-blue-400"
                             />
                             <td className="px-3 py-1 h-8 leading-5 align-middle whitespace-nowrap text-xs text-right text-gray-900 dark:text-gray-100">
-                              {row.lpoLiters ?? '—'}
+                              {row.lpoLiters != null ? formatLiters(row.lpoLiters) : '—'}
                             </td>
                             <TruncateTd
                               text={row.exceptionMessage}
@@ -2942,14 +2981,14 @@ function ReconciliationTab() {
                           className="font-mono text-blue-600 dark:text-blue-400"
                         />
                         <td className="px-3 py-1 h-8 leading-5 align-middle whitespace-nowrap text-xs text-right text-gray-900 dark:text-gray-100">
-                          {line.lpoLiters ?? '—'}
+                          {line.lpoLiters != null ? formatLiters(line.lpoLiters) : '—'}
                         </td>
                         <TruncateTd
                           text={displayTruck(line, 'stmt')}
                           className="font-mono text-blue-600 dark:text-blue-400"
                         />
                         <td className="px-3 py-1 h-8 leading-5 align-middle whitespace-nowrap text-xs text-right text-gray-900 dark:text-gray-100">
-                          {line.statementLiters ?? '—'}
+                          {line.statementLiters != null ? formatLiters(line.statementLiters) : '—'}
                         </td>
                         <TruncateTd
                           text={line.lpoStation || line.statementStation}
@@ -3539,7 +3578,7 @@ function ReconciliationTab() {
                         Status
                       </th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
-                        Matched
+                        Stmt matched
                       </th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-100 uppercase tracking-wider">
                         Diff L
@@ -3584,7 +3623,7 @@ function ReconciliationTab() {
                             {formatMatchedRatio(row.summary)}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-xs text-right text-red-600 dark:text-red-400">
-                            {row.summary?.literDifference ?? 0}
+                            {formatLiters(row.summary?.literDifference ?? 0)}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900 dark:text-gray-100">
                             {new Date(row.updatedAt).toLocaleDateString()}

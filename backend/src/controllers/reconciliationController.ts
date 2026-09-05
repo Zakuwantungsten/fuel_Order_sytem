@@ -141,7 +141,14 @@ export const listSessions = async (req: AuthRequest, res: Response): Promise<voi
   ]);
 
   res.json({
-    data: items.map((s) => ({ ...s, id: String(s._id) })),
+    data: items.map((s) => {
+      const summary = reconciliationService.computeSummary(
+        s.lines || [],
+        s.statementLines || []
+      );
+      const { lines: _lines, statementLines: _statementLines, ...rest } = s;
+      return { ...rest, summary, id: String(s._id) };
+    }),
     pagination: {
       page: pageNum,
       limit: limitNum,
@@ -169,6 +176,11 @@ export const getSession = async (req: AuthRequest, res: Response): Promise<void>
         lineDoc.statementLines || []
       );
     }
+  } else {
+    payload.summary = reconciliationService.computeSummary(
+      session.lines || [],
+      session.statementLines || []
+    );
   }
   res.json(payload);
 };

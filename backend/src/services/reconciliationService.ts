@@ -835,6 +835,12 @@ export function runAutoMatch(
   return lines;
 }
 
+/** Round liter quantities for display/storage (avoids float noise like 1.45e-11). */
+export function roundLiters(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 export function computeSummary(
   lines: IReconciliationLine[],
   statementLines: IStatementLine[] = []
@@ -848,6 +854,8 @@ export function computeSummary(
   let exceptions = 0;
   let stalePending = 0;
   let literVarianceTotal = 0;
+  let splitLinks = 0;
+  let mergeLinks = 0;
 
   const reconciledStatuses = new Set<IReconciliationLine['matchStatus']>([
     'matched',
@@ -856,9 +864,16 @@ export function computeSummary(
   ]);
 
   const matchedLpoEntryIds = new Set<string>();
+  const allLpoEntryIds = new Set<string>();
   const matchedStatementIndexes = new Set<number>();
 
   for (const line of lines) {
+    if (line.lpoEntryId) allLpoEntryIds.add(line.lpoEntryId);
+    line.linkedLpoEntryIds?.forEach((id) => allLpoEntryIds.add(id));
+
+    if (line.matchType === 'split') splitLinks += 1;
+    if (line.matchType === 'merge') mergeLinks += 1;
+
     if (reconciledStatuses.has(line.matchStatus)) {
       matched += 1;
       if (line.lpoEntryId) matchedLpoEntryIds.add(line.lpoEntryId);
@@ -892,8 +907,12 @@ export function computeSummary(
     }
   }
 
-  const statementTotalLiters = statementLines.reduce((s, l) => s + Number(l.liters || 0), 0);
-  const lpoTotalLiters = lpoLines.reduce((s, l) => s + Number(l.lpoLiters || 0), 0);
+  const statementTotalLiters = roundLiters(
+    statementLines.reduce((s, l) => s + Number(l.liters || 0), 0)
+  );
+  const lpoTotalLiters = roundLiters(
+    lpoLines.reduce((s, l) => s + Number(l.lpoLiters || 0), 0)
+  );
   let reconciledStatementLiters = 0;
   let reconciledLpoLiters = 0;
   const literVarianceDetails: IReconciliationSummary['literVarianceDetails'] = [];
@@ -911,8 +930,8 @@ export function computeSummary(
       line.matchStatus === 'unmatched_statement' ||
       line.exceptionCode === 'TRUCK_STATION_LITER_MISMATCH'
     ) {
-      const lpoL = Number(line.lpoLiters || 0);
-      const stmtL = Number(line.statementLiters || 0);
+      const lpoL = roundLiters(Number(line.lpoLiters || 0));
+      const stmtL = roundLiters(Number(line.statementLiters || 0));
       const category =
         line.matchStatus === 'unmatched_statement'
           ? 'statement_not_in_lpo'
@@ -936,7 +955,7 @@ export function computeSummary(
         station: line.lpoStation || line.statementStation || '—',
         lpoLiters: lpoL,
         statementLiters: stmtL,
-        difference: lpoL - stmtL,
+        difference: roundLiters(lpoL - stmtL),
         reason: line.exceptionMessage || line.matchStatus,
         statementRows: line.statementRowNumber
           ? `Row ${line.statementRowNumber}`
@@ -948,22 +967,28 @@ export function computeSummary(
     }
   }
 
+  reconciledStatementLiters = roundLiters(reconciledStatementLiters);
+  reconciledLpoLiters = roundLiters(reconciledLpoLiters);
+
   return {
     totalLpoLines: lpoLines.length,
+    totalLpoEntries: allLpoEntryIds.size,
     totalStatementLines: statementLines.length || statementOnly.length + matched,
     matched,
     matchedLpoLines: matchedLpoEntryIds.size,
     matchedStatementRows: matchedStatementIndexes.size,
+    splitLinks,
+    mergeLinks,
     pendingLpo,
     pendingStatement,
     exceptions,
     stalePending,
-    literVarianceTotal,
+    literVarianceTotal: roundLiters(literVarianceTotal),
     statementTotalLiters,
     lpoTotalLiters,
     reconciledStatementLiters,
     reconciledLpoLiters,
-    literDifference: statementTotalLiters - reconciledStatementLiters,
+    literDifference: roundLiters(statementTotalLiters - reconciledStatementLiters),
     literVarianceDetails,
   };
 }
@@ -1950,7 +1975,7 @@ export function buildStatementRows(
       lpoTruckNo: linked?.lpoTruckNoRaw || linked?.lpoTruckNo,
       lpoLiters: linked?.lpoLiters,
       lpoStation: linked?.lpoStation,
-      difference: linked?.lpoEntryId ? lpoL - stmtL : undefined,
+      difference: linked?.lpoEntryId ? roundLiters(lpoL - stmtL) : undefined,
       selectable: !isReconciledMatchStatus(resolvedStatus) && resolvedStatus !== 'dropped',
       userDecision: linked?.userDecision,
     };
@@ -2806,6 +2831,7 @@ export const reconciliationService = {
   runAutoMatch,
   rematchSessionLines,
   computeSummary,
+  roundLiters,
   querySessionLines,
   extractLineFilterOptions,
   extractStatementFilterOptions,

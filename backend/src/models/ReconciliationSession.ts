@@ -95,6 +95,12 @@ export interface IReconciliationSummary {
   literDifference: number;
   matchedLpoLines?: number;
   matchedStatementRows?: number;
+  /** Unique LPO entry IDs in the session (expands merged linkedLpoEntryIds). */
+  totalLpoEntries?: number;
+  /** Lines with matchType === 'split' (1 LPO → N statement). */
+  splitLinks?: number;
+  /** Lines with matchType === 'merge' (N LPO → 1 statement). */
+  mergeLinks?: number;
   literVarianceDetails?: Array<{
     category: 'lpo_not_in_statement' | 'statement_not_in_lpo' | 'liter_mismatch';
     truckNo: string;
@@ -232,6 +238,9 @@ const reconciliationSummarySchema = new Schema<IReconciliationSummary>(
     literDifference: { type: Number, default: 0 },
     matchedLpoLines: { type: Number, default: 0 },
     matchedStatementRows: { type: Number, default: 0 },
+    totalLpoEntries: { type: Number, default: 0 },
+    splitLinks: { type: Number, default: 0 },
+    mergeLinks: { type: Number, default: 0 },
     literVarianceDetails: { type: [Schema.Types.Mixed], default: [] },
   },
   { _id: false }

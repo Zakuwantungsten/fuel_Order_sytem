@@ -3530,6 +3530,9 @@ export interface ReconciliationSummary {
   matched: number;
   matchedLpoLines?: number;
   matchedStatementRows?: number;
+  totalLpoEntries?: number;
+  splitLinks?: number;
+  mergeLinks?: number;
   pendingLpo: number;
   pendingStatement: number;
   exceptions: number;
