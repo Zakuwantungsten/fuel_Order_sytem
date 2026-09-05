@@ -1130,11 +1130,122 @@ function styleExportHeaderRow(row: ExcelJS.Row, colCount: number): void {
   }
 }
 
-function styleExportDataRow(row: ExcelJS.Row, colCount: number): void {
+function styleExportDataRow(
+  row: ExcelJS.Row,
+  colCount: number,
+  opts?: { fillArgb?: string }
+): void {
   for (let col = 1; col <= colCount; col++) {
     const cell = row.getCell(col);
     cell.alignment = EXPORT_CENTER_ALIGN;
     cell.border = EXPORT_THIN_BORDER;
+    if (opts?.fillArgb) {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: opts.fillArgb },
+      };
+    }
+  }
+}
+
+/** Faint red highlight for unmatched statement rows in export. */
+const EXPORT_UNMATCHED_FILL = 'FFFFE4E4';
+
+async function addStatementExportSheet(
+  workbook: ExcelJS.Workbook,
+  session: IReconciliationSession,
+  lines: IReconciliationLine[]
+): Promise<void> {
+  const usedNames = new Set(
+    workbook.worksheets.map((ws) => ws.name.toLowerCase())
+  );
+  const sheetName = createUniqueWorksheetName(
+    statementFileSheetBaseName(session.statementFileName),
+    usedNames,
+    'Statement'
+  );
+  const sheet = workbook.addWorksheet(sheetName);
+  const headers = [
+    'S/N',
+    'Stmt Row',
+    'Date',
+    'Station',
+    'Truck No',
+    'Original Truck',
+    'Liters',
+    'Original Liters',
+    'Amount',
+    'LPO No',
+    'DO No',
+    'Destination',
+    'ACTIONS',
+  ] as const;
+  sheet.columns = headers.map((header) => ({
+    width:
+      header === 'ACTIONS'
+        ? 42
+        : header === 'Destination'
+          ? 22
+          : Math.min(28, Math.max(12, header.length + 2)),
+  }));
+  const headerRow = sheet.addRow([...headers]);
+  styleExportHeaderRow(headerRow, headers.length);
+
+  const stmtViews = buildStatementRows(lines, session.statementLines || []);
+  const viewByIndex = new Map(stmtViews.map((r) => [r.statementLineIndex, r]));
+  const lineById = new Map(
+    lines.map((l) => [String((l as { _id?: unknown })._id || ''), l])
+  );
+
+  const matchedEntryIds = stmtViews
+    .filter((r) => isReconciledMatchStatus(r.matchStatus))
+    .flatMap((r) => {
+      const linked = r.reconLineId ? lineById.get(r.reconLineId) : undefined;
+      return linked ? collectLineLpoEntryIds(linked) : [];
+    });
+  const enrichmentMap = await loadLpoEntryEnrichmentMap(matchedEntryIds);
+
+  const stmts = [...(session.statementLines || [])].sort(
+    (a, b) => (a.rowNumber ?? a.lineIndex) - (b.rowNumber ?? b.lineIndex)
+  );
+  for (const stmt of stmts) {
+    const view = viewByIndex.get(stmt.lineIndex);
+    const linked = view?.reconLineId ? lineById.get(view.reconLineId) : undefined;
+    const matched =
+      !!view && isReconciledMatchStatus(view.matchStatus) && !!linked;
+    const entryId = linked ? collectLineLpoEntryIds(linked)[0] : undefined;
+    const enrichment = entryId ? enrichmentMap.get(entryId) : undefined;
+
+    const lpoNo = matched
+      ? enrichment?.lpoNo || linked?.lpoNo || ''
+      : '';
+    const doNo = matched
+      ? enrichment?.doNo || linked?.lpoDoNo || ''
+      : '';
+    const destination = matched ? enrichment?.destination || '' : '';
+
+    const unmatched =
+      !!view &&
+      view.matchStatus !== 'dropped' &&
+      !isReconciledMatchStatus(view.matchStatus);
+
+    const row = sheet.addRow([
+      stmt.sn ?? '',
+      stmt.rowNumber ?? stmt.lineIndex + 2,
+      stmt.date || '',
+      stmt.station || '',
+      stmt.truckNoRaw || stmt.truckNo || '',
+      stmt.originalTruckNoRaw || stmt.originalTruckNo || '',
+      stmt.liters ?? '',
+      stmt.originalLiters ?? '',
+      stmt.amount ?? '',
+      lpoNo,
+      doNo,
+      destination,
+      buildStatementRowActions(stmt),
+    ]);
+    styleExportDataRow(row, headers.length, unmatched ? { fillArgb: EXPORT_UNMATCHED_FILL } : undefined);
   }
 }
 
@@ -1233,63 +1344,6 @@ function buildStatementRowActions(stmt: IStatementLine): string {
   return actions.join('; ');
 }
 
-function addStatementExportSheet(
-  workbook: ExcelJS.Workbook,
-  session: IReconciliationSession
-): void {
-  const usedNames = new Set(
-    workbook.worksheets.map((ws) => ws.name.toLowerCase())
-  );
-  const sheetName = createUniqueWorksheetName(
-    statementFileSheetBaseName(session.statementFileName),
-    usedNames,
-    'Statement'
-  );
-  const sheet = workbook.addWorksheet(sheetName);
-  const headers = [
-    'S/N',
-    'Stmt Row',
-    'Date',
-    'Station',
-    'Truck No',
-    'Original Truck',
-    'Liters',
-    'Original Liters',
-    'Amount',
-    'LPO No',
-    'DO No',
-    'Notes',
-    'ACTIONS',
-  ] as const;
-  sheet.columns = headers.map((header) => ({
-    width: header === 'ACTIONS' ? 42 : Math.min(28, Math.max(12, header.length + 2)),
-  }));
-  const headerRow = sheet.addRow([...headers]);
-  styleExportHeaderRow(headerRow, headers.length);
-
-  const stmts = [...(session.statementLines || [])].sort(
-    (a, b) => (a.rowNumber ?? a.lineIndex) - (b.rowNumber ?? b.lineIndex)
-  );
-  for (const stmt of stmts) {
-    const row = sheet.addRow([
-      stmt.sn ?? '',
-      stmt.rowNumber ?? stmt.lineIndex + 2,
-      stmt.date || '',
-      stmt.station || '',
-      stmt.truckNoRaw || stmt.truckNo || '',
-      stmt.originalTruckNoRaw || stmt.originalTruckNo || '',
-      stmt.liters ?? '',
-      stmt.originalLiters ?? '',
-      stmt.amount ?? '',
-      stmt.lpoNo || '',
-      stmt.doNo || '',
-      stmt.notes || '',
-      buildStatementRowActions(stmt),
-    ]);
-    styleExportDataRow(row, headers.length);
-  }
-}
-
 export async function exportSessionReportWorkbook(session: IReconciliationSession): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   const lines = session.lines || [];
@@ -1371,37 +1425,46 @@ export async function exportSessionReportWorkbook(session: IReconciliationSessio
   const issuesHeaderRow = issuesSheet.addRow([...issuesHeaders]);
   styleExportHeaderRow(issuesHeaderRow, issuesHeaders.length);
 
-  const issueLines = lines.filter(
-    (line) => line.matchStatus !== 'dropped' && lineMatchesFilter(line, 'exceptions')
+  // Same exception set as Statement tab (statement entries), not recon-line exceptions.
+  const issueStmtRows = buildStatementRows(lines, session.statementLines || []).filter(
+    (r) =>
+      r.matchStatus !== 'dropped' &&
+      (!!r.exceptionCode ||
+        r.matchStatus === 'liter_mismatch' ||
+        r.matchStatus === 'split_merge_candidate' ||
+        r.matchStatus === 'stale_pending')
   );
-  for (const line of issueLines) {
-    const stmtIndexes = lineStatementIndexes(line);
-    const stmtSn = stmtIndexes
-      .map((idx) => (session.statementLines || []).find((s) => s.lineIndex === idx)?.sn)
-      .find((sn) => sn != null);
+  for (const stmtRow of issueStmtRows) {
+    const linked = stmtRow.reconLineId
+      ? lines.find((l) => String((l as { _id?: unknown })._id || '') === stmtRow.reconLineId)
+      : undefined;
     const row = issuesSheet.addRow([
-      line.matchStatus,
-      line.exceptionCode || '',
-      line.exceptionMessage || line.exceptionCode || '',
-      line.statementRowNumber ?? '',
-      stmtSn ?? '',
-      line.statementDate || line.lpoDate || '',
-      line.statementStation || '',
-      line.statementTruckNoRaw || line.statementTruckNo || '',
-      line.statementLiters ?? '',
-      line.lpoStation || '',
-      line.lpoTruckNoRaw || line.lpoTruckNo || '',
-      line.lpoLiters ?? '',
-      line.lpoNo || '',
-      line.lpoDoNo || '',
-      line.daysGap ?? '',
-      line.userDecision || '',
-      line.notes || '',
+      stmtRow.matchStatus,
+      stmtRow.exceptionCode || linked?.exceptionCode || '',
+      stmtRow.exceptionMessage ||
+        linked?.exceptionMessage ||
+        stmtRow.exceptionCode ||
+        linked?.exceptionCode ||
+        '',
+      stmtRow.statementRowNumber ?? '',
+      stmtRow.sn ?? '',
+      stmtRow.date || '',
+      stmtRow.station || '',
+      stmtRow.truckNoRaw || stmtRow.truckNo || '',
+      stmtRow.liters ?? '',
+      stmtRow.lpoStation || linked?.lpoStation || '',
+      stmtRow.lpoTruckNo || linked?.lpoTruckNoRaw || linked?.lpoTruckNo || '',
+      stmtRow.lpoLiters ?? linked?.lpoLiters ?? '',
+      linked?.lpoNo || '',
+      linked?.lpoDoNo || '',
+      linked?.daysGap ?? '',
+      stmtRow.userDecision || linked?.userDecision || '',
+      linked?.notes || '',
     ]);
     styleExportDataRow(row, issuesHeaders.length);
   }
 
-  addStatementExportSheet(workbook, session);
+  await addStatementExportSheet(workbook, session, lines);
 
   const droppedSheet = workbook.addWorksheet('Dropped trucks');
   droppedSheet.addRow([

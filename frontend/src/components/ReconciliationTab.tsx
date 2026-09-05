@@ -148,9 +148,9 @@ function formatShortDate(value?: string | null): string {
 }
 
 function stmtRowLabel(line: ReconciliationLine): string {
-  if (line.statementRowNumber) return `Row ${line.statementRowNumber}`;
+  if (line.statementRowNumber) return String(line.statementRowNumber);
   if (line.statementLineIndexes?.length) {
-    return line.statementLineIndexes.map((i) => `Row ${i + 2}`).join(', ');
+    return line.statementLineIndexes.map((i) => String(i + 2)).join(', ');
   }
   return '—';
 }
@@ -2583,16 +2583,16 @@ function ReconciliationTab() {
                               className={`font-medium ${MATCH_COLORS[row.matchStatus] || ''}`}
                             />
                             <td
-                              className="px-3 py-1 h-8 leading-5 align-middle whitespace-nowrap text-xs font-mono text-gray-900 dark:text-gray-100 min-w-[6.5rem]"
+                              className="px-3 py-1 h-8 leading-5 align-middle whitespace-nowrap text-xs font-mono text-gray-900 dark:text-gray-100 min-w-[4.5rem]"
                               title={
                                 row.sn != null
-                                  ? `#${row.sn} · Row ${row.statementRowNumber}`
-                                  : `Row ${row.statementRowNumber}`
+                                  ? `#${row.sn} · ${row.statementRowNumber}`
+                                  : String(row.statementRowNumber)
                               }
                             >
                               {row.sn != null
-                                ? `#${row.sn} · Row ${row.statementRowNumber}`
-                                : `Row ${row.statementRowNumber}`}
+                                ? `#${row.sn} · ${row.statementRowNumber}`
+                                : row.statementRowNumber}
                             </td>
                             <TruncateTd
                               text={row.truckNoRaw || row.truckNo}
