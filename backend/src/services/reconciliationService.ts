@@ -101,8 +101,21 @@ function isReconcilableLpoEntry(entry: Record<string, unknown>): boolean {
   return true;
 }
 
-/** Resolve billed station including CUSTOM → customStationName. */
+/**
+ * Resolve billed/fill station for an LPO entry.
+ * Prefer entry picked-at override (same as LPO list / fuel records), else
+ * dieselAt/station; CUSTOM → customStationName.
+ */
 export function resolveLpoEntryStation(entry: Record<string, unknown>): string {
+  const picked = String(entry.pickedAtStation || '').trim();
+  if (picked) {
+    if (picked.toUpperCase() === 'CUSTOM') {
+      const customName = String(entry.customStationName || '').trim();
+      if (customName) return customName;
+    }
+    return picked;
+  }
+
   const base = String(entry.dieselAt || entry.station || '').trim();
   const isCustom =
     entry.isCustomStation === true || base.toUpperCase() === 'CUSTOM';
@@ -1058,6 +1071,7 @@ async function loadLpoEntryEnrichmentMap(
         lpoNo: 1,
         date: 1,
         station: '$station',
+        pickedAtStation: '$entries.pickedAtStation',
         customStationName: 1,
         doNo: '$entries.doNo',
         truckNo: '$entries.truckNo',
@@ -1076,6 +1090,7 @@ async function loadLpoEntryEnrichmentMap(
     const station = resolveLpoEntryStation({
       dieselAt: row.station,
       station: row.station,
+      pickedAtStation: row.pickedAtStation,
       isCustomStation: row.isCustomStation,
       customStationName: row.entryCustomStationName || row.customStationName,
     });

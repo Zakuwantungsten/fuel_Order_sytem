@@ -163,7 +163,17 @@ export async function getAllLPOEntries(options: ExportOptions = {}): Promise<any
           _id: '$entries._id',
           lpoNo: 1,
           date: 1,
-          dieselAt: '$station',
+          // Effective fill station: entry picked-at override, else LPO order station
+          // (same rule as LPO entries list / fuel-record aggregations).
+          dieselAt: {
+            $cond: {
+              if: { $gt: [{ $strLenCP: { $ifNull: ['$entries.pickedAtStation', ''] } }, 0] },
+              then: '$entries.pickedAtStation',
+              else: '$station',
+            },
+          },
+          orderStation: '$station',
+          pickedAtStation: '$entries.pickedAtStation',
           doSdo: {
             $cond: [
               { $eq: ['$entries.isCancelled', true] }, 'CANCELLED',
