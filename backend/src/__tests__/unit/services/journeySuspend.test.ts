@@ -1,8 +1,36 @@
-import { FuelRecord } from '../../../models';
+import { FuelRecord, SystemConfig } from '../../../models';
 import { createTestFuelRecord } from '../../helpers/testUtils';
-import { suspendJourney, restoreSuspendedJourney } from '../../../services/journeyService';
+import {
+  suspendJourney,
+  restoreSuspendedJourney,
+  invalidateJourneyConfigCache,
+} from '../../../services/journeyService';
+
+async function setAllowSuspendCompleted(value: boolean) {
+  let config = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false });
+  if (!config) {
+    await SystemConfig.create({
+      configType: 'journey_config',
+      journeyConfig: {
+        startColumns: ['tangaYard', 'darYard', 'darGoing', 'moroGoing'],
+        allowSuspendCompleted: value,
+      },
+      lastUpdatedBy: 'test',
+    });
+  } else {
+    await SystemConfig.updateOne(
+      { _id: config._id },
+      { $set: { 'journeyConfig.allowSuspendCompleted': value, lastUpdatedBy: 'test' } }
+    );
+  }
+  invalidateJourneyConfigCache();
+}
 
 describe('journey suspend / unsuspend', () => {
+  beforeEach(async () => {
+    await setAllowSuspendCompleted(false);
+  });
+
   it('suspends an active journey and promotes the next queued one', async () => {
     const active = await createTestFuelRecord({
       truckNo: 'T600 SUS',
@@ -50,7 +78,7 @@ describe('journey suspend / unsuspend', () => {
     expect(stillActive?.journeyStatus).toBe('active');
   });
 
-  it('rejects suspending a completed journey', async () => {
+  it('rejects suspending a completed journey when config is off', async () => {
     const completed = await createTestFuelRecord({
       truckNo: 'T602 SUS',
       goingDo: 'DO-SUS-DONE',
@@ -58,8 +86,46 @@ describe('journey suspend / unsuspend', () => {
     });
 
     await expect(suspendJourney(completed._id.toString(), 'tester')).rejects.toThrow(
-      /active or queued/i
+      /disabled|Journey Configuration|active or queued/i
     );
+  });
+
+  it('suspends a completed journey when config is on (no promote)', async () => {
+    await setAllowSuspendCompleted(true);
+    const completed = await createTestFuelRecord({
+      truckNo: 'T605 SUS',
+      goingDo: 'DO-SUS-DONE2',
+      journeyStatus: 'completed',
+    });
+    const active = await createTestFuelRecord({
+      truckNo: 'T605 SUS',
+      goingDo: 'DO-SUS-LIVE',
+      journeyStatus: 'active',
+    });
+
+    const result = await suspendJourney(completed._id.toString(), 'tester');
+
+    expect(result.record.journeyStatus).toBe('suspended');
+    expect(result.record.suspendedFromJourneyStatus).toBe('completed');
+    expect(result.promotedId).toBeNull();
+
+    const stillActive = await FuelRecord.findById(active._id);
+    expect(stillActive?.journeyStatus).toBe('active');
+  });
+
+  it('unsuspends a completed-origin journey back to completed', async () => {
+    await setAllowSuspendCompleted(true);
+    const completed = await createTestFuelRecord({
+      truckNo: 'T606 SUS',
+      goingDo: 'DO-UNSUS-DONE',
+      journeyStatus: 'completed',
+    });
+
+    await suspendJourney(completed._id.toString(), 'tester');
+    const restored = await restoreSuspendedJourney(completed._id.toString(), 'tester');
+
+    expect(restored.record.journeyStatus).toBe('completed');
+    expect(restored.record.suspendedFromJourneyStatus).toBeUndefined();
   });
 
   it('unsuspends an active-origin journey and restores the successor to the queue', async () => {

@@ -143,7 +143,7 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
     /** Journey status before suspend side-effects (for unsuspend restore). */
     suspendedFromJourneyStatus: {
       type: String,
-      enum: ['active', 'queued'],
+      enum: ['active', 'queued', 'completed'],
       required: false,
     },
     /** Queue slot before a queued journey was suspended. */

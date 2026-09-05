@@ -473,13 +473,13 @@ function IdentityMoveConfirmModal({
             on <span className="font-mono text-green-600 dark:text-green-400">{yardField}</span>
             {' '}(billed <strong>{billed}L</strong>).
           </p>
-          <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-750 px-3 py-2 text-xs space-y-1">
+          <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 px-3 py-2 text-xs space-y-1">
             <div className="flex justify-between gap-2">
-              <span className="text-gray-500">From</span>
+              <span className="text-gray-500 dark:text-gray-400">From</span>
               <span className="font-medium text-gray-900 dark:text-gray-100">{entry.doNo || '—'} · {entry.truckNo}</span>
             </div>
             <div className="flex justify-between gap-2">
-              <span className="text-gray-500">To</span>
+              <span className="text-gray-500 dark:text-gray-400">To</span>
               <span className="font-medium text-gray-900 dark:text-gray-100">{pending.doNo || '—'} · {pending.truckNo}</span>
             </div>
           </div>

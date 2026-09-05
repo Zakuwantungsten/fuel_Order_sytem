@@ -2131,6 +2131,8 @@ export interface JourneyConfig {
   cashLpoLookbackDays?: number;
   // How many months back the LPO form searches fuel records when entering a truck (default 4)
   lpoTruckLookupMonths?: number;
+  // When true, Suspend is offered on completed journeys (default false)
+  allowSuspendCompleted?: boolean;
   // Dashboard unified-search configuration
   searchConfig?: {
     doMonths?: number;       // months back for DO search (default 4)
@@ -2819,6 +2821,11 @@ export const configAPI = {
 
   updateLpoTruckLookupMonths: async (lpoTruckLookupMonths: number): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', { lpoTruckLookupMonths });
+    return response.data.data;
+  },
+
+  updateAllowSuspendCompleted: async (allowSuspendCompleted: boolean): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { allowSuspendCompleted });
     return response.data.data;
   },
 

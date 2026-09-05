@@ -69,6 +69,8 @@ const CACHE_TTL_MS = 30000;
 // with the start-columns cache whenever journey_config is saved.
 let _fuelAutomationCache: IFuelAutomationConfig | null = null;
 let _fuelAutomationCacheUpdatedAt = 0;
+let _allowSuspendCompletedCache: boolean | null = null;
+let _allowSuspendCompletedCacheUpdatedAt = 0;
 
 // Cache for the manager-access config (super-manager stations + LPO lookback).
 // Read on every manager/super_manager LPO list request, so it must not hit the DB
@@ -151,6 +153,8 @@ export function invalidateJourneyConfigCache(): void {
   _cacheUpdatedAt = 0;
   _fuelAutomationCache = null;
   _fuelAutomationCacheUpdatedAt = 0;
+  _allowSuspendCompletedCache = null;
+  _allowSuspendCompletedCacheUpdatedAt = 0;
   _managerAccessCache = null;
   _managerAccessCacheUpdatedAt = 0;
   _dashboardSearchCache = null;
@@ -350,6 +354,29 @@ export async function getFuelAutomationFlags(): Promise<IFuelAutomationConfig> {
   } catch (error: any) {
     logger.error(`Failed to load fuel-automation flags, using all-enabled defaults: ${error.message}`);
     return { ...DEFAULT_FUEL_AUTOMATION };
+  }
+}
+
+/**
+ * Whether Suspend is allowed on completed journeys (Journey Config toggle).
+ * Default false. Cached 30s; never throws.
+ */
+export async function getAllowSuspendCompleted(): Promise<boolean> {
+  const now = Date.now();
+  if (_allowSuspendCompletedCache !== null && now - _allowSuspendCompletedCacheUpdatedAt < CACHE_TTL_MS) {
+    return _allowSuspendCompletedCache;
+  }
+  try {
+    const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false })
+      .select('journeyConfig.allowSuspendCompleted')
+      .lean();
+    const allowed = cfg?.journeyConfig?.allowSuspendCompleted === true;
+    _allowSuspendCompletedCache = allowed;
+    _allowSuspendCompletedCacheUpdatedAt = now;
+    return allowed;
+  } catch (error: any) {
+    logger.error(`Failed to load allowSuspendCompleted, defaulting false: ${error.message}`);
+    return false;
   }
 }
 
@@ -1021,10 +1048,11 @@ export interface SuspendJourneyResult {
 }
 
 /**
- * Suspend an active or queued journey.
+ * Suspend an active, queued, or (when configured) completed journey.
  * Active: mark suspended and promote next queued (like cancel, without isCancelled).
  * Queued: mark suspended and renumber remaining queue.
- * Stores snapshots so unsuspend can restore.
+ * Completed: mark suspended only (no promote) when allowSuspendCompleted is on.
+ * Stores snapshots so unsuspend can restore (active/queued/completed accordingly).
  */
 export async function suspendJourney(
   recordId: string,
@@ -1044,15 +1072,25 @@ export async function suspendJourney(
     if (record.journeyStatus === 'suspended') {
       throw new ApiError(409, 'Fuel record is already suspended');
     }
-    if (record.journeyStatus !== 'active' && record.journeyStatus !== 'queued') {
-      throw new ApiError(409, 'Only active or queued journeys can be suspended');
+
+    const status = record.journeyStatus;
+    const wasActive = status === 'active';
+    const wasQueued = status === 'queued';
+    const wasCompleted = status === 'completed';
+
+    if (!wasActive && !wasQueued && !wasCompleted) {
+      throw new ApiError(409, 'Only active, queued, or completed journeys can be suspended');
+    }
+    if (wasCompleted && !(await getAllowSuspendCompleted())) {
+      throw new ApiError(
+        409,
+        'Suspending completed journeys is disabled — enable it in Journey Configuration'
+      );
     }
 
     const truckNo = record.truckNo;
-    const wasActive = record.journeyStatus === 'active';
-    const wasQueued = record.journeyStatus === 'queued';
 
-    record.suspendedFromJourneyStatus = wasActive ? 'active' : 'queued';
+    record.suspendedFromJourneyStatus = wasActive ? 'active' : wasQueued ? 'queued' : 'completed';
     if (wasQueued && record.queueOrder != null) {
       record.suspendedFromQueueOrder = record.queueOrder;
     } else {
@@ -1079,12 +1117,14 @@ export async function suspendJourney(
       }
     }
 
-    for (const id of await renumberQueuedJourneys(truckNo, session)) {
-      affectedIds.add(id);
+    if (wasActive || wasQueued) {
+      for (const id of await renumberQueuedJourneys(truckNo, session)) {
+        affectedIds.add(id);
+      }
     }
 
     logger.info(
-      `Journey ${record.goingDo} (truck ${truckNo}) suspended from ${wasActive ? 'active' : 'queued'} by ${username}` +
+      `Journey ${record.goingDo} (truck ${truckNo}) suspended from ${record.suspendedFromJourneyStatus} by ${username}` +
         (promotedId ? `; promoted successor ${promotedId}` : '')
     );
   });
@@ -1097,7 +1137,9 @@ export async function suspendJourney(
 }
 
 /**
- * Undo suspend: restore prior active/queued status and reverse any promote done at suspend.
+ * Undo suspend: restore prior active/queued/completed status and reverse any
+ * promote done at suspend (active-origin only). Completed-origin restores to
+ * completed with no queue changes. Active/queued restore accordingly.
  */
 export async function restoreSuspendedJourney(
   recordId: string,
@@ -1126,6 +1168,26 @@ export async function restoreSuspendedJourney(
 
     if (!fromStatus) {
       throw new ApiError(409, 'Cannot unsuspend — missing suspend restore snapshot');
+    }
+
+    const clearSuspendSnapshot = () => {
+      record.suspendedFromJourneyStatus = undefined;
+      record.suspendedFromQueueOrder = undefined;
+      record.suspendPromotedSuccessorId = undefined;
+      record.suspendedAt = undefined;
+      record.suspendedBy = undefined;
+    };
+
+    if (fromStatus === 'completed') {
+      record.journeyStatus = 'completed';
+      record.queueOrder = undefined;
+      clearSuspendSnapshot();
+      await record.save(sessionWrite(session));
+
+      logger.info(
+        `Suspended completed journey ${record.goingDo} (truck ${truckNo}) restored on unsuspend by ${username}`
+      );
+      return;
     }
 
     if (fromStatus === 'active') {
@@ -1163,11 +1225,7 @@ export async function restoreSuspendedJourney(
       record.journeyStatus = 'active';
       record.activatedAt = record.activatedAt || new Date();
       record.queueOrder = undefined;
-      record.suspendedFromJourneyStatus = undefined;
-      record.suspendedFromQueueOrder = undefined;
-      record.suspendPromotedSuccessorId = undefined;
-      record.suspendedAt = undefined;
-      record.suspendedBy = undefined;
+      clearSuspendSnapshot();
       await record.save(sessionWrite(session));
 
       for (const id of await renumberQueuedJourneys(truckNo, session)) {
@@ -1183,11 +1241,7 @@ export async function restoreSuspendedJourney(
     if (fromStatus === 'queued') {
       record.journeyStatus = 'queued';
       record.queueOrder = fromQueueOrder && fromQueueOrder > 0 ? fromQueueOrder : undefined;
-      record.suspendedFromJourneyStatus = undefined;
-      record.suspendedFromQueueOrder = undefined;
-      record.suspendPromotedSuccessorId = undefined;
-      record.suspendedAt = undefined;
-      record.suspendedBy = undefined;
+      clearSuspendSnapshot();
       await record.save(sessionWrite(session));
 
       for (const id of await renumberQueuedJourneys(truckNo, session)) {

@@ -538,7 +538,7 @@ export interface IFuelRecord {
   cancelledFromJourneyStatus?: 'active' | 'queued';
   cancelledFromQueueOrder?: number;
   cancelPromotedSuccessorId?: string;
-  suspendedFromJourneyStatus?: 'active' | 'queued';
+  suspendedFromJourneyStatus?: 'active' | 'queued' | 'completed';
   suspendedFromQueueOrder?: number;
   suspendPromotedSuccessorId?: string;
   suspendedAt?: Date;

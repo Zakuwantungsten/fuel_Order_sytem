@@ -100,6 +100,9 @@ export interface IJourneyConfig {
     lpoMaxResults?: number;  // max LPO results (default 50)
     fuelMaxResults?: number; // max fuel record results (default 3)
   };
+  // When true, Suspend is allowed on completed journeys (no queue promote).
+  // Default false — only active/queued can be suspended.
+  allowSuspendCompleted?: boolean;
 }
 
 // Canonical default for the fuel-automation flags (all enabled).
@@ -399,6 +402,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         lpoMaxResults: { type: Number, default: 50, min: 1, max: 500 },
         fuelMaxResults:{ type: Number, default: 3,  min: 1, max: 100 },
       },
+      allowSuspendCompleted: { type: Boolean, default: false },
     },
     yardFuelTimeLimit: {
       enabled: { type: Boolean, default: false },

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, ChangeEvent } from 'react';
-import { Route, Check, Save, RotateCcw, Loader2, Info, Flag, Fuel, Clock, Gauge, Pencil, X, FileDown, Workflow, AlertTriangle, Search } from 'lucide-react';
+import { Route, Check, Save, RotateCcw, Loader2, Info, Flag, Fuel, Clock, Gauge, Pencil, X, FileDown, Workflow, AlertTriangle, Search, PauseCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { configAPI, JourneyConfig as JourneyConfigData, StandardAllocations, YardFuelTimeLimitConfig, FuelAutomationConfig } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -189,6 +189,7 @@ export default function JourneyConfig() {
         <SuperManagerStationsCard />
         <YardTimeLimitCard />
         <PdfDownloadSettingsCard />
+        <SuspendCompletedCard />
         <LpoPriorOrderLookbackCard />
         <LpoTruckLookupCard />
         <SearchConfigCard />
@@ -331,6 +332,96 @@ function PdfDownloadSettingsCard() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Suspend completed journeys ────────────────────────────────────────────────
+
+function SuspendCompletedCard() {
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const cfg = await configAPI.getJourneyConfig();
+      setEnabled(cfg.allowSuspendCompleted === true);
+    } catch {
+      toast.error('Failed to load suspend settings');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeSync('journey_config', load, 'rt-suspend-completed');
+
+  const toggle = async (value: boolean) => {
+    if (saving) return;
+    const prev = enabled;
+    setEnabled(value);
+    setSaving(true);
+    try {
+      const cfg = await configAPI.updateAllowSuspendCompleted(value);
+      setEnabled(cfg.allowSuspendCompleted === true);
+      toast.success(
+        value
+          ? 'Suspend on completed journeys enabled'
+          : 'Suspend on completed journeys disabled'
+      );
+    } catch {
+      setEnabled(prev);
+      toast.error('Failed to update suspend settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+        <PauseCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        <h2 className="font-medium text-sm text-gray-900 dark:text-gray-100">Suspend completed journeys</h2>
+      </div>
+
+      <div className="px-4 py-3 space-y-1">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          When on, Fuel Records can Suspend a completed journey (no queue promote). Unsuspend restores it to completed. Active and queued suspend/unsuspend still restore active or queued accordingly.
+        </p>
+
+        {loading ? (
+          <div className="h-14 rounded-lg bg-gray-100 dark:bg-gray-700/50 animate-pulse" />
+        ) : (
+          <div
+            className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+              enabled
+                ? 'border-amber-200 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-900/10'
+                : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'
+            }`}
+          >
+            <div className="min-w-0">
+              <p className={`text-xs font-medium ${enabled ? 'text-amber-900 dark:text-amber-100' : 'text-gray-700 dark:text-gray-300'}`}>
+                Allow suspend on completed
+              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
+                Off by default. Turn on only when you need to mark a finished journey suspended (e.g. block EXPORT linking).
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+              <span className={`text-[10px] font-semibold ${enabled ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                {enabled ? 'ON' : 'OFF'}
+              </span>
+              <Switch
+                checked={enabled}
+                onChange={toggle}
+                disabled={saving}
+                label="Allow suspend on completed"
+              />
+            </div>
           </div>
         )}
       </div>

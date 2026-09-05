@@ -13,6 +13,8 @@ interface FuelRecordActionsModalProps {
   record: FuelRecord | null;
   position: FuelRecordActionsPosition | null;
   canUncancel: boolean;
+  /** When true, Suspend is offered on completed journeys (Journey Config). */
+  allowSuspendCompleted?: boolean;
   onClose: () => void;
   onEdit: (record: FuelRecord) => void;
   onCancel: (record: FuelRecord) => void;
@@ -39,6 +41,7 @@ export default function FuelRecordActionsModal({
   record,
   position,
   canUncancel,
+  allowSuspendCompleted = false,
   onClose,
   onEdit,
   onCancel,
@@ -53,7 +56,8 @@ export default function FuelRecordActionsModal({
   const isSuspended = !isCancelled && record?.journeyStatus === 'suspended';
   const isActive = !isCancelled && record?.journeyStatus === 'active';
   const isQueued = !isCancelled && record?.journeyStatus === 'queued';
-  const canSuspend = isActive || isQueued;
+  const isCompleted = !isCancelled && record?.journeyStatus === 'completed';
+  const canSuspend = isActive || isQueued || (allowSuspendCompleted && isCompleted);
   const canUndoComplete =
     !isCancelled && record?.journeyStatus === 'completed' && record?.manuallyCompleted === true;
 

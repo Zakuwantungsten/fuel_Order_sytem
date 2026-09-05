@@ -157,12 +157,14 @@ const LPOs = () => {
   const [pendingHighlightTruck, setPendingHighlightTruck] = useState<string | null>(null);
 
   // --- React Query hooks (server-side pagination + caching) ---
+  // When an exact day is selected, send only dateFrom/dateTo — do not also AND
+  // month periods (a stale period outside that day used to return zero rows).
   const lpoQuery = useLPOList({
     page: currentPage,
     limit: itemsPerPage,
     search: searchTerm || undefined,
     stations: selectedStations,
-    periods: selectedPeriods,
+    periods: dateFilter ? undefined : selectedPeriods,
     dateFrom: dateFilter || undefined,
     dateTo: dateFilter || undefined,
     sort: 'lpo_desc',
@@ -519,8 +521,11 @@ const LPOs = () => {
         matchesFilters: (rec) => {
           if (statusFilter === 'cancelled') return false; // new LPOs are active
           if (selectedStationSet.size > 0 && !selectedStationSet.has(String(rec?.station ?? '').trim().toUpperCase())) return false;
+          // Exact day filter wins (same as the list query — periods are ignored).
+          if (dateFilter) {
+            return String(rec?.date ?? '').slice(0, 10) === dateFilter;
+          }
           if (rec?.date && !selectedPeriodKeys.has(String(rec.date).slice(0, 7))) return false;
-          if (dateFilter && String(rec?.date ?? '').slice(0, 10) !== dateFilter) return false;
           return true;
         },
         matchesBulk: () => statusFilter !== 'cancelled',
@@ -1725,7 +1730,20 @@ const LPOs = () => {
             ref={dateInputRef}
             type="date"
             value={dateFilter}
-            onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }}
+            onChange={(e) => {
+              const next = e.target.value;
+              setDateFilter(next);
+              setCurrentPage(1);
+              // Keep the month picker aligned with the chosen day so clearing
+              // the date still shows a sensible period.
+              if (/^\d{4}-\d{2}-\d{2}$/.test(next)) {
+                const year = Number(next.slice(0, 4));
+                const month = Number(next.slice(5, 7));
+                if (year && month >= 1 && month <= 12) {
+                  setSelectedPeriods([{ year, month }]);
+                }
+              }
+            }}
             className="w-full h-[34px] px-3 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-600 focus:border-transparent [color-scheme:light] dark:[color-scheme:dark]"
             title={dateFilter || 'Filter by date'}
           />

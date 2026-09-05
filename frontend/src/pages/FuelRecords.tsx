@@ -29,6 +29,7 @@ import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
 import PendingDoFollowUpModal from '../components/PendingDoFollowUpModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useFuelRecordJourneyStatuses, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
+import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { replaceUrlPreservingState } from '../utils/historyState';
 import { pendingDoStatusLabel } from '../utils/pendingDo';
 import { formatTruckNumber } from '../utils/dataCleanup';
@@ -179,6 +180,8 @@ const FuelRecords = () => {
   const [actionsRecord, setActionsRecord] = useState<FuelRecord | null>(null);
   const [actionsMenuPosition, setActionsMenuPosition] = useState<FuelRecordActionsPosition | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const { data: journeyConfig } = useJourneyConfig();
+  const allowSuspendCompleted = journeyConfig?.allowSuspendCompleted === true;
   
   // Standard allocations (fetched from backend)
   const [standardAllocations, setStandardAllocations] = useState<StandardAllocations | null>(null);
@@ -1831,7 +1834,7 @@ const FuelRecords = () => {
                             <PlayCircle className="w-3.5 h-3.5 mr-0.5 shrink-0" />
                             Unsuspend
                           </button>
-                        ) : (record.journeyStatus === 'active' || record.journeyStatus === 'queued') ? (
+                        ) : (record.journeyStatus === 'active' || record.journeyStatus === 'queued' || (allowSuspendCompleted && record.journeyStatus === 'completed')) ? (
                           <button
                             onClick={(e) => {
                               const id = recordIdOf(record);
@@ -1846,7 +1849,11 @@ const FuelRecords = () => {
                           <button
                             type="button"
                             disabled
-                            title="Only active or queued journeys can be suspended"
+                            title={
+                              record.journeyStatus === 'completed' && !allowSuspendCompleted
+                                ? 'Enable “Suspend completed journeys” in Journey Configuration'
+                                : 'Only active or queued journeys can be suspended'
+                            }
                             className="px-1.5 py-2 text-[11px] font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700/50 rounded-lg inline-flex items-center justify-center cursor-not-allowed"
                           >
                             <PauseCircle className="w-3.5 h-3.5 mr-0.5 shrink-0" />
@@ -2119,6 +2126,7 @@ const FuelRecords = () => {
         record={actionsRecord}
         position={actionsMenuPosition}
         canUncancel={canUncancel}
+        allowSuspendCompleted={allowSuspendCompleted}
         onClose={closeActionsMenu}
         onEdit={(record) => {
           closeActionsMenu();
@@ -2314,7 +2322,7 @@ const FuelRecords = () => {
       <ConfirmModal
         open={suspendPending !== null}
         title="Suspend Journey"
-        message="This will suspend the journey so it cannot be linked to EXPORT DOs. If it is active, the next queued journey will be promoted. You can unsuspend later to restore."
+        message="This will suspend the journey so it cannot be linked to EXPORT DOs. Active journeys promote the next queued trip; completed journeys stay out of the queue. You can unsuspend later to restore the prior status (active, queued, or completed)."
         confirmLabel="Suspend"
         cancelLabel="Keep"
         variant="warning"
