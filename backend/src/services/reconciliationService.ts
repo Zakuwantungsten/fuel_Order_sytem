@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import mongoose from 'mongoose';
+import { ApiError } from '../middleware/errorHandler';
 import { Counter } from '../models/Counter';
 import { FuelStationConfig } from '../models/FuelStationConfig';
 import { LPOSummary } from '../models/LPOSummary';
@@ -207,7 +208,42 @@ function mapHeaderToField(header: string): keyof Omit<IStatementLine, 'lineIndex
   return HEADER_ALIASES[key] || null;
 }
 
-export async function parseStatementWorkbookAsync(buffer: Buffer): Promise<IStatementLine[]> {
+/** True when Excel cell is blank (null/undefined/''), not when liters is legitimately 0. */
+function isBlankCell(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+  return false;
+}
+
+function cellText(value: unknown): string {
+  if (value == null) return '';
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'object' && value !== null && 'text' in (value as object)) {
+    return String((value as { text?: unknown }).text ?? '');
+  }
+  if (typeof value === 'object' && value !== null && 'result' in (value as object)) {
+    return cellText((value as { result?: unknown }).result);
+  }
+  return String(value);
+}
+
+export interface StatementRowIssue {
+  rowNumber: number;
+  sn?: number;
+  date?: string;
+  station?: string;
+  truckNo?: string;
+  liters?: number | null;
+  missing: string[];
+  message: string;
+}
+
+export interface ParseStatementResult {
+  lines: IStatementLine[];
+  rowIssues: StatementRowIssue[];
+}
+
+export async function parseStatementWorkbookAsync(buffer: Buffer): Promise<ParseStatementResult> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
 
@@ -217,7 +253,7 @@ export async function parseStatementWorkbookAsync(buffer: Buffer): Promise<IStat
     workbook.worksheets[0];
 
   if (!sheet) {
-    throw new Error('No worksheet found in uploaded file');
+    throw new ApiError(400, 'No worksheet found in uploaded file');
   }
 
   const headerRow = sheet.getRow(1);
@@ -234,13 +270,17 @@ export async function parseStatementWorkbookAsync(buffer: Buffer): Promise<IStat
     'liters',
   ];
   const mappedFields = new Set(Object.values(columnMap));
-  for (const req of requiredFields) {
-    if (!mappedFields.has(req)) {
-      throw new Error(`Missing required column for "${req}" in statement template`);
-    }
+  const missingColumns = requiredFields.filter((req) => !mappedFields.has(req));
+  if (missingColumns.length > 0) {
+    throw new ApiError(
+      400,
+      `Missing required column(s) in statement template: ${missingColumns.join(', ')}. Download the template and keep the header row.`
+    );
   }
 
   const lines: IStatementLine[] = [];
+  const rowIssues: StatementRowIssue[] = [];
+
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber === 1) return;
     const partial: Partial<IStatementLine> = {};
@@ -249,53 +289,77 @@ export async function parseStatementWorkbookAsync(buffer: Buffer): Promise<IStat
       partial[field] = cell.value as never;
     });
 
-    const truckRaw = displayTruckNo(String(partial.truckNo || ''));
+    const truckRaw = displayTruckNo(cellText(partial.truckNo));
     const truckNo = normalizeTruckNo(truckRaw);
-    const station = String(partial.station || '').trim();
-    const liters = Number(partial.liters);
+    const station = cellText(partial.station).trim();
     const date = parseDateOnly(partial.date);
+    const litersBlank = isBlankCell(partial.liters);
+    const liters = litersBlank ? NaN : Number(partial.liters);
+    const sn =
+      partial.sn != null && cellText(partial.sn).trim() !== '' && !Number.isNaN(Number(partial.sn))
+        ? Number(partial.sn)
+        : undefined;
 
-    if (!truckNo && !station && !date && !partial.liters) return;
-    if (!truckNo || !station || !date || Number.isNaN(liters)) {
-      throw new Error(`Invalid data on row ${rowNumber}: date, station, truck, and liters are required`);
+    // Truly empty row — ignore silently.
+    if (!truckNo && !station && !date && litersBlank && sn == null) {
+      return;
+    }
+
+    if (!truckNo || !station || !date || litersBlank || Number.isNaN(liters) || liters < 0) {
+      const missing: string[] = [];
+      if (!date) missing.push('date');
+      if (!station) missing.push('station');
+      if (!truckNo) missing.push('truck');
+      if (litersBlank || Number.isNaN(liters)) missing.push('liters');
+      else if (liters < 0) missing.push('liters (must be ≥ 0)');
+
+      rowIssues.push({
+        rowNumber,
+        sn,
+        date: date || undefined,
+        station: station || undefined,
+        truckNo: truckRaw || undefined,
+        liters: litersBlank || Number.isNaN(liters) ? null : liters,
+        missing,
+        message: `Row ${rowNumber}: missing/invalid ${missing.join(', ')}`,
+      });
+      return;
     }
 
     lines.push({
-      lineIndex: rowNumber - 2,
+      lineIndex: lines.length,
       rowNumber,
       date,
       station,
       truckNo,
       truckNoRaw: truckRaw,
       liters,
-      sn:
-        partial.sn != null && String(partial.sn).trim() !== '' && !Number.isNaN(Number(partial.sn))
-          ? Number(partial.sn)
-          : undefined,
+      sn,
       amount:
-        partial.amount != null && String(partial.amount).trim() !== '' && !Number.isNaN(Number(partial.amount))
+        !isBlankCell(partial.amount) && !Number.isNaN(Number(partial.amount))
           ? Number(partial.amount)
           : undefined,
-      lpoNo:
-        partial.lpoNo != null && String(partial.lpoNo).trim() !== ''
-          ? String(partial.lpoNo).trim()
-          : undefined,
-      doNo:
-        partial.doNo != null && String(partial.doNo).trim() !== ''
-          ? String(partial.doNo).trim()
-          : undefined,
-      notes:
-        partial.notes != null && String(partial.notes).trim() !== ''
-          ? String(partial.notes).trim()
-          : undefined,
+      lpoNo: !isBlankCell(partial.lpoNo) ? cellText(partial.lpoNo).trim() : undefined,
+      doNo: !isBlankCell(partial.doNo) ? cellText(partial.doNo).trim() : undefined,
+      notes: !isBlankCell(partial.notes) ? cellText(partial.notes).trim() : undefined,
     });
   });
 
   if (lines.length === 0) {
-    throw new Error('No statement lines found in uploaded file');
+    const preview = rowIssues
+      .slice(0, 5)
+      .map((i) => i.message)
+      .join('; ');
+    const more = rowIssues.length > 5 ? ` (+${rowIssues.length - 5} more)` : '';
+    throw new ApiError(
+      400,
+      rowIssues.length > 0
+        ? `No complete statement lines found. Fix these rows (need date, station, truck, and liters): ${preview}${more}`
+        : 'No statement lines found in uploaded file'
+    );
   }
 
-  return lines;
+  return { lines, rowIssues };
 }
 
 export interface LpoEntryForReconciliation {

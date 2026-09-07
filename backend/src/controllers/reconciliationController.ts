@@ -612,8 +612,24 @@ export const uploadStatement = async (req: AuthRequest, res: Response): Promise<
       : { ...(session.statementStationMappings || {}) };
   const mergedMappings = { ...existingMappings, ...incomingMappings };
 
-  let statementLines = await reconciliationService.parseStatementWorkbookAsync(req.file.buffer);
-  statementLines = reconciliationService.applyStatementStationMappings(statementLines, mergedMappings);
+  let parsed = await reconciliationService.parseStatementWorkbookAsync(req.file.buffer);
+  const acceptRowIssues = String(req.body.acceptRowIssues || '') === 'true';
+  if (parsed.rowIssues.length > 0 && !acceptRowIssues) {
+    throw new ApiError(
+      422,
+      `Statement has ${parsed.rowIssues.length} incomplete/invalid row(s). Review them and confirm to continue without those rows.`
+    ).withData({
+      rowIssues: parsed.rowIssues,
+      validLineCount: parsed.lines.length,
+      fileName: req.file.originalname || 'statement.xlsx',
+      selectedStations: session.stations,
+    });
+  }
+
+  let statementLines = reconciliationService.applyStatementStationMappings(
+    parsed.lines,
+    mergedMappings
+  );
 
   const knownStations = await reconciliationService.loadKnownStationNames();
   const stationValidation = reconciliationService.validateStatementStations(
@@ -633,7 +649,12 @@ export const uploadStatement = async (req: AuthRequest, res: Response): Promise<
       throw new ApiError(
         422,
         'Statement contains station names that do not match your selected stations. Map or flag them before import.'
-      ).withData({ stationValidation, selectedStations: session.stations });
+      ).withData({
+        stationValidation,
+        selectedStations: session.stations,
+        rowIssues: parsed.rowIssues,
+        validLineCount: parsed.lines.length,
+      });
     }
   }
 
@@ -673,6 +694,8 @@ export const uploadStatement = async (req: AuthRequest, res: Response): Promise<
   res.json({
     ...sessionToJson(session),
     stationValidation,
+    rowIssues: parsed.rowIssues,
+    skippedRowCount: parsed.rowIssues.length,
   });
 };
 
@@ -684,19 +707,21 @@ export const validateStatementUpload = async (req: AuthRequest, res: Response): 
   }
   if (!req.file?.buffer) throw new ApiError(400, 'Excel file is required');
 
-  const statementLines = await reconciliationService.parseStatementWorkbookAsync(req.file.buffer);
+  let parsed = await reconciliationService.parseStatementWorkbookAsync(req.file.buffer);
   const knownStations = await reconciliationService.loadKnownStationNames();
   const stationValidation = reconciliationService.validateStatementStations(
-    statementLines,
+    parsed.lines,
     session.stations,
     knownStations
   );
 
   res.json({
-    lineCount: statementLines.length,
+    lineCount: parsed.lines.length,
     fileName: req.file.originalname || 'statement.xlsx',
     selectedStations: session.stations,
     stationValidation,
+    rowIssues: parsed.rowIssues,
+    skippedRowCount: parsed.rowIssues.length,
   });
 };
 

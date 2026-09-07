@@ -42,6 +42,7 @@ import {
   ReconciliationStatementRow,
   ReconciliationSession,
   StatementStationValidation,
+  StatementRowIssue,
 } from '../services/api';
 import { isYardStation } from '../utils/yardStations';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
@@ -901,7 +902,111 @@ type StatementImportModalState = {
   selectedStations: string[];
   mappings: Record<string, string>;
   flagged: Record<string, boolean>;
+  acceptRowIssues: boolean;
+  rowIssues: StatementRowIssue[];
+  validLineCount: number;
 };
+
+type StatementRowIssuesModalState = {
+  file: File;
+  fileName: string;
+  rowIssues: StatementRowIssue[];
+  validLineCount: number;
+  selectedStations: string[];
+  stationValidation: StatementStationValidation;
+};
+
+function StatementRowIssuesModal({
+  state,
+  onClose,
+  onContinue,
+  loading,
+}: {
+  state: StatementRowIssuesModalState;
+  onClose: () => void;
+  onContinue: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={() => !loading && onClose()} />
+      <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl border dark:border-gray-700 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-5 border-b dark:border-gray-700">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-500" />
+            Incomplete statement rows
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+            <strong>{state.fileName}</strong> has {state.rowIssues.length} row(s) missing required
+            fields (date, station, truck, liters). Fix the Excel file and re-upload, or continue with
+            the {state.validLineCount} complete row(s) only — incomplete rows will be excluded.
+          </p>
+        </div>
+
+        <div className="overflow-y-auto p-5 flex-1">
+          <div className="overflow-x-auto rounded-lg border dark:border-gray-700">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-900/60 text-left text-[11px] uppercase text-gray-500">
+                <tr>
+                  <th className="px-3 py-2">Excel row</th>
+                  <th className="px-3 py-2">S/N</th>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Station</th>
+                  <th className="px-3 py-2">Truck</th>
+                  <th className="px-3 py-2">Liters</th>
+                  <th className="px-3 py-2">Issue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.rowIssues.map((issue) => (
+                  <tr
+                    key={issue.rowNumber}
+                    className="border-t dark:border-gray-700 odd:bg-white even:bg-amber-50/40 dark:odd:bg-gray-800 dark:even:bg-amber-900/10"
+                  >
+                    <td className="px-3 py-2 font-medium">{issue.rowNumber}</td>
+                    <td className="px-3 py-2">{issue.sn ?? '—'}</td>
+                    <td className="px-3 py-2">{issue.date || '—'}</td>
+                    <td className="px-3 py-2">{issue.station || '—'}</td>
+                    <td className="px-3 py-2">{issue.truckNo || '—'}</td>
+                    <td className="px-3 py-2">
+                      {issue.liters == null || Number.isNaN(Number(issue.liters))
+                        ? '—'
+                        : issue.liters}
+                    </td>
+                    <td className="px-3 py-2 text-amber-800 dark:text-amber-200">
+                      Missing/invalid: {issue.missing.join(', ')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="p-4 border-t dark:border-gray-700 flex flex-wrap gap-2 justify-end">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onClose}
+            className="px-4 py-2 text-sm rounded-md border dark:border-gray-600"
+          >
+            Cancel — fix file first
+          </button>
+          <button
+            type="button"
+            disabled={loading || state.validLineCount === 0}
+            onClick={onContinue}
+            className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white disabled:opacity-50"
+          >
+            {loading
+              ? 'Continuing…'
+              : `Continue without these ${state.rowIssues.length} row(s)`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StatementStationImportModal({
   state,
@@ -953,11 +1058,16 @@ function StatementStationImportModal({
             Station names need mapping
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-            <strong>{state.fileName}</strong> has {state.validation.lineCount} rows.{' '}
-            {state.validation.outOfScopeRowCount} row(s) use station names that do not match your
-            selected stations. Map each name to a station, or flag it to import as an exception and
-            resolve later.
+            <strong>{state.fileName}</strong> has {state.validLineCount || state.validation.lineCount}{' '}
+            importable row(s). {state.validation.outOfScopeRowCount} row(s) use station names that do
+            not match your selected stations. Map each name to a station, or flag it to import as an
+            exception and resolve later.
           </p>
+          {state.acceptRowIssues && state.rowIssues.length > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+              {state.rowIssues.length} incomplete row(s) will be excluded from this import.
+            </p>
+          )}
           <p className="text-xs text-gray-500 mt-2">
             Selected for this reconciliation:{' '}
             <span className="font-medium">{state.selectedStations.join(', ')}</span>
@@ -1131,6 +1241,7 @@ function ReconciliationTab() {
     search: '',
   });
   const [importModal, setImportModal] = useState<StatementImportModalState | null>(null);
+  const [rowIssuesModal, setRowIssuesModal] = useState<StatementRowIssuesModalState | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1760,32 +1871,136 @@ function ReconciliationTab() {
     setCreateModalOpen(false);
   };
 
+  const openStationImportModal = (
+    file: File,
+    fileName: string,
+    validation: StatementStationValidation,
+    selectedStations: string[],
+    opts?: { acceptRowIssues?: boolean; rowIssues?: StatementRowIssue[]; validLineCount?: number }
+  ) => {
+    const mappings: Record<string, string> = {};
+    for (const s of validation.stationsInFile) {
+      if (!s.inSelectedScope && !s.isYard && s.suggestedMatch) {
+        mappings[s.statementStation] = s.suggestedMatch;
+      }
+    }
+    setImportModal({
+      file,
+      fileName,
+      validation,
+      selectedStations,
+      mappings,
+      flagged: {},
+      acceptRowIssues: Boolean(opts?.acceptRowIssues),
+      rowIssues: opts?.rowIssues || [],
+      validLineCount: opts?.validLineCount ?? validation.lineCount,
+    });
+  };
+
+  const finishStatementUpload = async (
+    file: File,
+    opts?: {
+      stationMappings?: Record<string, string>;
+      flaggedStatementStations?: string[];
+      forceImport?: boolean;
+      acceptRowIssues?: boolean;
+      skippedRowCount?: number;
+    }
+  ) => {
+    if (!activeSessionId) return;
+    const result = await mutations.uploadStatement.mutateAsync({
+      id: activeSessionId,
+      file,
+      stationMappings: opts?.stationMappings,
+      flaggedStatementStations: opts?.flaggedStatementStations,
+      forceImport: opts?.forceImport,
+      acceptRowIssues: opts?.acceptRowIssues,
+    });
+    const skipped = opts?.skippedRowCount ?? result.skippedRowCount ?? 0;
+    const imported = result.summary?.totalStatementLines;
+    toast.success(
+      skipped > 0
+        ? `Statement imported — ${imported ?? 'complete'} row(s), ${skipped} incomplete row(s) excluded`
+        : `Statement imported — ${imported ?? 'complete'} rows matched`
+    );
+  };
+
   const handleUpload = async (file: File) => {
     if (!activeSessionId || sessionBusy) return;
     try {
       const result = await mutations.validateStatement.mutateAsync({ id: activeSessionId, file });
-      if (result.stationValidation.allValid) {
-        await mutations.uploadStatement.mutateAsync({ id: activeSessionId, file });
-        toast.success(`Statement imported — ${result.lineCount} rows matched`);
+      const rowIssues = result.rowIssues || [];
+
+      if (rowIssues.length > 0) {
+        setRowIssuesModal({
+          file,
+          fileName: result.fileName,
+          rowIssues,
+          validLineCount: result.lineCount,
+          selectedStations: result.selectedStations,
+          stationValidation: result.stationValidation,
+        });
         return;
       }
 
-      const mappings: Record<string, string> = {};
-      for (const s of result.stationValidation.stationsInFile) {
-        if (!s.inSelectedScope && !s.isYard && s.suggestedMatch) {
-          mappings[s.statementStation] = s.suggestedMatch;
-        }
+      if (!result.stationValidation.allValid) {
+        openStationImportModal(file, result.fileName, result.stationValidation, result.selectedStations, {
+          acceptRowIssues: false,
+          rowIssues: [],
+          validLineCount: result.lineCount,
+        });
+        return;
       }
-      setImportModal({
-        file,
-        fileName: result.fileName,
-        validation: result.stationValidation,
-        selectedStations: result.selectedStations,
-        mappings,
-        flagged: {},
-      });
+
+      await finishStatementUpload(file);
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || err.message || 'Could not read statement file');
+      const apiMessage = err?.response?.data?.message || err.message || 'Could not read statement file';
+      const rowIssues = err?.response?.data?.data?.rowIssues as StatementRowIssue[] | undefined;
+      if (err?.response?.status === 422 && rowIssues?.length) {
+        setRowIssuesModal({
+          file,
+          fileName: err.response.data.data.fileName || file.name,
+          rowIssues,
+          validLineCount: Number(err.response.data.data.validLineCount || 0),
+          selectedStations: err.response.data.data.selectedStations || [],
+          stationValidation: err.response.data.data.stationValidation || {
+            selectedStations: [],
+            lineCount: 0,
+            inScopeRowCount: 0,
+            outOfScopeRowCount: 0,
+            yardRowCount: 0,
+            unknownStations: [],
+            stationsInFile: [],
+            allValid: true,
+          },
+        });
+        return;
+      }
+      toast.error(apiMessage);
+    }
+  };
+
+  const confirmContinueWithRowIssues = async () => {
+    if (!activeSessionId || !rowIssuesModal) return;
+    const { file, fileName, rowIssues, validLineCount, selectedStations, stationValidation } =
+      rowIssuesModal;
+    try {
+      if (!stationValidation.allValid) {
+        setRowIssuesModal(null);
+        openStationImportModal(file, fileName, stationValidation, selectedStations, {
+          acceptRowIssues: true,
+          rowIssues,
+          validLineCount,
+        });
+        return;
+      }
+      await finishStatementUpload(file, {
+        acceptRowIssues: true,
+        skippedRowCount: rowIssues.length,
+      });
+      setRowIssuesModal(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Import failed');
     }
   };
 
@@ -1805,19 +2020,14 @@ function ReconciliationTab() {
       }
     }
     try {
-      await mutations.uploadStatement.mutateAsync({
-        id: activeSessionId,
-        file: importModal.file,
+      await finishStatementUpload(importModal.file, {
         stationMappings: mappings,
         flaggedStatementStations: flaggedStations,
         forceImport: flaggedStations.length > 0,
+        acceptRowIssues: importModal.acceptRowIssues,
+        skippedRowCount: importModal.acceptRowIssues ? importModal.rowIssues.length : 0,
       });
       setImportModal(null);
-      toast.success(
-        flaggedStations.length > 0
-          ? 'Statement imported — flagged stations saved as exceptions'
-          : 'Statement imported with station mappings applied'
-      );
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err.message || 'Import failed');
     }
@@ -2015,6 +2225,14 @@ function ReconciliationTab() {
 
     return (
       <>
+        {rowIssuesModal && (
+          <StatementRowIssuesModal
+            state={rowIssuesModal}
+            loading={mutations.uploadStatement.isPending}
+            onClose={() => setRowIssuesModal(null)}
+            onContinue={confirmContinueWithRowIssues}
+          />
+        )}
         {importModal && (
           <StatementStationImportModal
             state={importModal}

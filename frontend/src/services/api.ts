@@ -3687,11 +3687,24 @@ export interface StatementStationValidation {
   allValid: boolean;
 }
 
+export interface StatementRowIssue {
+  rowNumber: number;
+  sn?: number;
+  date?: string;
+  station?: string;
+  truckNo?: string;
+  liters?: number | null;
+  missing: string[];
+  message: string;
+}
+
 export interface StatementValidateResponse {
   lineCount: number;
   fileName: string;
   selectedStations: string[];
   stationValidation: StatementStationValidation;
+  rowIssues?: StatementRowIssue[];
+  skippedRowCount?: number;
 }
 
 export const reconciliationAPI = {
@@ -3803,6 +3816,7 @@ export const reconciliationAPI = {
       stationMappings?: Record<string, string>;
       flaggedStatementStations?: string[];
       forceImport?: boolean;
+      acceptRowIssues?: boolean;
     }
   ) => {
     const formData = new FormData();
@@ -3816,10 +3830,17 @@ export const reconciliationAPI = {
     if (opts?.forceImport) {
       formData.append('forceImport', 'true');
     }
+    if (opts?.acceptRowIssues) {
+      formData.append('acceptRowIssues', 'true');
+    }
     const response = await apiClient.post(`/reconciliation/${id}/upload-statement`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return response.data as ReconciliationSession & { stationValidation?: StatementStationValidation };
+    return response.data as ReconciliationSession & {
+      stationValidation?: StatementStationValidation;
+      rowIssues?: StatementRowIssue[];
+      skippedRowCount?: number;
+    };
   },
 
   validateStatement: async (id: string, file: File): Promise<StatementValidateResponse> => {

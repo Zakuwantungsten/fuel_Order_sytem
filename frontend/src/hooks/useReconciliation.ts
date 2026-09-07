@@ -239,17 +239,20 @@ export function useReconciliationMutations() {
         stationMappings,
         flaggedStatementStations,
         forceImport,
+        acceptRowIssues,
       }: {
         id: string;
         file: File;
         stationMappings?: Record<string, string>;
         flaggedStatementStations?: string[];
         forceImport?: boolean;
+        acceptRowIssues?: boolean;
       }) =>
         reconciliationAPI.uploadStatement(id, file, {
           stationMappings,
           flaggedStatementStations,
           forceImport,
+          acceptRowIssues,
         }),
       onSuccess: (_d, v) => invalidate(v.id),
     }),
