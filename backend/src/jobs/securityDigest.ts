@@ -44,8 +44,9 @@ export async function runSecurityDigest(): Promise<void> {
 
   await emailService.sendSecurityDigest(digest);
   logger.info(
-    `[SecurityDigest] Sent: ${digest.totalBlocks} block(s), ${digest.uniqueIPs} unique IP(s), ` +
-      `${digest.criticalAlerts} critical / ${digest.highAlerts} high alert(s)`,
+    `[SecurityDigest] Sent: ${digest.totalBlocks} block(s) (${digest.scannerBlocks} scanner / ${digest.authBlocks} auth), ` +
+      `${digest.uniqueIPs} unique IP(s), ${digest.scannerAlerts} scanner alert(s), ` +
+      `${digest.criticalAlerts} critical / ${digest.highAlerts} high`,
   );
 }
 

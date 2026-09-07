@@ -278,7 +278,8 @@ const HONEYPOT_CONFIG = {
     isActive: true,
   })),
   autoBlockOnHit: true,
-  autoBlockDurationMs: 3_600_000, // 1 hour
+  autoBlockDurationMs: 0, // permanent ban on first trap hit
+  tarpitMs: 8_000, // Phase 3: delay response to waste scanner time
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -321,10 +322,27 @@ export async function runFirewallSeed(): Promise<void> {
       .filter(h => !existingPaths.has(h.path))
       .map(h => ({ path: h.path, action: h.action, description: h.description, isActive: true }));
 
-    if (newPaths.length > 0) {
-      existingHoneypot.value = { ...current, paths: [...(current.paths || []), ...newPaths] };
+    // Phase 1/3 policy: first trap hit → permanent ban; enable tarpit
+    const policyPatch = {
+      autoBlockOnHit: true,
+      autoBlockDurationMs: 0,
+      tarpitMs: typeof current.tarpitMs === 'number' ? current.tarpitMs : 8_000,
+    };
+    const needsPolicyUpdate =
+      current.autoBlockOnHit !== true ||
+      (current.autoBlockDurationMs ?? 0) !== 0 ||
+      typeof (current as { tarpitMs?: number }).tarpitMs !== 'number';
+
+    if (newPaths.length > 0 || needsPolicyUpdate) {
+      existingHoneypot.value = {
+        ...current,
+        ...policyPatch,
+        paths: [...(current.paths || []), ...newPaths],
+      };
       await existingHoneypot.save();
-      logger.info(`[FirewallSeed] Honeypot — added ${newPaths.length} new trap paths`);
+      logger.info(
+        `[FirewallSeed] Honeypot — paths +${newPaths.length}, permanent auto-block policy ${needsPolicyUpdate ? 'applied' : 'unchanged'}`,
+      );
     }
   } else {
     await FirewallConfig.create({ key: 'honeypot_config', value: HONEYPOT_CONFIG, updatedBy: 'system' });
@@ -350,6 +368,17 @@ export async function runFirewallSeed(): Promise<void> {
   } else {
     await FirewallConfig.create({ key: 'bot_protection', value: BOT_PROTECTION_CONFIG, updatedBy: 'system' });
     logger.info(`[FirewallSeed] Bot protection seeded — ${BOT_UA_BLOCKLIST.length} blocked UAs, ${BOT_UA_ALLOWLIST.length} allowed`);
+  }
+
+  /* ── 4. Geo-block config (disabled by default) ───────────────────────── */
+  const existingGeo = await FirewallConfig.findOne({ key: 'geo_block' });
+  if (!existingGeo) {
+    await FirewallConfig.create({
+      key: 'geo_block',
+      value: { enabled: false, mode: 'deny', countries: [], autoBlock: false },
+      updatedBy: 'system',
+    });
+    logger.info('[FirewallSeed] Geo-block config seeded (disabled)');
   }
 }
 

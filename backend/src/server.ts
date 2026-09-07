@@ -20,6 +20,7 @@ import { ipFilterMiddleware } from './middleware/ipFilter';
 import { attackPatternMiddleware } from './middleware/attackPatternMiddleware';
 import { ipReputationMiddleware } from './middleware/ipReputationMiddleware';
 import { uaBlockingMiddleware } from './middleware/uaBlockingMiddleware';
+import { geoBlockMiddleware } from './middleware/geoBlockMiddleware';
 import { suspicious404Middleware } from './middleware/suspicious404Middleware';
 import { fingerprintObfuscationMiddleware } from './middleware/fingerprintObfuscation';
 import honeypotRoutes from './routes/honeypotRoutes';
@@ -208,6 +209,9 @@ app.use(ipReputationMiddleware);
 
 // ✅ SECURITY: Block requests from known malicious / scanning user-agents
 app.use(uaBlockingMiddleware);
+
+// ✅ SECURITY: Optional country allow/deny (FirewallConfig geo_block; off by default)
+app.use(geoBlockMiddleware);
 
 // Request ID for traceability
 app.use(requestId);

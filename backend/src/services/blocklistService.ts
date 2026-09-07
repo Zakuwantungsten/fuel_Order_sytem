@@ -5,6 +5,7 @@ import { SystemConfig } from '../models/SystemConfig';
 import { matchesRule } from '../middleware/ipFilter';
 import logger from '../utils/logger';
 import { securityAlertService } from './securityAlertService';
+import ipThreatIntelService from '../utils/ipThreatIntelService';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,16 +44,23 @@ const TRUSTED_IP_TTL_MS = 60 * 60 * 1000; // 1 hour after last successful auth
 const AUTO_BLOCK_FALLBACK_MS = 10 * 60 * 1000;
 
 /**
- * Probe/noise events reject the individual request but do NOT escalate to an
- * IP-wide ban — shared mobile CGNAT egress must not lock out whole driver cohorts.
+ * Probe/noise events that reject the request but do NOT escalate via strike
+ * counting. Phase 2 bans for these use blockScanner() with temp→permanent
+ * tiers instead of strike accumulation (avoids CGNAT lockouts from one-off noise).
  */
 const NON_ESCALATING_REASONS = new Set<BlockReason>([
-  'path_probe',
   'suspicious_404',
   'ua_blocked',
-  'honeypot',
   'rate_limit',
 ]);
+
+/** Reasons accepted by blockScanner (immediate ban path). */
+export type ScannerBlockReason =
+  | 'honeypot'
+  | 'path_probe'
+  | 'suspicious_404'
+  | 'ua_blocked'
+  | 'rate_limit';
 
 // Track when we last synced from DB
 let _lastDbSync = 0;
@@ -309,6 +317,15 @@ const BlocklistService = {
       return { blocked: false };
     }
 
+    // Phase 1: honeypot + path_probe → immediate permanent ban (same as blockScanner).
+    if (reason === 'honeypot' || reason === 'path_probe') {
+      if (this.isBlockedSync(normalized).blocked) {
+        return { blocked: true };
+      }
+      await this.block(normalized, null, reason, details);
+      return { blocked: true };
+    }
+
     // Probe/noise: log the strike but do not accumulate toward IP-wide ban.
     if (NON_ESCALATING_REASONS.has(reason)) {
       logger.debug(`BlocklistService: Non-escalating event from ${normalized} (${reason}) — request rejected only`);
@@ -358,6 +375,53 @@ const BlocklistService = {
     }
 
     return { blocked: false };
+  },
+
+  /**
+   * Immediate scanner ban. Respects IP-blocking kill switch and trusted/admin
+   * exemptions. durationMs 0 or null = permanent.
+   * If already temp-blocked and a permanent ban is requested, upgrades to permanent.
+   */
+  async blockScanner(
+    ip: string,
+    reason: ScannerBlockReason,
+    details?: string,
+    durationMs: number | null = null,
+  ): Promise<{ blocked: boolean }> {
+    if (!config.securityIpBlocking) {
+      return { blocked: false };
+    }
+
+    const normalized = normalizeIP(ip);
+
+    if (this.isExemptFromAutoBlock(normalized)) {
+      logger.info(`BlocklistService: Scanner block skipped for exempt IP ${normalized} (${reason})`);
+      return { blocked: false };
+    }
+
+    const wantPermanent = !durationMs || durationMs <= 0;
+    const existing = blockedIPs.get(normalized);
+    if (existing) {
+      const stillActive = existing.expiresAt === null || existing.expiresAt > Date.now();
+      if (stillActive) {
+        // Upgrade temporary → permanent when re-offending under aggressive policy
+        if (wantPermanent && existing.expiresAt !== null) {
+          await this.block(normalized, null, reason, details || 'Upgraded to permanent after repeat offense');
+          ipThreatIntelService.report(normalized, reason, details).catch(() => {});
+        }
+        return { blocked: true };
+      }
+      blockedIPs.delete(normalized);
+    }
+
+    await this.block(normalized, wantPermanent ? null : durationMs, reason, details);
+
+    // Phase 3: opt-in public feed sync (AbuseIPDB) — fail-open, deduped
+    ipThreatIntelService
+      .report(normalized, reason, details)
+      .catch(() => {});
+
+    return { blocked: true };
   },
 
   /**
@@ -714,7 +778,12 @@ const BlocklistService = {
         if (ab.ipBlockingEnabled !== undefined) (config as any).securityIpBlocking = ab.ipBlockingEnabled;
         if (ab.blockDurationMs !== undefined) (config as any).securityBlockDurationMs = ab.blockDurationMs;
         if (ab.suspiciousThreshold !== undefined) (config as any).securitySuspiciousThreshold = ab.suspiciousThreshold;
-        if (ab.threshold404Count !== undefined) (config as any).security404CountThreshold = ab.threshold404Count;
+        if (ab.threshold404Count !== undefined) {
+          // Phase 2: migrate legacy soft defaults (30 or 50) → 10
+          let count = ab.threshold404Count;
+          if (count === 30 || count === 50) count = 10;
+          (config as any).security404CountThreshold = count;
+        }
         if (ab.threshold404WindowMs !== undefined) (config as any).security404WindowMs = ab.threshold404WindowMs;
         if (ab.uaBlockingEnabled !== undefined) (config as any).securityUaBlocking = ab.uaBlockingEnabled;
         if (ab.ipGatingEnabled !== undefined) (config as any).securityIpGating = ab.ipGatingEnabled;
@@ -722,6 +791,7 @@ const BlocklistService = {
           ipBlocking: config.securityIpBlocking,
           blockDurationMs: config.securityBlockDurationMs,
           suspiciousThreshold: config.securitySuspiciousThreshold,
+          threshold404Count: config.security404CountThreshold,
         });
       }
     } catch (err) {

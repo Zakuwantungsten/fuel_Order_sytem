@@ -3,9 +3,32 @@ jest.mock('../../../config', () => ({
   config: {
     securityPathBlocking: true,
     securityBlockPaths: '',
+    securityIpBlocking: true,
     logFile: '/tmp/test.log',
     logLevel: 'error',
   },
+}));
+
+jest.mock('../../../models/FirewallPathRule', () => ({
+  FirewallPathRule: {
+    find: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+  },
+}));
+
+jest.mock('../../../services/blocklistService', () => ({
+  __esModule: true,
+  default: {
+    blockScanner: jest.fn().mockResolvedValue({ blocked: true }),
+    isExemptFromAutoBlock: jest.fn().mockReturnValue(false),
+  },
+}));
+
+jest.mock('../../../services/securityLogService', () => ({
+  securityLogService: { logEvent: jest.fn().mockResolvedValue(undefined) },
+}));
+
+jest.mock('../../../services/securityAlertService', () => ({
+  securityAlertService: { alertPathProbe: jest.fn().mockResolvedValue(undefined) },
 }));
 
 // Mock logger

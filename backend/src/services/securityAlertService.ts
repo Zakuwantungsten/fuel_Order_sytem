@@ -49,13 +49,36 @@ export interface SecurityDigest {
   until: Date;
   totalBlocks: number;
   uniqueIPs: number;
+  /** Blocks from scanner reasons (honeypot, path, 404, UA, rate_limit) */
+  scannerBlocks: number;
+  /** Blocks from auth / brute / manual / auto_escalation */
+  authBlocks: number;
   byReason: { reason: string; count: number }[];
   topIPs: { ip: string; count: number; reason: string }[];
-  criticalAlerts: number;              // critical alerts raised in period
-  highAlerts: number;                  // high alerts raised in period
-  openCritical: { title: string; severity: string; createdAt: Date }[]; // unresolved, needs attention
-  hasActivity: boolean;                // false = nothing happened this period
+  criticalAlerts: number;
+  highAlerts: number;
+  /** HIGH alerts from scanner activity (may exceed blocks if exempt IPs) */
+  scannerAlerts: number;
+  openCritical: { title: string; severity: string; createdAt: Date }[];
+  hasActivity: boolean;
 }
+
+const SCANNER_BLOCK_REASONS = new Set([
+  'honeypot',
+  'path_probe',
+  'suspicious_404',
+  'ua_blocked',
+  'rate_limit',
+]);
+
+const SCANNER_ALERT_EVENT_TYPES = [
+  'honeypot_hit',
+  'path_probe',
+  'path_blocked',
+  'suspicious_404',
+  'ua_blocked',
+  'rate_limited',
+];
 
 /* ───────── Cooldown state ───────── */
 
@@ -290,7 +313,8 @@ class SecurityAlertService {
 
   /**
    * Aggregate security activity over a rolling window for the scheduled digest.
-   * Reads real data from BlockedIP + SecurityAlert.
+   * Separates scanner blocks/alerts from auth blocks so digests are not confusing
+   * when HIGH alerts exist without (or with) IP bans.
    */
   async buildDigest(windowMs: number, periodLabel = 'last 24 hours'): Promise<SecurityDigest> {
     const until = new Date();
@@ -302,10 +326,14 @@ class SecurityAlertService {
 
     const reasonMap = new Map<string, number>();
     const ipMap = new Map<string, { count: number; reason: string }>();
+    let scannerBlocks = 0;
+    let authBlocks = 0;
     for (const b of blocks) {
       reasonMap.set(b.reason, (reasonMap.get(b.reason) || 0) + 1);
       const cur = ipMap.get(b.ip);
       ipMap.set(b.ip, { count: (cur?.count || 0) + 1, reason: b.reason });
+      if (SCANNER_BLOCK_REASONS.has(b.reason)) scannerBlocks += 1;
+      else authBlocks += 1;
     }
 
     const byReason = Array.from(reasonMap.entries())
@@ -317,9 +345,21 @@ class SecurityAlertService {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    const [criticalAlerts, highAlerts, openCriticalDocs] = await Promise.all([
+    const [criticalAlerts, highAlerts, scannerAlerts, openCriticalDocs] = await Promise.all([
       SecurityAlert.countDocuments({ createdAt: { $gte: since }, severity: 'critical' }),
       SecurityAlert.countDocuments({ createdAt: { $gte: since }, severity: 'high' }),
+      SecurityAlert.countDocuments({
+        createdAt: { $gte: since },
+        severity: { $in: ['high', 'medium'] },
+        $or: [
+          { 'metadata.eventType': { $in: SCANNER_ALERT_EVENT_TYPES } },
+          {
+            title: {
+              $regex: /Honeypot|Suspicious 404|Path Probe|Malicious User-Agent|Rate Limit/i,
+            },
+          },
+        ],
+      }),
       SecurityAlert.find({
         severity: { $in: ['critical', 'high'] },
         status: { $in: ['new', 'investigating'] },
@@ -342,12 +382,15 @@ class SecurityAlertService {
       until,
       totalBlocks: blocks.length,
       uniqueIPs: ipMap.size,
+      scannerBlocks,
+      authBlocks,
       byReason,
       topIPs,
       criticalAlerts,
       highAlerts,
+      scannerAlerts,
       openCritical,
-      hasActivity: blocks.length > 0 || criticalAlerts > 0 || highAlerts > 0,
+      hasActivity: blocks.length > 0 || criticalAlerts > 0 || highAlerts > 0 || scannerAlerts > 0,
     };
   }
 
@@ -441,7 +484,7 @@ class SecurityAlertService {
       type: this.mapAlertType(input.eventType),
       title: input.title,
       message: input.description,
-      metadata: input.details || {},
+      metadata: { ...(input.details || {}), eventType: input.eventType },
       relatedIP: input.ip,
     });
 

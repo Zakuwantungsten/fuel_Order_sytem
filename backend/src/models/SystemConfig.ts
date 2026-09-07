@@ -507,7 +507,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         ipBlockingEnabled: { type: Boolean, default: true },
         blockDurationMs: { type: Number, default: 600000 },
         suspiciousThreshold: { type: Number, default: 5 },
-        threshold404Count: { type: Number, default: 30 },
+        threshold404Count: { type: Number, default: 10 },
         threshold404WindowMs: { type: Number, default: 300000 },
         uaBlockingEnabled: { type: Boolean, default: true },
         ipGatingEnabled: { type: Boolean, default: false },

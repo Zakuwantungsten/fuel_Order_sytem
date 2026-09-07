@@ -1,55 +1,56 @@
 /**
  * IP Threat Intelligence Service — AbuseIPDB integration
  *
- * Queries AbuseIPDB (https://www.abuseipdb.com) to check whether a given IP
- * has been reported for malicious activity.
+ * check()  — query reputation (used at login risk scoring)
+ * report() — submit confirmed scanner IPs (honeypot / path / 404 bans)
  *
- * Free tier: 1,000 checks / day.
- * Results are cached in-memory for 6 hours to conserve the daily quota.
- *
- * Configuration (environment variables):
- *   ABUSEIPDB_API_KEY   — API key from abuseipdb.com. If unset, all checks
- *                         return { isKnownBad: false } and the service is
- *                         effectively disabled without breaking anything.
- *   ABUSEIPDB_THRESHOLD — Abuse confidence score (0–100) at or above which
- *                         an IP is considered known-bad. Default: 25.
+ * Free tier: 1,000 checks / day; reports also count against quota.
+ * Opt-in reporting: ABUSEIPDB_AUTO_REPORT=true (default off to conserve quota).
  */
 
 import axios from 'axios';
 import logger from './logger';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 export interface ThreatIntelResult {
-  isKnownBad: boolean;     // true if score ≥ threshold and not whitelisted
-  confidenceScore: number; // 0–100 AbuseIPDB abuse confidence score
-  totalReports: number;    // number of reports on this IP
-  isTor: boolean;          // known Tor exit node
+  isKnownBad: boolean;
+  confidenceScore: number;
+  totalReports: number;
+  isTor: boolean;
 }
-
-// ─── Private ─────────────────────────────────────────────────────────────────
 
 interface CacheEntry {
   result: ThreatIntelResult;
   expiresAt: number;
 }
 
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-const ABUSEIPDB_URL = 'https://api.abuseipdb.com/api/v2/check';
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const ABUSEIPDB_CHECK_URL = 'https://api.abuseipdb.com/api/v2/check';
+const ABUSEIPDB_REPORT_URL = 'https://api.abuseipdb.com/api/v2/report';
 const DEFAULT_THRESHOLD = 25;
 
-const _cache = new Map<string, CacheEntry>();
+/** AbuseIPDB category IDs — https://www.abuseipdb.com/categories */
+const CATEGORY = {
+  DDoS: 4,
+  PortScan: 14,
+  Hacking: 15,
+  BadWebBot: 19,
+  WebAppAttack: 21,
+} as const;
 
-// RFC 1918 private, loopback, link-local, and IPv6 special ranges
+const _cache = new Map<string, CacheEntry>();
+/** Dedupe reports per IP for 24h so we don't spam the API. */
+const _reportedAt = new Map<string, number>();
+const REPORT_DEDUP_MS = 24 * 60 * 60 * 1000;
+
 const PRIVATE_IP_PATTERNS: RegExp[] = [
-  /^127\./,                      // IPv4 loopback
-  /^10\./,                       // RFC 1918 Class A
-  /^172\.(1[6-9]|2\d|3[01])\./,  // RFC 1918 Class B
-  /^192\.168\./,                  // RFC 1918 Class C
-  /^169\.254\./,                  // link-local
-  /^::1$/,                        // IPv6 loopback
-  /^fc[0-9a-f]{2}:/i,             // IPv6 ULA (fc00::/7)
-  /^fd[0-9a-f]{2}:/i,             // IPv6 ULA (fd00::/8 subset)
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^169\.254\./,
+  /^::1$/,
+  /^fc[0-9a-f]{2}:/i,
+  /^fd[0-9a-f]{2}:/i,
 ];
 
 function isPrivateIP(ip: string): boolean {
@@ -57,17 +58,26 @@ function isPrivateIP(ip: string): boolean {
   return PRIVATE_IP_PATTERNS.some((re) => re.test(normalized));
 }
 
-// ─── Service ─────────────────────────────────────────────────────────────────
+function categoriesForReason(reason: string): number[] {
+  switch (reason) {
+    case 'honeypot':
+    case 'path_probe':
+      return [CATEGORY.WebAppAttack, CATEGORY.Hacking];
+    case 'suspicious_404':
+      return [CATEGORY.PortScan, CATEGORY.BadWebBot];
+    case 'ua_blocked':
+      return [CATEGORY.BadWebBot, CATEGORY.WebAppAttack];
+    case 'rate_limit':
+      return [CATEGORY.DDoS, CATEGORY.BadWebBot];
+    case 'brute_force':
+    case 'auth_failure':
+      return [CATEGORY.Hacking];
+    default:
+      return [CATEGORY.WebAppAttack];
+  }
+}
 
 const ipThreatIntelService = {
-  /**
-   * Check whether an IP is listed as malicious on AbuseIPDB.
-   *
-   * Returns safe defaults (isKnownBad: false) when:
-   *   - ABUSEIPDB_API_KEY is not set (service disabled)
-   *   - The IP is a private / loopback address (internal traffic)
-   *   - The API call fails or times out (fail-open: never block users due to API outage)
-   */
   async check(ip: string): Promise<ThreatIntelResult> {
     const apiKey = process.env.ABUSEIPDB_API_KEY;
     const safe: ThreatIntelResult = {
@@ -77,13 +87,9 @@ const ipThreatIntelService = {
       isTor: false,
     };
 
-    // Service disabled — no API key configured
     if (!apiKey) return safe;
-
-    // Skip private / loopback IPs
     if (isPrivateIP(ip)) return safe;
 
-    // Return cached result if still fresh
     const cached = _cache.get(ip);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.result;
@@ -102,7 +108,7 @@ const ipThreatIntelService = {
           isTor: boolean;
           isWhitelisted: boolean;
         };
-      }>(ABUSEIPDB_URL, {
+      }>(ABUSEIPDB_CHECK_URL, {
         headers: {
           Key: apiKey,
           Accept: 'application/json',
@@ -111,7 +117,7 @@ const ipThreatIntelService = {
           ipAddress: ip,
           maxAgeInDays: 90,
         },
-        timeout: 3_000, // 3 s — must not slow down login
+        timeout: 3_000,
       });
 
       const d = response.data.data;
@@ -135,7 +141,6 @@ const ipThreatIntelService = {
 
       return result;
     } catch (err: any) {
-      // Fail open — a timeout or API error must never block legitimate users
       logger.debug('[ThreatIntel] AbuseIPDB check failed (failing open)', {
         ip,
         error: err?.message,
@@ -144,12 +149,62 @@ const ipThreatIntelService = {
     }
   },
 
-  /** Manually evict an IP from the local cache (e.g. after manual unblock). */
+  /**
+   * Report a confirmed malicious IP to AbuseIPDB (opt-in).
+   * Requires ABUSEIPDB_API_KEY and ABUSEIPDB_AUTO_REPORT=true.
+   * Fail-open: never throws; dedupes per IP for 24h.
+   */
+  async report(
+    ip: string,
+    reason: string,
+    comment?: string,
+  ): Promise<{ reported: boolean }> {
+    const apiKey = process.env.ABUSEIPDB_API_KEY;
+    if (!apiKey || process.env.ABUSEIPDB_AUTO_REPORT !== 'true') {
+      return { reported: false };
+    }
+    if (isPrivateIP(ip)) return { reported: false };
+
+    const last = _reportedAt.get(ip);
+    if (last && Date.now() - last < REPORT_DEDUP_MS) {
+      return { reported: false };
+    }
+
+    try {
+      const categories = categoriesForReason(reason).join(',');
+      await axios.post(
+        ABUSEIPDB_REPORT_URL,
+        new URLSearchParams({
+          ip,
+          categories,
+          comment: (comment || `Fuel Order auto-report: ${reason}`).slice(0, 1024),
+        }).toString(),
+        {
+          headers: {
+            Key: apiKey,
+            Accept: 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          timeout: 5_000,
+        },
+      );
+      _reportedAt.set(ip, Date.now());
+      logger.info('[ThreatIntel] Reported IP to AbuseIPDB', { ip, reason, categories });
+      return { reported: true };
+    } catch (err: any) {
+      logger.debug('[ThreatIntel] AbuseIPDB report failed (ignored)', {
+        ip,
+        error: err?.message,
+        status: err?.response?.status,
+      });
+      return { reported: false };
+    }
+  },
+
   evict(ip: string): void {
     _cache.delete(ip);
   },
 
-  /** Current cache size — useful for metrics / health checks. */
   cacheSize(): number {
     return _cache.size;
   },

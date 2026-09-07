@@ -572,7 +572,7 @@ class EmailService {
       await this.dispatchMail({
         from: `"${this.fromName} - Security" <${this.fromAddress}>`,
         to: recipients,
-        subject: `🛡️ Security Digest (${digest.periodLabel}) — ${digest.totalBlocks} block(s), ${digest.criticalAlerts} critical`,
+        subject: `Security Digest (${digest.periodLabel}) — ${digest.totalBlocks} block(s), ${digest.scannerAlerts} scanner alert(s), ${digest.criticalAlerts} critical`,
         html: this.generateSecurityDigestEmail(digest),
       });
 
@@ -1077,29 +1077,51 @@ class EmailService {
               `<li style="margin-bottom:6px"><span style="font-weight:bold;color:${a.severity === 'critical' ? '#dc2626' : '#f97316'}">[${a.severity.toUpperCase()}]</span> ${a.title} <span style="color:#9ca3af;font-size:12px">— ${fmt(a.createdAt)}</span></li>`,
           )
           .join('')
-      : `<li style="color:#10b981">✅ No unresolved critical/high alerts — nothing needs your attention.</li>`;
+      : `<li style="color:#10b981">No unresolved critical/high alerts — nothing needs your attention.</li>`;
+
+    const clarityNote =
+      d.scannerAlerts > 0 && d.scannerBlocks === 0
+        ? `<p style="margin:0 0 16px;padding:12px;background:#fff7ed;border-left:4px solid #f97316;border-radius:4px;color:#9a3412;font-size:13px;line-height:1.5">
+            <strong>Note:</strong> ${d.scannerAlerts} scanner alert(s) were raised, but no scanner IPs were banned this period
+            (e.g. trusted/admin egress, IP blocking disabled, or alert-only mode). Review the open items below.
+          </p>`
+        : '';
 
     return `
       <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
         <div style="background:${headerColor};color:white;padding:20px;text-align:center">
-          <h1 style="margin:0;font-size:22px">🛡️ Security Digest</h1>
+          <h1 style="margin:0;font-size:22px">Security Digest</h1>
           <p style="margin:6px 0 0;opacity:0.9">${d.periodLabel} — ${fmt(d.since)} → ${fmt(d.until)}</p>
         </div>
         <div style="padding:24px;background:#f9fafb">
-          <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
-            <div style="flex:1;min-width:120px;background:white;padding:14px;border-radius:8px;text-align:center">
+          ${clarityNote}
+          <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:110px;background:white;padding:14px;border-radius:8px;text-align:center">
               <div style="font-size:26px;font-weight:bold;color:#1f2937">${d.totalBlocks}</div>
-              <div style="color:#6b7280;font-size:13px">IPs blocked</div>
+              <div style="color:#6b7280;font-size:12px">IPs blocked</div>
             </div>
-            <div style="flex:1;min-width:120px;background:white;padding:14px;border-radius:8px;text-align:center">
+            <div style="flex:1;min-width:110px;background:white;padding:14px;border-radius:8px;text-align:center">
               <div style="font-size:26px;font-weight:bold;color:#1f2937">${d.uniqueIPs}</div>
-              <div style="color:#6b7280;font-size:13px">Unique IPs</div>
+              <div style="color:#6b7280;font-size:12px">Unique blocked IPs</div>
             </div>
-            <div style="flex:1;min-width:120px;background:white;padding:14px;border-radius:8px;text-align:center">
+            <div style="flex:1;min-width:110px;background:white;padding:14px;border-radius:8px;text-align:center">
+              <div style="font-size:26px;font-weight:bold;color:#ea580c">${d.scannerBlocks}</div>
+              <div style="color:#6b7280;font-size:12px">Scanner bans</div>
+            </div>
+            <div style="flex:1;min-width:110px;background:white;padding:14px;border-radius:8px;text-align:center">
+              <div style="font-size:26px;font-weight:bold;color:#2563eb">${d.scannerAlerts}</div>
+              <div style="color:#6b7280;font-size:12px">Scanner alerts</div>
+            </div>
+            <div style="flex:1;min-width:110px;background:white;padding:14px;border-radius:8px;text-align:center">
               <div style="font-size:26px;font-weight:bold;color:${d.criticalAlerts > 0 ? '#dc2626' : '#10b981'}">${d.criticalAlerts}</div>
-              <div style="color:#6b7280;font-size:13px">Critical alerts</div>
+              <div style="color:#6b7280;font-size:12px">Critical alerts</div>
             </div>
           </div>
+          <p style="margin:0 0 16px;color:#6b7280;font-size:12px;line-height:1.4">
+            <strong>IPs blocked</strong> = ban records created.
+            <strong>Scanner alerts</strong> = honeypot / path / 404 / UA detections (separate from bans).
+            Auth-related bans this period: <strong>${d.authBlocks}</strong>.
+          </p>
 
           <div style="background:white;padding:16px;border-radius:8px;margin-bottom:16px">
             <h3 style="margin:0 0 10px;color:#1f2937">Needs your attention</h3>

@@ -24,6 +24,8 @@ import { NetworkZone } from '../models/NetworkZone';
 import { EgressFilterRule } from '../models/EgressFilterRule';
 import AuditService from '../utils/auditService';
 import logger from '../utils/logger';
+import { reloadDbPathRules } from '../middleware/attackPatternMiddleware';
+import { reloadGeoBlockConfig } from '../middleware/geoBlockMiddleware';
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 
@@ -91,6 +93,8 @@ export const createPathRule = async (req: AuthRequest, res: Response): Promise<v
       ipAddress: req.ip,
     });
 
+    await reloadDbPathRules();
+
     res.status(201).json({ success: true, data: rule });
   } catch (err) {
     if (err instanceof ApiError) throw err;
@@ -131,6 +135,8 @@ export const updatePathRule = async (req: AuthRequest, res: Response): Promise<v
       ipAddress: req.ip,
     });
 
+    await reloadDbPathRules();
+
     res.status(200).json({ success: true, data: rule });
   } catch (err) {
     if (err instanceof ApiError) throw err;
@@ -156,6 +162,8 @@ export const deletePathRule = async (req: AuthRequest, res: Response): Promise<v
       severity: 'medium',
       ipAddress: req.ip,
     });
+
+    await reloadDbPathRules();
 
     res.status(200).json({ success: true, message: 'Path rule deleted' });
   } catch (err) {
@@ -184,6 +192,8 @@ export const togglePathRule = async (req: AuthRequest, res: Response): Promise<v
       ipAddress: req.ip,
       severity: 'medium',
     });
+
+    await reloadDbPathRules();
 
     res.status(200).json({ success: true, data: rule });
   } catch (err) {
@@ -326,7 +336,10 @@ const DEFAULT_HONEYPOT_CONFIG = {
   enabled: true,
   paths: [] as { path: string; action: 'block' | 'alert' | 'log'; description: string; isActive: boolean }[],
   autoBlockOnHit: true,
-  autoBlockDurationMs: 3600000,
+  /** 0 = permanent ban on first trap hit */
+  autoBlockDurationMs: 0,
+  /** Delay response to waste scanner time (ms). 0 = off. */
+  tarpitMs: 8000,
 };
 
 export const getHoneypotConfig = async (_req: AuthRequest, res: Response): Promise<void> => {
@@ -341,7 +354,7 @@ export const getHoneypotConfig = async (_req: AuthRequest, res: Response): Promi
 
 export const saveHoneypotConfig = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { enabled, paths, autoBlockOnHit, autoBlockDurationMs } = req.body;
+    const { enabled, paths, autoBlockOnHit, autoBlockDurationMs, tarpitMs } = req.body;
     if (paths !== undefined && !Array.isArray(paths)) throw new ApiError(400, 'paths must be an array');
     const cleanPaths = (Array.isArray(paths) ? paths : []).map((p: Record<string, unknown>) => ({
       path: typeof p.path === 'string' ? p.path.trim() : '',
@@ -354,7 +367,15 @@ export const saveHoneypotConfig = async (req: AuthRequest, res: Response): Promi
       enabled: !!enabled,
       paths: cleanPaths,
       autoBlockOnHit: !!autoBlockOnHit,
-      autoBlockDurationMs: typeof autoBlockDurationMs === 'number' ? autoBlockDurationMs : 3600000,
+      // 0 / null / omitted → permanent ban; positive ms → temporary
+      autoBlockDurationMs:
+        typeof autoBlockDurationMs === 'number' && autoBlockDurationMs > 0
+          ? autoBlockDurationMs
+          : 0,
+      tarpitMs:
+        typeof tarpitMs === 'number'
+          ? Math.min(Math.max(0, tarpitMs), 60_000)
+          : 8000,
     };
     await saveConfig(HONEYPOT_CONFIG_KEY, value, req.user?.username ?? 'system');
 
@@ -754,6 +775,67 @@ export const saveTlsPolicy = async (req: AuthRequest, res: Response): Promise<vo
     if (err instanceof ApiError) throw err;
     logger.error('saveTlsPolicy error:', err);
     throw new ApiError(500, 'Failed to save TLS policy');
+  }
+};
+
+/* ══════════════════════════════════════════════════════════════════
+ *  GEO BLOCK (optional country allow/deny)
+ * ══════════════════════════════════════════════════════════════════ */
+
+const GEO_BLOCK_KEY = 'geo_block';
+const DEFAULT_GEO_BLOCK = {
+  enabled: false,
+  mode: 'deny' as 'deny' | 'allow',
+  countries: [] as string[],
+  autoBlock: false,
+};
+
+export const getGeoBlockConfig = async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const data = await getOrCreateConfig(GEO_BLOCK_KEY, DEFAULT_GEO_BLOCK);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    logger.error('getGeoBlockConfig error:', err);
+    throw new ApiError(500, 'Failed to fetch geo-block config');
+  }
+};
+
+export const saveGeoBlockConfig = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { enabled, mode, countries, autoBlock } = req.body;
+    const cleanCountries = (Array.isArray(countries) ? countries : [])
+      .map((c: unknown) => String(c).trim().toUpperCase())
+      .filter((c: string) => /^[A-Z]{2}$/.test(c));
+
+    if (mode !== undefined && mode !== 'deny' && mode !== 'allow') {
+      throw new ApiError(400, 'mode must be deny or allow');
+    }
+
+    const value = {
+      enabled: !!enabled,
+      mode: mode === 'allow' ? 'allow' : 'deny',
+      countries: cleanCountries,
+      autoBlock: !!autoBlock,
+    };
+    await saveConfig(GEO_BLOCK_KEY, value, req.user?.username ?? 'system');
+    await reloadGeoBlockConfig();
+
+    await AuditService.log({
+      action: 'CONFIG_CHANGE',
+      resourceType: 'firewall_geo_block',
+      resourceId: GEO_BLOCK_KEY,
+      userId: req.user?.userId ?? '',
+      username: req.user?.username ?? '',
+      details: `Geo-block ${value.enabled ? 'enabled' : 'disabled'} mode=${value.mode} countries=${value.countries.join(',') || '(none)'}`,
+      severity: 'high',
+      ipAddress: req.ip,
+    });
+
+    res.status(200).json({ success: true, data: value, message: 'Geo-block config saved' });
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    logger.error('saveGeoBlockConfig error:', err);
+    throw new ApiError(500, 'Failed to save geo-block config');
   }
 };
 

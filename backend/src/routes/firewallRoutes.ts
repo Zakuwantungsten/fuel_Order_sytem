@@ -37,6 +37,9 @@ import {
   // TLS Policy
   getTlsPolicy,
   saveTlsPolicy,
+  // Geo Block
+  getGeoBlockConfig,
+  saveGeoBlockConfig,
   // DDoS Config
   getDdosConfig,
   saveDdosConfig,
@@ -91,6 +94,10 @@ router.delete('/network-zones/:id', deleteNetworkZone);
 /* ── TLS Policy ──────────────────────────────────────────────── */
 router.get('/tls', getTlsPolicy);
 router.put('/tls', saveTlsPolicy);
+
+/* ── Geo Block (country allow/deny) ──────────────────────────── */
+router.get('/geo-block', getGeoBlockConfig);
+router.put('/geo-block', saveGeoBlockConfig);
 
 /* ── DDoS / Burst Protection ─────────────────────────────────── */
 router.get('/ddos', getDdosConfig);

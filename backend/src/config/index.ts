@@ -82,8 +82,10 @@ export const config = {
   securityIpBlocking: process.env.SECURITY_IP_BLOCKING !== 'false',       // enabled by default
   securitySuspiciousThreshold: parseInt(process.env.SECURITY_SUSPICIOUS_THRESHOLD || '10', 10),
   securityBlockDurationMs: parseInt(process.env.SECURITY_BLOCK_DURATION_MS || '600000', 10), // 10 min
-  security404CountThreshold: parseInt(process.env.SECURITY_404_COUNT_THRESHOLD || '50', 10),
+  security404CountThreshold: parseInt(process.env.SECURITY_404_COUNT_THRESHOLD || '10', 10),
   security404WindowMs: parseInt(process.env.SECURITY_404_WINDOW_MS || '300000', 10),         // 5 min
+  /** Phase 2: first 404/UA/rate-limit offense → temporary ban (default 24h) */
+  securityScannerTempBanMs: parseInt(process.env.SECURITY_SCANNER_TEMP_BAN_MS || String(24 * 60 * 60 * 1000), 10),
   securityEventLogging: process.env.SECURITY_EVENT_LOGGING !== 'false',   // enabled by default
   securityAlertEmail: process.env.SECURITY_ALERT_EMAIL || '',
   // When set, critical security emails go ONLY here (not every super_admin account)
