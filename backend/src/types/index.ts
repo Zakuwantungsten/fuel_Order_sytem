@@ -288,6 +288,8 @@ export interface IDeliveryOrder {
   editHistory?: IDeliveryOrderEditHistory[];
   lastEditedAt?: Date;
   lastEditedBy?: string;
+  /** True when this DO has had a truck-number amend that cascaded to fuel. */
+  hasTruckChangeAmendment?: boolean;
   /** Pending DO (PG/PR) this real DO replaced, if any */
   promotedFromPendingDo?: string;
   promotedFromPendingAt?: Date;
@@ -591,9 +593,38 @@ export interface IFuelRecord {
   uncancelledBy?: string;
   isDeleted: boolean;
   deletedAt?: Date;
+  /** True when this journey has had at least one non-undone truck change. */
+  hasTruckChange?: boolean;
+  lastTruckChangeAt?: Date;
+  truckChangeSnapshots?: ITruckChangeSnapshot[];
   editLock?: { lockedBy?: string | null; lockedAt?: Date | null; lockedUntil?: Date | null };
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface ITruckChangeSnapshot {
+  _id?: any;
+  changedAt: Date;
+  changedBy: string;
+  source: 'do_amend' | 'fuel_record_edit';
+  deliveryOrderId?: string;
+  doNumber?: string;
+  oldTruckNo: string;
+  newTruckNo: string;
+  decision: 'maintain' | 'reset';
+  checkpointsBefore?: Record<string, number>;
+  balanceBefore?: number;
+  totalLtsBefore?: number | null;
+  extraBefore?: number | null;
+  journeyBefore?: {
+    journeyStatus?: string;
+    queueOrder?: number;
+    previousJourneyId?: string;
+    activatedAt?: Date;
+  };
+  placement?: string;
+  undoneAt?: Date;
+  undoneBy?: string;
 }
 
 // Yard Fuel Dispensing

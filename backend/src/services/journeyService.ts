@@ -71,6 +71,8 @@ let _fuelAutomationCache: IFuelAutomationConfig | null = null;
 let _fuelAutomationCacheUpdatedAt = 0;
 let _allowSuspendCompletedCache: boolean | null = null;
 let _allowSuspendCompletedCacheUpdatedAt = 0;
+let _allowUnlinkExportDoCache: boolean | null = null;
+let _allowUnlinkExportDoCacheUpdatedAt = 0;
 
 // Cache for the manager-access config (super-manager stations + LPO lookback).
 // Read on every manager/super_manager LPO list request, so it must not hit the DB
@@ -155,6 +157,8 @@ export function invalidateJourneyConfigCache(): void {
   _fuelAutomationCacheUpdatedAt = 0;
   _allowSuspendCompletedCache = null;
   _allowSuspendCompletedCacheUpdatedAt = 0;
+  _allowUnlinkExportDoCache = null;
+  _allowUnlinkExportDoCacheUpdatedAt = 0;
   _managerAccessCache = null;
   _managerAccessCacheUpdatedAt = 0;
   _dashboardSearchCache = null;
@@ -376,6 +380,29 @@ export async function getAllowSuspendCompleted(): Promise<boolean> {
     return allowed;
   } catch (error: any) {
     logger.error(`Failed to load allowSuspendCompleted, defaulting false: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Whether Unlink Export DO is allowed on fuel records (Journey Config toggle).
+ * Default false. Cached 30s; never throws.
+ */
+export async function getAllowUnlinkExportDo(): Promise<boolean> {
+  const now = Date.now();
+  if (_allowUnlinkExportDoCache !== null && now - _allowUnlinkExportDoCacheUpdatedAt < CACHE_TTL_MS) {
+    return _allowUnlinkExportDoCache;
+  }
+  try {
+    const cfg = await SystemConfig.findOne({ configType: 'journey_config', isDeleted: false })
+      .select('journeyConfig.allowUnlinkExportDo')
+      .lean();
+    const allowed = cfg?.journeyConfig?.allowUnlinkExportDo === true;
+    _allowUnlinkExportDoCache = allowed;
+    _allowUnlinkExportDoCacheUpdatedAt = now;
+    return allowed;
+  } catch (error: any) {
+    logger.error(`Failed to load allowUnlinkExportDo, defaulting false: ${error.message}`);
     return false;
   }
 }

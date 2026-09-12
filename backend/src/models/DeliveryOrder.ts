@@ -163,6 +163,11 @@ const deliveryOrderSchema = new Schema<IDeliveryOrderDocument>(
       type: String,
       trim: true,
     },
+    /** True when this DO has had a truck-number amend that cascaded to fuel. */
+    hasTruckChangeAmendment: {
+      type: Boolean,
+      default: false,
+    },
     /** Pending DO (PG/PR) this real DO replaced, if any */
     promotedFromPendingDo: {
       type: String,

@@ -50,6 +50,8 @@ export interface DeliveryOrder {
   editHistory?: DeliveryOrderEditHistory[];
   lastEditedAt?: string;
   lastEditedBy?: string;
+  /** True when this DO had a truck-number amend cascaded to fuel. */
+  hasTruckChangeAmendment?: boolean;
   // Timestamps
   createdAt?: string;
   updatedAt?: string;
@@ -348,6 +350,10 @@ export interface FuelRecord {
   // Timestamps
   createdAt?: string;
   updatedAt?: string;
+  /** True when this journey had a truck change with a snapshot. */
+  hasTruckChange?: boolean;
+  lastTruckChangeAt?: string;
+  truckChangeSnapshots?: TruckChangeSnapshot[];
   // Edit lock
   editLock?: {
     lockedBy?: string;
@@ -355,6 +361,32 @@ export interface FuelRecord {
     lockedAt?: string;
     lockedUntil?: string;
   };
+}
+
+export interface TruckChangeSnapshot {
+  _id?: string;
+  id?: string;
+  changedAt: string;
+  changedBy: string;
+  source: 'do_amend' | 'fuel_record_edit';
+  deliveryOrderId?: string;
+  doNumber?: string;
+  oldTruckNo: string;
+  newTruckNo: string;
+  decision: 'maintain' | 'reset';
+  checkpointsBefore?: Record<string, number>;
+  balanceBefore?: number;
+  totalLtsBefore?: number | null;
+  extraBefore?: number | null;
+  journeyBefore?: {
+    journeyStatus?: string;
+    queueOrder?: number;
+    previousJourneyId?: string;
+    activatedAt?: string;
+  };
+  placement?: string;
+  undoneAt?: string;
+  undoneBy?: string;
 }
 
 // Master DO template (for generating new DOs)

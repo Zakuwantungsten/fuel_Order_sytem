@@ -72,7 +72,7 @@ const LITER_FIELDS = new Set([
   'zambiaReturn', 'tundumaReturn', 'mbeyaReturn', 'moroReturn', 'darReturn', 'tangaReturn',
 ]);
 
-const SKIP_DIFF_KEYS = new Set(['source', 'changes', 'merge']);
+const SKIP_DIFF_KEYS = new Set(['source', 'changes', 'merge', 'undoTruckChange', 'snapshotId', 'fuelRecordId']);
 
 export function fieldLabel(field: string): string {
   return FIELD_LABELS[field] ?? field.replace(/([A-Z])/g, ' $1').trim();
@@ -231,35 +231,46 @@ const RecordTimeline = ({ fetchHistory, isOpen }: RecordTimelineProps) => {
     !!(entry.newValue && (entry.newValue as any).merge) ||
     /merge_source/i.test(String((entry.previousValue as any)?.role || ''));
 
+  const isUndoTruckChange = (entry: AuditEntry) =>
+    !!(entry.newValue && (entry.newValue as any).undoTruckChange) ||
+    /undo truck-change/i.test(entry.details || '');
+
   return (
     <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
       {entries.map((entry) => {
         const diffs = extractDiffs(entry.previousValue, entry.newValue);
         const promotion = isPendingPromotion(entry);
         const merge = isPendingMerge(entry);
-        const highlight = merge || promotion;
-        const label = merge
-          ? 'Merged pending → DO'
-          : promotion
-            ? 'Pending → Real DO'
-            : (actionLabel[entry.action] || entry.action);
+        const undoTruck = isUndoTruckChange(entry);
+        const highlight = merge || promotion || undoTruck;
+        const label = undoTruck
+          ? 'Undo truck change'
+          : merge
+            ? 'Merged pending → DO'
+            : promotion
+              ? 'Pending → Real DO'
+              : (actionLabel[entry.action] || entry.action);
         return (
           <div
             key={entry._id}
             className={`relative pl-6 pb-3 border-l-2 last:border-transparent ${
               highlight
-                ? merge
-                  ? 'border-violet-300 dark:border-violet-700'
-                  : 'border-amber-300 dark:border-amber-700'
+                ? undoTruck
+                  ? 'border-sky-300 dark:border-sky-700'
+                  : merge
+                    ? 'border-violet-300 dark:border-violet-700'
+                    : 'border-amber-300 dark:border-amber-700'
                 : 'border-gray-200 dark:border-gray-700'
             }`}
           >
             <div
               className={`absolute left-[-5px] top-1 w-2 h-2 rounded-full ${
                 highlight
-                  ? merge
-                    ? 'bg-violet-500'
-                    : 'bg-amber-500'
+                  ? undoTruck
+                    ? 'bg-sky-500'
+                    : merge
+                      ? 'bg-violet-500'
+                      : 'bg-amber-500'
                   : 'bg-gray-400 dark:bg-gray-500'
               }`}
             />
@@ -273,20 +284,24 @@ const RecordTimeline = ({ fetchHistory, isOpen }: RecordTimelineProps) => {
                 {entry.username}
               </span>
               <span className={`text-xs font-semibold ${
-                merge
-                  ? 'text-violet-700 dark:text-violet-300'
-                  : actionColor[entry.action] || 'text-gray-600'
+                undoTruck
+                  ? 'text-sky-700 dark:text-sky-300'
+                  : merge
+                    ? 'text-violet-700 dark:text-violet-300'
+                    : actionColor[entry.action] || 'text-gray-600'
               }`}>
                 {label}
               </span>
             </div>
             {entry.details && (
               <p className={`text-xs mt-0.5 ${
-                merge
-                  ? 'text-violet-800 dark:text-violet-300'
-                  : promotion
-                    ? 'text-amber-800 dark:text-amber-300'
-                    : 'text-gray-500 dark:text-gray-400'
+                undoTruck
+                  ? 'text-sky-800 dark:text-sky-300'
+                  : merge
+                    ? 'text-violet-800 dark:text-violet-300'
+                    : promotion
+                      ? 'text-amber-800 dark:text-amber-300'
+                      : 'text-gray-500 dark:text-gray-400'
               }`}>
                 {entry.details}
               </p>

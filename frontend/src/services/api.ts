@@ -1522,6 +1522,16 @@ export const fuelRecordsAPI = {
     return response.data.data;
   },
 
+  undoTruckChange: async (
+    id: string | number,
+    snapshotId?: string
+  ): Promise<FuelRecord> => {
+    const response = await apiClient.post(`/fuel-records/${id}/undo-truck-change`, {
+      snapshotId,
+    });
+    return response.data.data;
+  },
+
   suspend: async (id: string | number): Promise<FuelRecord> => {
     const response = await apiClient.post(`/fuel-records/${id}/suspend`);
     return response.data.data;
@@ -1529,6 +1539,11 @@ export const fuelRecordsAPI = {
 
   unsuspend: async (id: string | number): Promise<FuelRecord> => {
     const response = await apiClient.post(`/fuel-records/${id}/unsuspend`);
+    return response.data.data;
+  },
+
+  unlinkExportDo: async (id: string | number): Promise<FuelRecord> => {
+    const response = await apiClient.post(`/fuel-records/${id}/unlink-export-do`);
     return response.data.data;
   },
 
@@ -2133,6 +2148,8 @@ export interface JourneyConfig {
   lpoTruckLookupMonths?: number;
   // When true, Suspend is offered on completed journeys (default false)
   allowSuspendCompleted?: boolean;
+  // When true, Fuel Records can Unlink a wrongly linked EXPORT return DO (default false)
+  allowUnlinkExportDo?: boolean;
   // Dashboard unified-search configuration
   searchConfig?: {
     doMonths?: number;       // months back for DO search (default 4)
@@ -2826,6 +2843,11 @@ export const configAPI = {
 
   updateAllowSuspendCompleted: async (allowSuspendCompleted: boolean): Promise<JourneyConfig> => {
     const response = await apiClient.put('/admin/journey-config', { allowSuspendCompleted });
+    return response.data.data;
+  },
+
+  updateAllowUnlinkExportDo: async (allowUnlinkExportDo: boolean): Promise<JourneyConfig> => {
+    const response = await apiClient.put('/admin/journey-config', { allowUnlinkExportDo });
     return response.data.data;
   },
 

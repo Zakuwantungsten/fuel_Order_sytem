@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, Edit, Undo2, XCircle, RotateCcw, PauseCircle, PlayCircle } from 'lucide-react';
+import { CheckCircle2, Edit, Undo2, XCircle, RotateCcw, PauseCircle, PlayCircle, Unlink2 } from 'lucide-react';
 import type { FuelRecord } from '../types';
+import { isPendingReturnDo } from '../utils/pendingDo';
 
 export type FuelRecordActionsPosition = {
   top?: number;
@@ -15,6 +16,9 @@ interface FuelRecordActionsModalProps {
   canUncancel: boolean;
   /** When true, Suspend is offered on completed journeys (Journey Config). */
   allowSuspendCompleted?: boolean;
+  /** When true and role allows, Unlink Export DO is offered (Journey Config). */
+  allowUnlinkExportDo?: boolean;
+  canUnlinkExportDo?: boolean;
   onClose: () => void;
   onEdit: (record: FuelRecord) => void;
   onCancel: (record: FuelRecord) => void;
@@ -23,11 +27,12 @@ interface FuelRecordActionsModalProps {
   onUncancel: (record: FuelRecord) => void;
   onSuspend: (record: FuelRecord) => void;
   onUnsuspend: (record: FuelRecord) => void;
+  onUnlinkExportDo: (record: FuelRecord) => void;
 }
 
 export function actionsMenuPositionFromEvent(event: React.MouseEvent<HTMLButtonElement>): FuelRecordActionsPosition {
   const rect = event.currentTarget.getBoundingClientRect();
-  const DROPDOWN_HEIGHT = 280;
+  const DROPDOWN_HEIGHT = 320;
   const DROPDOWN_WIDTH = 224;
   const left = Math.max(10, Math.min(rect.right - DROPDOWN_WIDTH, window.innerWidth - DROPDOWN_WIDTH - 10));
   const spaceBelow = window.innerHeight - rect.bottom;
@@ -42,6 +47,8 @@ export default function FuelRecordActionsModal({
   position,
   canUncancel,
   allowSuspendCompleted = false,
+  allowUnlinkExportDo = false,
+  canUnlinkExportDo = false,
   onClose,
   onEdit,
   onCancel,
@@ -50,6 +57,7 @@ export default function FuelRecordActionsModal({
   onUncancel,
   onSuspend,
   onUnsuspend,
+  onUnlinkExportDo,
 }: FuelRecordActionsModalProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const isCancelled = record?.isCancelled === true;
@@ -60,6 +68,12 @@ export default function FuelRecordActionsModal({
   const canSuspend = isActive || isQueued || (allowSuspendCompleted && isCompleted);
   const canUndoComplete =
     !isCancelled && record?.journeyStatus === 'completed' && record?.manuallyCompleted === true;
+  const hasLinkedExport =
+    !!record?.returnDo?.trim() &&
+    !isPendingReturnDo(record.returnDo) &&
+    record.isPendingReturn !== true;
+  const showUnlinkExport =
+    !isCancelled && allowUnlinkExportDo && canUnlinkExportDo && hasLinkedExport;
 
   useEffect(() => {
     if (!record) return;
@@ -167,6 +181,17 @@ export default function FuelRecordActionsModal({
                 Undo complete
               </button>
             )}
+            {showUnlinkExport && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => onUnlinkExportDo(record)}
+                className="flex items-center w-full px-4 py-2 text-left text-sm text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+              >
+                <Unlink2 className="w-4 h-4 mr-2" />
+                Unlink Export DO
+              </button>
+            )}
           </>
         )}
         {isCancelled && canUncancel && (
@@ -182,6 +207,6 @@ export default function FuelRecordActionsModal({
         )}
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }

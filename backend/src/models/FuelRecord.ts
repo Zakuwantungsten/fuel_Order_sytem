@@ -338,6 +338,52 @@ const fuelRecordSchema = new Schema<IFuelRecordDocument>(
     deletedAt: {
       type: Date,
     },
+    /** True when this journey has had at least one non-undone truck change. */
+    hasTruckChange: {
+      type: Boolean,
+      default: false,
+    },
+    lastTruckChangeAt: {
+      type: Date,
+    },
+    /**
+     * Structured history of truck reassignments (DO amend / fuel edit) with
+     * checkpoint liters captured so maintain/reset decisions can be audited
+     * and undone.
+     */
+    truckChangeSnapshots: [
+      {
+        changedAt: { type: Date, required: true },
+        changedBy: { type: String, trim: true, required: true },
+        source: {
+          type: String,
+          enum: ['do_amend', 'fuel_record_edit'],
+          required: true,
+        },
+        deliveryOrderId: { type: String, trim: true },
+        doNumber: { type: String, trim: true },
+        oldTruckNo: { type: String, trim: true, required: true },
+        newTruckNo: { type: String, trim: true, required: true },
+        decision: {
+          type: String,
+          enum: ['maintain', 'reset'],
+          required: true,
+        },
+        checkpointsBefore: { type: Schema.Types.Mixed },
+        balanceBefore: { type: Number },
+        totalLtsBefore: { type: Number },
+        extraBefore: { type: Number },
+        journeyBefore: {
+          journeyStatus: { type: String },
+          queueOrder: { type: Number },
+          previousJourneyId: { type: String },
+          activatedAt: { type: Date },
+        },
+        placement: { type: String },
+        undoneAt: { type: Date },
+        undoneBy: { type: String, trim: true },
+      },
+    ],
     // Edit locks are NOT stored here — they live in the dedicated `EditLock`
     // collection (see services/lockService.ts). The `editLock` field on the
     // response type is populated at read-time via attachLocks().

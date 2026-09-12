@@ -112,6 +112,15 @@ router.post(
   asyncHandler(fuelRecordController.uncompleteFuelRecord)
 );
 
+// Undo truck-change snapshot (restore previous truck + checkpoints if reset)
+router.post(
+  '/:id/undo-truck-change',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'boss'),
+  validate,
+  asyncHandler(fuelRecordController.undoFuelRecordTruckChange)
+);
+
 // Suspend / unsuspend — same roles as complete (operational hold, not permanent cancel)
 router.post(
   '/:id/suspend',
@@ -126,6 +135,15 @@ router.post(
   authorize('super_admin', 'admin', 'manager', 'supervisor', 'boss'),
   validate,
   asyncHandler(fuelRecordController.unsuspendFuelRecord)
+);
+
+// Unlink wrongly linked EXPORT return DO (Journey Config toggle; restores going leg)
+router.post(
+  '/:id/unlink-export-do',
+  commonValidation.mongoId,
+  authorize('super_admin', 'admin', 'fuel_order_maker'),
+  validate,
+  asyncHandler(fuelRecordController.unlinkExportReturnDo)
 );
 
 // Edit lock routes (same roles as update)

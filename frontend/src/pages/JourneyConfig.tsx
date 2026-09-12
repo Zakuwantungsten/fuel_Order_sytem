@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, ChangeEvent } from 'react';
-import { Route, Check, Save, RotateCcw, Loader2, Info, Flag, Fuel, Clock, Gauge, Pencil, X, FileDown, Workflow, AlertTriangle, Search, PauseCircle } from 'lucide-react';
+import { Route, Check, Save, RotateCcw, Loader2, Info, Flag, Fuel, Clock, Gauge, Pencil, X, FileDown, Workflow, AlertTriangle, Search, PauseCircle, Unlink2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { configAPI, JourneyConfig as JourneyConfigData, StandardAllocations, YardFuelTimeLimitConfig, FuelAutomationConfig } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
@@ -190,6 +190,7 @@ export default function JourneyConfig() {
         <YardTimeLimitCard />
         <PdfDownloadSettingsCard />
         <SuspendCompletedCard />
+        <UnlinkExportDoCard />
         <LpoPriorOrderLookbackCard />
         <LpoTruckLookupCard />
         <SearchConfigCard />
@@ -420,6 +421,96 @@ function SuspendCompletedCard() {
                 onChange={toggle}
                 disabled={saving}
                 label="Allow suspend on completed"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Unlink Export DO ──────────────────────────────────────────────────────────
+
+function UnlinkExportDoCard() {
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const cfg = await configAPI.getJourneyConfig();
+      setEnabled(cfg.allowUnlinkExportDo === true);
+    } catch {
+      toast.error('Failed to load unlink export settings');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useRealtimeSync('journey_config', load, 'rt-unlink-export-do');
+
+  const toggle = async (value: boolean) => {
+    if (saving) return;
+    const prev = enabled;
+    setEnabled(value);
+    setSaving(true);
+    try {
+      const cfg = await configAPI.updateAllowUnlinkExportDo(value);
+      setEnabled(cfg.allowUnlinkExportDo === true);
+      toast.success(
+        value
+          ? 'Unlink Export DO enabled on fuel records'
+          : 'Unlink Export DO disabled'
+      );
+    } catch {
+      setEnabled(prev);
+      toast.error('Failed to update unlink export settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+        <Unlink2 className="w-4 h-4 text-rose-600 dark:text-rose-400" aria-hidden="true" />
+        <h2 className="font-medium text-sm text-gray-900 dark:text-gray-100">Unlink Export DO</h2>
+      </div>
+
+      <div className="px-4 py-3 space-y-1">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          When on, Fuel Records can unlink a wrongly linked EXPORT return DO. That restores the going from/to and liters, and makes the DO linkable again in DO Management. The EXPORT DO itself is not cancelled.
+        </p>
+
+        {loading ? (
+          <div className="h-14 rounded-lg bg-gray-100 dark:bg-gray-700/50 animate-pulse" />
+        ) : (
+          <div
+            className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors ${
+              enabled
+                ? 'border-rose-200 dark:border-rose-800/60 bg-rose-50/50 dark:bg-rose-900/10'
+                : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'
+            }`}
+          >
+            <div className="min-w-0">
+              <p className={`text-xs font-medium ${enabled ? 'text-rose-900 dark:text-rose-100' : 'text-gray-700 dark:text-gray-300'}`}>
+                Allow unlink on fuel records
+              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
+                Off by default. Admin, super admin, and fuel order maker only. Use when an EXPORT was linked to the wrong journey.
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+              <span className={`text-[10px] font-semibold ${enabled ? 'text-rose-600 dark:text-rose-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                {enabled ? 'ON' : 'OFF'}
+              </span>
+              <Switch
+                checked={enabled}
+                onChange={toggle}
+                disabled={saving}
+                label="Allow unlink Export DO"
               />
             </div>
           </div>

@@ -15,15 +15,19 @@ import {
   Link2,
   Loader2,
   Edit,
+  Camera,
+  RotateCcw,
 } from 'lucide-react';
 import { FuelRecordDetails, fuelRecordsAPI } from '../services/api';
 import type { AdditionalYardDispensation, TruckQueueJourney } from '../services/api';
-import type { FuelRecord } from '../types';
+import type { FuelRecord, TruckChangeSnapshot } from '../types';
 import JourneyStatusBadge from './JourneyStatusBadge';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import RecordTimeline from './RecordTimeline';
 import { isPendingGoingDo } from '../utils/pendingDo';
 import { toast } from 'react-toastify';
+import { useAuth } from '../contexts/AuthContext';
+import ConfirmModal from './SuperAdmin/ConfirmModal';
 
 interface FuelRecordDetailsModalProps {
   isOpen: boolean;
@@ -32,7 +36,7 @@ interface FuelRecordDetailsModalProps {
   onEdit?: (record: FuelRecord) => void;
 }
 
-type ActiveTab = 'lpos' | 'yard' | 'queue' | 'history';
+type ActiveTab = 'lpos' | 'yard' | 'queue' | 'snapshots' | 'history';
 
 type LpoContextNote = {
   lpoNo: string;
@@ -42,6 +46,7 @@ type LpoContextNote = {
 };
 
 const FUEL_LABELS: Record<string, string> = {
+  mmsaYard: 'MMSA Yard',
   tangaYard: 'Tanga Yard',
   darYard: 'Dar Yard',
   tangaGoing: 'Tanga Going',
@@ -97,6 +102,10 @@ export default function FuelRecordDetailsModal({
   recordId,
   onEdit,
 }: FuelRecordDetailsModalProps) {
+  const { user } = useAuth();
+  const canUndoTruckChange = ['super_admin', 'admin', 'manager', 'supervisor', 'boss'].includes(
+    String(user?.role || '')
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<FuelRecordDetails | null>(null);
@@ -107,6 +116,8 @@ export default function FuelRecordDetailsModal({
   const [mergeLoading, setMergeLoading] = useState(false);
   const [mergeSaving, setMergeSaving] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [undoingSnapshotId, setUndoingSnapshotId] = useState<string | null>(null);
+  const [undoConfirmSnapshot, setUndoConfirmSnapshot] = useState<TruckChangeSnapshot | null>(null);
 
   useEffect(() => {
     if (isOpen && recordId) {
@@ -114,6 +125,8 @@ export default function FuelRecordDetailsModal({
       setMergeOpen(false);
       setMergeCandidates([]);
       setSelectedSourceId(null);
+      setUndoConfirmSnapshot(null);
+      setUndoingSnapshotId(null);
       fetchDetails();
     }
   }, [isOpen, recordId]);
@@ -178,6 +191,47 @@ export default function FuelRecordDetailsModal({
   const queueQueued: TruckQueueJourney[] = details?.truckQueue?.queued ?? [];
   const queueCount = queueQueued.length + (queueActive ? 1 : 0);
 
+  const truckChangeSnapshots: TruckChangeSnapshot[] = Array.isArray(record?.truckChangeSnapshots)
+    ? [...record!.truckChangeSnapshots!].sort(
+        (a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime()
+      )
+    : [];
+  const activeSnapshotCount = truckChangeSnapshots.filter((s) => !s.undoneAt).length;
+  const latestActiveSnapshotId = truckChangeSnapshots.find((s) => !s.undoneAt)?._id
+    || truckChangeSnapshots.find((s) => !s.undoneAt)?.id
+    || null;
+
+  const requestUndoTruckChange = (snapshot: TruckChangeSnapshot) => {
+    if (!recordId || !canUndoTruckChange) return;
+    const snapId = String(snapshot._id || snapshot.id || '');
+    if (!snapId) return;
+    setUndoConfirmSnapshot(snapshot);
+  };
+
+  const handleUndoTruckChangeConfirm = async () => {
+    const snapshot = undoConfirmSnapshot;
+    if (!recordId || !snapshot || !canUndoTruckChange) return;
+    const snapId = String(snapshot._id || snapshot.id || '');
+    if (!snapId) return;
+
+    setUndoingSnapshotId(snapId);
+    try {
+      await fuelRecordsAPI.undoTruckChange(recordId, snapId);
+      toast.success(`Truck restored to ${snapshot.oldTruckNo}`);
+      setUndoConfirmSnapshot(null);
+      await fetchDetails();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to undo truck change');
+    } finally {
+      setUndoingSnapshotId(null);
+    }
+  };
+
+  const handleUndoTruckChangeCancel = () => {
+    if (undoingSnapshotId) return;
+    setUndoConfirmSnapshot(null);
+  };
+
   const isPendingGoing =
     !!record &&
     !record.isCancelled &&
@@ -240,6 +294,12 @@ export default function FuelRecordDetailsModal({
     { id: 'lpos' as const, label: 'LPO Entries', count: details?.lpoEntries.length, icon: FileText },
     { id: 'yard' as const, label: 'Additional Dispensation (Yard)', count: additionalRows.length, icon: MapPin },
     { id: 'queue' as const, label: 'Queued Journeys', count: queueCount || undefined, icon: ListOrdered },
+    {
+      id: 'snapshots' as const,
+      label: 'Snapshots',
+      count: truckChangeSnapshots.length || undefined,
+      icon: Camera,
+    },
     { id: 'history' as const, label: 'Audit History', icon: Clock },
   ];
 
@@ -282,6 +342,14 @@ export default function FuelRecordDetailsModal({
                 {record?.isCancelled && (
                   <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-xs font-semibold rounded-full tracking-wide">
                     CANCELLED
+                  </span>
+                )}
+                {(record?.hasTruckChange || activeSnapshotCount > 0) && (
+                  <span
+                    className="px-2 py-0.5 bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-xs font-semibold rounded-full tracking-wide"
+                    title="This fuel record has truck-change snapshot history"
+                  >
+                    TRUCK Δ
                   </span>
                 )}
               </div>
@@ -508,6 +576,8 @@ export default function FuelRecordDetailsModal({
                             ? 'Additional Dispensation (Yard) — billed vs dispense diffs & context'
                             : tab.id === 'queue'
                             ? 'Same-truck active & queued journeys (Q1, Q2, …)'
+                            : tab.id === 'snapshots'
+                            ? 'Truck-change history and checkpoint snapshots (undo supported)'
                             : tab.label
                         }
                         className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -850,6 +920,116 @@ export default function FuelRecordDetailsModal({
                       )
                     )}
 
+                    {activeTab === 'snapshots' && (
+                      truckChangeSnapshots.length === 0 ? (
+                        <div className="flex items-center justify-center py-8 text-sm text-slate-400">
+                          No truck-change snapshots for this journey yet
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {truckChangeSnapshots.map((snap) => {
+                            const snapId = String(snap._id || snap.id || '');
+                            const isLatestActive =
+                              !snap.undoneAt &&
+                              !!latestActiveSnapshotId &&
+                              snapId === String(latestActiveSnapshotId);
+                            const checkpointRows = Object.entries(snap.checkpointsBefore || {}).filter(
+                              ([, v]) => Number(v) !== 0
+                            );
+                            const undoing = undoingSnapshotId === snapId;
+                            return (
+                              <div
+                                key={snapId || `${snap.changedAt}-${snap.oldTruckNo}`}
+                                className={`rounded-lg border px-3 py-2.5 ${
+                                  snap.undoneAt
+                                    ? 'border-slate-200 dark:border-slate-700 opacity-70'
+                                    : 'border-sky-200 dark:border-sky-800 bg-sky-50/40 dark:bg-sky-950/20'
+                                }`}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                      <span>{snap.oldTruckNo}</span>
+                                      <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>{snap.newTruckNo}</span>
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                          snap.decision === 'reset'
+                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                            : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                        }`}
+                                      >
+                                        {snap.decision === 'reset' ? 'Reset' : 'Maintained'}
+                                      </span>
+                                      {snap.undoneAt && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                          Undone
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                      {new Date(snap.changedAt).toLocaleString()} · {snap.changedBy}
+                                      {snap.source === 'do_amend' ? ' · DO amend' : ' · Fuel edit'}
+                                      {snap.doNumber ? ` · DO ${snap.doNumber}` : ''}
+                                      {snap.placement ? ` · ${snap.placement}` : ''}
+                                    </div>
+                                    {snap.undoneAt && (
+                                      <div className="mt-0.5 text-[11px] text-slate-400">
+                                        Undone {new Date(snap.undoneAt).toLocaleString()}
+                                        {snap.undoneBy ? ` by ${snap.undoneBy}` : ''}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {canUndoTruckChange && !snap.undoneAt && isLatestActive && (
+                                    <button
+                                      type="button"
+                                      disabled={!!undoingSnapshotId}
+                                      onClick={() => requestUndoTruckChange(snap)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-sky-700 dark:text-sky-300 bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-700 hover:bg-sky-50 dark:hover:bg-sky-900/30 disabled:opacity-50"
+                                    >
+                                      {undoing ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                      )}
+                                      Undo
+                                    </button>
+                                  )}
+                                </div>
+                                {checkpointRows.length > 0 ? (
+                                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                    {checkpointRows.map(([field, liters]) => (
+                                      <div
+                                        key={field}
+                                        className="rounded border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/40 px-2 py-1 text-[11px] flex justify-between gap-2"
+                                      >
+                                        <span className="text-slate-500 dark:text-slate-400 truncate">
+                                          {fuelLabel(field)}
+                                        </span>
+                                        <span className="font-medium tabular-nums text-slate-800 dark:text-slate-200">
+                                          {liters}L
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 text-[11px] text-slate-400 italic">
+                                    No checkpoint liters at time of truck change
+                                  </div>
+                                )}
+                                {snap.balanceBefore != null && (
+                                  <div className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                    Balance before: {snap.balanceBefore}L
+                                    {snap.totalLtsBefore != null ? ` · Total ${snap.totalLtsBefore}L` : ''}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )
+                    )}
+
                     {activeTab === 'history' && (
                       <RecordTimeline
                         fetchHistory={() => fuelRecordsAPI.getHistory(recordId!)}
@@ -993,6 +1173,26 @@ export default function FuelRecordDetailsModal({
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={!!undoConfirmSnapshot}
+        title="Undo truck change?"
+        message={
+          undoConfirmSnapshot
+            ? `Restore truck from ${undoConfirmSnapshot.newTruckNo} back to ${undoConfirmSnapshot.oldTruckNo}?` +
+              (undoConfirmSnapshot.decision === 'reset'
+                ? ' Checkpoint liters from the snapshot will be restored.'
+                : ' Checkpoint liters will stay as they are now.') +
+              ' This will be recorded in audit history.'
+            : ''
+        }
+        confirmLabel="Yes, undo"
+        cancelLabel="Cancel"
+        variant="warning"
+        loading={!!undoingSnapshotId}
+        onConfirm={handleUndoTruckChangeConfirm}
+        onCancel={handleUndoTruckChangeCancel}
+      />
     </div>
   );
 }

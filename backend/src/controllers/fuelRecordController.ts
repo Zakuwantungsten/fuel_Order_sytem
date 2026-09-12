@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import mongoose from 'mongoose';
 import { matchedData } from 'express-validator';
-import { FuelRecord } from '../models';
+import { FuelRecord, DeliveryOrder } from '../models';
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { getPaginationParams, createPaginatedResponse, calculateSkip, logger, formatTruckNumber, sanitizeRegexInput, buildFuzzyRegex } from '../utils';
@@ -12,9 +12,17 @@ import { attachLocks } from '../services/lockService';
 import { emitDataChange } from '../services/websocket';
 import { filterFuelRecordFields } from '../utils/roleFieldPolicy';
 import { logFuelRecordChange, snapshotFuelRecord } from '../utils/fuelRecordAudit';
-import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled, healCancelledQueuedJourneys, completeJourneyManually, reopenManuallyCompletedJourney, restoreJourneyOnFuelRecordUncancel, suspendJourney, restoreSuspendedJourney } from '../services/journeyService';
+import { checkAndPromoteStartedJourney, getLpoTruckLookupMonths, computeLpoTruckLookupDateFrom, computeLpoTruckLookupMonthKeys, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled, healCancelledQueuedJourneys, completeJourneyManually, reopenManuallyCompletedJourney, restoreJourneyOnFuelRecordUncancel, suspendJourney, restoreSuspendedJourney, getAllowUnlinkExportDo } from '../services/journeyService';
+import { undoTruckChangeSnapshot } from '../services/truckChangeSnapshotService';
 import type { JourneyStatus } from '../types';
 import { isYardStation, isDarYardStation, isTangaYardStation, YARD_STATION } from '../utils/yardStations';
+import { isPendingReturnDo } from '../utils/pendingDoNumber';
+import {
+  buildExportReturnUnlinkUpdate,
+  matchExportRouteLiters,
+  resolveStoredOutboundLiters,
+} from '../utils/fuelRecordCalculator';
+import { RouteConfig } from '../models/RouteConfig';
 
 /**
  * Get available periods (year-month pairs) for the period picker dropdown.
@@ -1204,6 +1212,101 @@ export const uncompleteFuelRecord = async (req: AuthRequest, res: Response): Pro
   }
 };
 
+/**
+ * Undo a truck-change snapshot (restore previous truck + checkpoint liters if reset).
+ * Body: { snapshotId?: string } — defaults to the latest active snapshot.
+ */
+export const undoFuelRecordTruckChange = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    const existingRecord = await FuelRecord.findOne({ _id: id, isDeleted: false });
+    if (!existingRecord) throw new ApiError(404, 'Fuel record not found');
+
+    const snapshotId = req.body?.snapshotId ? String(req.body.snapshotId) : undefined;
+    const result = await undoTruckChangeSnapshot(id, username, { snapshotId });
+
+    const undoDetails =
+      `Undo truck-change amendment: Truck ${result.previousTruckNo} → ${result.restoredTruckNo}` +
+      (result.decision === 'reset' ? ' (checkpoints restored from snapshot)' : ' (checkpoints were maintained)') +
+      (result.doNumber ? `; DO ${result.doNumber}` : '') +
+      `; snapshot ${result.snapshotId}`;
+
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: result.fuelRecord._id.toString(),
+      username,
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existingRecord),
+      next: snapshotFuelRecord(result.fuelRecord),
+      source: 'manual',
+      tags: ['truck-change', 'undo', 'checkpoint', 'undo-truck-change'],
+      severity: 'high',
+      details: undoDetails,
+    });
+
+    // Mirror into Delivery Order audit history so DO Detail → Audit History shows the undo.
+    if (result.deliveryOrderId) {
+      const changes = [
+        {
+          field: 'truckNo',
+          oldValue: result.previousTruckNo,
+          newValue: result.restoredTruckNo,
+        },
+      ];
+      await AuditService.log({
+        userId: req.user?.userId,
+        username,
+        action: 'UPDATE',
+        resourceType: 'DeliveryOrder',
+        resourceId: result.deliveryOrderId,
+        previousValue: {
+          doNumber: result.doNumber,
+          truckNo: result.previousTruckNo,
+          changes,
+        },
+        newValue: {
+          doNumber: result.doNumber,
+          truckNo: result.restoredTruckNo,
+          changes,
+          undoTruckChange: true,
+          snapshotId: result.snapshotId,
+          fuelRecordId: String(result.fuelRecord._id),
+        },
+        details: undoDetails,
+        ipAddress: req.ip,
+        severity: 'high',
+        tags: ['truck-change', 'undo', 'undo-truck-change', 'do_amend'],
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Truck change undone — restored truck ${result.restoredTruckNo}`,
+      data: result.fuelRecord,
+      snapshotId: result.snapshotId,
+      deliveryOrderId: result.deliveryOrderId,
+    });
+
+    const emitIds = new Set<string>(result.affectedIds);
+    for (const emitId of emitIds) {
+      const fresh =
+        emitId === result.fuelRecord._id.toString()
+          ? result.fuelRecord
+          : await FuelRecord.findById(emitId);
+      if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
+    }
+    if (result.deliveryOrderId) {
+      emitDataChange('delivery_orders', 'update');
+    }
+  } catch (error: any) {
+    throw error;
+  }
+};
+
 export const uncancelFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -1337,6 +1440,120 @@ export const unsuspendFuelRecord = async (req: AuthRequest, res: Response): Prom
         : await FuelRecord.findById(emitId);
       if (fresh) emitDataChange('fuel_records', 'update', fresh.toObject());
     }
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Unlink a wrongly linked EXPORT return DO from a fuel journey.
+ * Restores going from/to, deducts outbound liters, clears return checkpoints.
+ * Leaves the EXPORT DO intact so it can be linked again from DO Management.
+ * Gated by Journey Config `allowUnlinkExportDo`.
+ */
+export const unlinkExportReturnDo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const username = req.user?.username;
+    if (!username) throw new ApiError(401, 'Authentication required');
+
+    if (!(await getAllowUnlinkExportDo())) {
+      throw new ApiError(403, 'Unlink Export DO is disabled in Journey Config');
+    }
+
+    const existingRecord = await FuelRecord.findOne({ _id: id, isDeleted: false });
+    if (!existingRecord) throw new ApiError(404, 'Fuel record not found');
+    if (existingRecord.isCancelled) {
+      throw new ApiError(400, 'Cannot unlink export DO from a cancelled fuel record');
+    }
+
+    const returnDo = String(existingRecord.returnDo || '').trim();
+    if (!returnDo) {
+      throw new ApiError(400, 'This fuel record has no linked return DO');
+    }
+    if (isPendingReturnDo(returnDo) || existingRecord.isPendingReturn === true) {
+      throw new ApiError(400, 'Cannot unlink a pending return DO (PR####). Cancel the pending return instead.');
+    }
+
+    let revertFrom = existingRecord.originalGoingFrom;
+    let revertTo = existingRecord.originalGoingTo;
+    if (!revertFrom || !revertTo) {
+      const goingDO = await DeliveryOrder.findOne({
+        doNumber: existingRecord.goingDo,
+        isDeleted: false,
+      });
+      if (goingDO) {
+        revertFrom = goingDO.destination;
+        revertTo = goingDO.loadingPoint;
+      } else {
+        revertFrom = existingRecord.from;
+        revertTo = existingRecord.to;
+      }
+    }
+
+    let exportRouteLiters = resolveStoredOutboundLiters(existingRecord);
+    if (typeof existingRecord.outboundLiters !== 'number') {
+      const exportDO = await DeliveryOrder.findOne({
+        doNumber: returnDo,
+        isDeleted: false,
+      }).lean();
+      if (exportDO) {
+        const activeRoutes = await RouteConfig.find({ isActive: true }).lean();
+        const exportMatch = matchExportRouteLiters(
+          activeRoutes,
+          exportDO.loadingPoint || '',
+          exportDO.destination || ''
+        );
+        if (exportMatch.matched) exportRouteLiters = exportMatch.liters;
+      }
+    }
+
+    const { update, info } = buildExportReturnUnlinkUpdate(existingRecord, {
+      revertFrom,
+      revertTo,
+      exportRouteLiters,
+    });
+
+    const fuelRecord = await FuelRecord.findByIdAndUpdate(id, { $set: update }, { new: true });
+    if (!fuelRecord) throw new ApiError(404, 'Fuel record not found');
+
+    await logFuelRecordChange({
+      action: 'UPDATE',
+      resourceId: fuelRecord._id.toString(),
+      username,
+      userId: req.user?.userId,
+      ipAddress: req.ip,
+      previous: snapshotFuelRecord(existingRecord),
+      next: snapshotFuelRecord(fuelRecord),
+      source: 'manual',
+      tags: ['unlink-export-do', 'return_do_removed'],
+      severity: 'medium',
+      details: `Unlinked EXPORT DO ${info.removedReturnDo} from fuel record ${id}. Restored going ${info.revertFrom} → ${info.revertTo}. TotalLts ${info.originalTotalLts}L → ${info.newTotalLts}L (deducted ${info.exportRouteLiters}L).`,
+    });
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username,
+      action: 'UPDATE',
+      resourceType: 'FuelRecord',
+      resourceId: fuelRecord._id.toString(),
+      details: `Unlinked EXPORT DO ${info.removedReturnDo} (truck: ${fuelRecord.truckNo}) from fuel record ${id} by ${username}. From/to restored to going journey; deducted ${info.exportRouteLiters}L.`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    }).catch((err: any) => logger.warn(`Failed to write audit for unlink export DO: ${err?.message}`));
+
+    logger.info(
+      `Fuel record ${id} EXPORT return DO ${info.removedReturnDo} unlinked by ${username}. From: ${info.revertFrom}, To: ${info.revertTo}. TotalLts: ${info.originalTotalLts}L → ${info.newTotalLts}L`
+    );
+
+    emitDataChange('fuel_records', 'update', fuelRecord.toObject());
+    emitDataChange('delivery_orders', 'update');
+
+    res.status(200).json({
+      success: true,
+      message: `Unlinked EXPORT DO ${info.removedReturnDo}. Journey restored to going-only; the DO can be linked again from DO Management.`,
+      data: fuelRecord,
+    });
   } catch (error: any) {
     throw error;
   }

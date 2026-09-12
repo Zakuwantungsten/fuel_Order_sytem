@@ -406,3 +406,82 @@ export function buildReturnUpdate(
 
   return { update, info };
 }
+
+/**
+ * Reverse an EXPORT return-leg link: clear returnDo, restore going from/to,
+ * deduct outbound liters, and zero return checkpoint columns.
+ * Same field effects as EXPORT cancel cascade (`return_do_removed`).
+ */
+export function buildExportReturnUnlinkUpdate(
+  fuelRecord: Record<string, any>,
+  options?: {
+    revertFrom?: string | null;
+    revertTo?: string | null;
+    exportRouteLiters?: number;
+  }
+): {
+  update: Record<string, any>;
+  info: {
+    removedReturnDo: string;
+    revertFrom: string;
+    revertTo: string;
+    exportRouteLiters: number;
+    originalTotalLts: number;
+    newTotalLts: number;
+    newBalance: number;
+  };
+} {
+  const removedReturnDo = String(fuelRecord.returnDo || '');
+  const revertFrom = String(
+    options?.revertFrom ?? fuelRecord.originalGoingFrom ?? fuelRecord.from ?? ''
+  );
+  const revertTo = String(
+    options?.revertTo ?? fuelRecord.originalGoingTo ?? fuelRecord.to ?? ''
+  );
+
+  const exportRouteLiters =
+    typeof options?.exportRouteLiters === 'number'
+      ? Math.max(0, options.exportRouteLiters)
+      : resolveStoredOutboundLiters(fuelRecord);
+
+  const originalTotalLts = fuelRecord.totalLts || 0;
+  const newTotalLts = Math.max(0, originalTotalLts - exportRouteLiters);
+  const clearedReturns = {
+    zambiaReturn: 0,
+    tundumaReturn: 0,
+    mbeyaReturn: 0,
+    moroReturn: 0,
+    darReturn: 0,
+    tangaReturn: 0,
+  };
+  const newBalance = recalculateBalanceFromTotal(newTotalLts, fuelRecord.extra, {
+    ...fuelRecord,
+    ...clearedReturns,
+  });
+
+  const update: Record<string, any> = {
+    returnDo: null,
+    from: revertFrom,
+    to: revertTo,
+    originalGoingFrom: null,
+    originalGoingTo: null,
+    outboundLiters: 0,
+    totalLts: newTotalLts,
+    balance: newBalance,
+    isPendingReturn: false,
+    ...clearedReturns,
+  };
+
+  return {
+    update,
+    info: {
+      removedReturnDo,
+      revertFrom,
+      revertTo,
+      exportRouteLiters,
+      originalTotalLts,
+      newTotalLts,
+      newBalance,
+    },
+  };
+}

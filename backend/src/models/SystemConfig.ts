@@ -103,6 +103,9 @@ export interface IJourneyConfig {
   // When true, Suspend is allowed on completed journeys (no queue promote).
   // Default false — only active/queued can be suspended.
   allowSuspendCompleted?: boolean;
+  // When true, Fuel Records can Unlink a wrongly linked EXPORT return DO
+  // (restores going from/to and liters). Default false.
+  allowUnlinkExportDo?: boolean;
 }
 
 // Canonical default for the fuel-automation flags (all enabled).
@@ -403,6 +406,7 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
         fuelMaxResults:{ type: Number, default: 3,  min: 1, max: 100 },
       },
       allowSuspendCompleted: { type: Boolean, default: false },
+      allowUnlinkExportDo: { type: Boolean, default: false },
     },
     yardFuelTimeLimit: {
       enabled: { type: Boolean, default: false },

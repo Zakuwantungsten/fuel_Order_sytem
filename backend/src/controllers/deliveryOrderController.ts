@@ -14,6 +14,11 @@ import AnomalyDetectionService from '../utils/anomalyDetectionService';
 import { emitDataChange, BulkChangeMeta } from '../services/websocket';
 import { filterDeliveryOrderFields } from '../utils/roleFieldPolicy';
 import { getFuelAutomationFlags, resolveDashboardSearchLimits, reassignJourneyOnTruckChange, afterJourneyCancelled } from '../services/journeyService';
+import {
+  applyTruckChangeCheckpointDecision,
+  buildCheckpointDecisionPreview,
+  type CheckpointDecision,
+} from '../services/truckChangeSnapshotService';
 import { logFuelRecordChange, snapshotFuelRecord } from '../utils/fuelRecordAudit';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import { addDoSummaryTabSheets, parseMonthYearLabel } from '../utils/summaryTabExport';
@@ -33,6 +38,7 @@ import {
   determineJourneyStart,
   recalculateBalanceFromTotal,
   resolveStoredOutboundLiters,
+  buildExportReturnUnlinkUpdate,
   applyOutboundLitersToTotals,
   type RouteLike,
   type DeliveryOrderLike,
@@ -251,6 +257,28 @@ const cascadeUpdateToFuelRecord = async (
         // Refresh in-memory doc for liters/route logic below
         const refreshed = await FuelRecord.findById(fuelRecord._id).session(session || null);
         if (refreshed) fuelRecord = refreshed;
+
+        // Capture checkpoint snapshot + optional reset for the new truck.
+        // Decision is required by the amend gate when allocation > 0; otherwise maintain.
+        const rawDecision = String(updatedData.checkpointDecision || '').toLowerCase();
+        const decision: CheckpointDecision =
+          rawDecision === 'reset' ? 'reset' : 'maintain';
+        const snapResult = await applyTruckChangeCheckpointDecision(fuelRecord._id.toString(), {
+          session: session || undefined,
+          username,
+          decision,
+          oldTruckNo: String(originalDO.truckNo || reassign.oldTruckNo || ''),
+          newTruckNo: String(updatedData.truckNo || reassign.newTruckNo || ''),
+          source: 'do_amend',
+          doNumber: String(originalDO.doNumber || ''),
+          deliveryOrderId: originalDO._id ? String(originalDO._id) : undefined,
+          placement: reassign.placement,
+        });
+        changes.push(...snapResult.changes);
+        if (snapResult.checkpointsReset) {
+          const afterReset = await FuelRecord.findById(fuelRecord._id).session(session || null);
+          if (afterReset) fuelRecord = afterReset;
+        }
       }
     }
 
@@ -608,35 +636,15 @@ const cascadeCancelFuelRecord = async (
         if (exportMatch.matched) exportRouteLiters = exportMatch.liters;
       }
 
-      // Deduct the export route liters from totalLts
-      const originalTotalLts = fuelRecord.totalLts || 0;
-      const newTotalLts = Math.max(0, originalTotalLts - exportRouteLiters);
-      const newBalance = recalculateBalanceFromTotal(newTotalLts, fuelRecord.extra, fuelRecord);
+      const { update: updateData, info } = buildExportReturnUnlinkUpdate(fuelRecord, {
+        revertFrom,
+        revertTo,
+        exportRouteLiters,
+      });
 
-      // Clear all return fuel allocations and deduct export fuel
-      const updateData: any = {
-        returnDo: null, // Remove the return DO
-        from: revertFrom,
-        to: revertTo,
-        // Clear original going values since there's no return DO now
-        originalGoingFrom: null,
-        originalGoingTo: null,
-        outboundLiters: 0,
-        // Deduct export route liters from totalLts and recalculate balance
-        totalLts: newTotalLts,
-        balance: newBalance,
-        // Clear return fuel allocations
-        zambiaReturn: 0,
-        tundumaReturn: 0,
-        mbeyaReturn: 0,
-        moroReturn: 0,
-        darReturn: 0,
-        tangaReturn: 0,
-      };
-      
       await FuelRecord.findByIdAndUpdate(fuelRecord._id, updateData, opts);
 
-      logger.info(`Fuel record ${fuelRecord._id} return DO ${deliveryOrder.doNumber} removed and reverted to going-only journey. From: ${revertFrom}, To: ${revertTo}. TotalLts: ${originalTotalLts}L → ${newTotalLts}L (deducted ${exportRouteLiters}L from export route). Balance recalculated: ${newBalance}L. Reason: ${cancellationReason}`);
+      logger.info(`Fuel record ${fuelRecord._id} return DO ${deliveryOrder.doNumber} removed and reverted to going-only journey. From: ${info.revertFrom}, To: ${info.revertTo}. TotalLts: ${info.originalTotalLts}L → ${info.newTotalLts}L (deducted ${info.exportRouteLiters}L from export route). Balance recalculated: ${info.newBalance}L. Reason: ${cancellationReason}`);
 
       const afterExport = await FuelRecord.findById(fuelRecord._id).session(session || null);
       return {
@@ -2231,6 +2239,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     // Prepare the update data - exclude fields that shouldn't be directly set
     const { editHistory, editReason, _id, __v, createdAt, ...fieldsToUpdate } = payload;
+    delete fieldsToUpdate.hasTruckChangeAmendment;
 
     const importExportChanged =
       payload.importOrExport !== undefined &&
@@ -2277,6 +2286,36 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
     // Per-operation automation toggle for the DO→fuel-record amendment cascade.
     const fuelAutomationFlags = await getFuelAutomationFlags();
     let amendCascadeSkipped = false;
+
+    // Checkpoint maintain/reset gate: when amending truck onto a journey that
+    // already has allocated fuel liters, require an explicit client decision.
+    const checkpointDecisionRaw = String(req.body?.checkpointDecision || '').toLowerCase();
+    const checkpointDecision: CheckpointDecision | null =
+      checkpointDecisionRaw === 'maintain' || checkpointDecisionRaw === 'reset'
+        ? (checkpointDecisionRaw as CheckpointDecision)
+        : null;
+
+    if (
+      (importTruckChanged || exportTruckChanged) &&
+      fuelAutomationFlags.doAmendCascade &&
+      String(originalDO.doType || '').toUpperCase() !== 'SDO'
+    ) {
+      const preview = await buildCheckpointDecisionPreview(originalDO, targetTruckNo);
+      if (preview && !checkpointDecision) {
+        throw new ApiError(
+          409,
+          `Fuel record for DO ${preview.doNumber} already has ${preview.totalAllocated}L allocated at checkpoints. Choose whether to keep or reset those liters for truck ${preview.newTruckNo}.`
+        ).withData({
+          code: 'CHECKPOINT_DECISION_REQUIRED',
+          checkpointDecisionPreview: preview,
+        });
+      }
+    }
+
+    // Mark DO when truck number is part of this amend (cascade path records snapshots).
+    if (changes.some((c) => c.field === 'truckNo')) {
+      updateData.$set.hasTruckChangeAmendment = true;
+    }
 
     // Run the DO update + all cascade operations inside a transaction
     // so partial cascade failures roll back everything
@@ -2456,7 +2495,12 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         // Cascade to fuel records if relevant fields changed — gated by automation toggle.
         if (!importExportChanged && changes.some(c => ['truckNo', 'destination', 'loadingPoint'].includes(c.field))) {
           if (fuelAutomationFlags.doAmendCascade) {
-            const bodyWithRole = { ...payload, userRole, userId: req.user?.userId };
+            const bodyWithRole = {
+              ...payload,
+              userRole,
+              userId: req.user?.userId,
+              checkpointDecision: checkpointDecision || 'maintain',
+            };
             const fuelResult = await cascadeUpdateToFuelRecord(originalDO, bodyWithRole, username, session);
             cascadeResults.fuelRecordUpdated = fuelResult.updated;
             cascadeResults.fuelRecordChanges = fuelResult.changes || [];

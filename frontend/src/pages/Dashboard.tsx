@@ -154,6 +154,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-chart-data'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-pending-do-stats'] });
   };
 
   const { data: stats = null, isLoading: loading, isFetching: statsFetching, isError: statsIsError, error: statsError, refetch: refetchStats } = useQuery({
@@ -168,6 +169,17 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     queryFn: () => dashboardAPI.getChartData().then(d => d ?? DEFAULT_CHART_DATA),
     staleTime: 2 * 60 * 1000,
     placeholderData: DEFAULT_CHART_DATA,
+  });
+
+  const { data: pendingDoStats = { total: 0, goingPending: 0, returnPending: 0 } } = useQuery({
+    queryKey: ['dashboard-pending-do-stats'],
+    queryFn: () =>
+      fuelRecordsAPI.getPendingDoStats().then((s) => ({
+        total: s?.total ?? 0,
+        goingPending: s?.goingPending ?? 0,
+        returnPending: s?.returnPending ?? 0,
+      })),
+    staleTime: 2 * 60 * 1000,
   });
   
   // Unified search states — persisted in sessionStorage so results survive tab navigation
@@ -205,6 +217,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     statsRefreshTimer.current = setTimeout(() => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-chart-data'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-pending-do-stats'] });
     }, 2500);
   });
   useEffect(() => () => {
@@ -1007,19 +1020,53 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
             <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-100">Journey Status</h3>
           </div>
           {chartData.journeyStatus.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2.5">
-              {chartData.journeyStatus.map((status: any) => {
-                const c = JOURNEY_CAT(status.name);
-                return (
-                  <div key={status.name} className={`flex items-center gap-3 p-3.5 rounded-xl border ${c.tile}`}>
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.dot}`} />
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 truncate">{status.name}</div>
-                      <div className="text-[22px] font-extrabold font-mono text-gray-900 dark:text-gray-100 leading-tight">{status.value}</div>
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
+                {chartData.journeyStatus.map((status: any) => {
+                  const c = JOURNEY_CAT(status.name);
+                  return (
+                    <div key={status.name} className={`flex items-center gap-3 p-3.5 rounded-xl border ${c.tile}`}>
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.dot}`} />
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 truncate">{status.name}</div>
+                        <div className="text-[22px] font-extrabold font-mono text-gray-900 dark:text-gray-100 leading-tight">{status.value}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Pending DOs — one connected row: Going · Return · Total */}
+              <div className="rounded-xl border border-amber-100 dark:border-amber-800/50 bg-amber-50/70 dark:bg-amber-900/15 overflow-hidden">
+                <div className="flex items-center gap-1.5 px-3.5 pt-2.5 pb-1">
+                  <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-amber-700/80 dark:text-amber-300/90">
+                    Pending DOs
+                  </span>
+                </div>
+                <div className="flex items-stretch">
+                  <div className="flex-1 text-center px-2 py-2.5 min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 truncate">Going</div>
+                    <div className="text-[20px] font-extrabold font-mono text-gray-900 dark:text-gray-100 leading-tight mt-0.5">
+                      {pendingDoStats.goingPending}
                     </div>
                   </div>
-                );
-              })}
+                  <div className="w-px self-stretch bg-amber-200/80 dark:bg-amber-800/50 my-2" />
+                  <div className="flex-1 text-center px-2 py-2.5 min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 truncate">Return</div>
+                    <div className="text-[20px] font-extrabold font-mono text-gray-900 dark:text-gray-100 leading-tight mt-0.5">
+                      {pendingDoStats.returnPending}
+                    </div>
+                  </div>
+                  <div className="w-px self-stretch bg-amber-200/80 dark:bg-amber-800/50 my-2" />
+                  <div className="flex-1 text-center px-2 py-2.5 min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300 truncate">Total</div>
+                    <div className="text-[20px] font-extrabold font-mono text-amber-800 dark:text-amber-200 leading-tight mt-0.5">
+                      {pendingDoStats.total}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data available</div>

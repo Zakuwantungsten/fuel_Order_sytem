@@ -42,6 +42,10 @@ import {
 import { fuelRecordKeys } from '../hooks/useFuelRecords';
 import { toast } from 'react-toastify';
 import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
+import TruckChangeCheckpointModal, {
+  type CheckpointDecisionChoice,
+  type CheckpointDecisionPreview,
+} from '../components/TruckChangeCheckpointModal';
 
 // Month names for display
 const MONTH_NAMES = [
@@ -93,6 +97,11 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     pendingFuelRecordId: string;
   } | null>(null);
   const pendingMergeDecisionRef = useRef<((confirmed: boolean) => void) | null>(null);
+  const [checkpointDecisionPrompt, setCheckpointDecisionPrompt] =
+    useState<CheckpointDecisionPreview | null>(null);
+  const checkpointDecisionRef = useRef<((decision: CheckpointDecisionChoice | null) => void) | null>(
+    null
+  );
   const [activeTab, setActiveTab] = usePersistedState<'list' | 'summary' | 'workbook'>('do:activeTab', 'list');
   
   // Pagination state
@@ -891,44 +900,78 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         
         // Update existing DO - now returns { order, cascadeResults }
         // Include clientUpdatedAt for optimistic locking
-        const updatePayload = {
+        const updatePayload: Record<string, any> = {
           ...orderData,
           clientUpdatedAt: (editingOrder as any)?.updatedAt || (editingOrder as any)?.createdAt,
         };
         let result;
-        try {
-          result = await deliveryOrdersAPI.update(orderId, updatePayload);
-        } catch (updateError: any) {
-          const preview = updateError?.response?.data?.data?.pendingMergePreview;
-          const needsMergeConfirm =
-            updateError?.response?.status === 409 &&
-            !!preview?.pendingFuelRecordId;
+        // Confirm gates may return 409 (pending merge, then checkpoint decision).
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+            result = await deliveryOrdersAPI.update(orderId, updatePayload as any);
+            break;
+          } catch (updateError: any) {
+            const errData = updateError?.response?.data?.data;
+            const status = updateError?.response?.status;
+            const code = errData?.code;
 
-          if (!needsMergeConfirm) {
+            if (
+              status === 409 &&
+              code === 'PENDING_MERGE_CONFIRMATION_REQUIRED' &&
+              !updatePayload.pendingMergeConfirmed
+            ) {
+              const preview = errData?.pendingMergePreview;
+              if (!preview?.pendingFuelRecordId) throw updateError;
+
+              mergeTarget = {
+                truckNo: String(preview.truckNo || ''),
+                pendingDo: String(preview.pendingDo || 'pending DO'),
+                pendingFuelRecordId: String(preview.pendingFuelRecordId || ''),
+              };
+
+              const confirmed = await new Promise<boolean>((resolve) => {
+                pendingMergeDecisionRef.current = resolve;
+                setPendingMergePrompt(mergeTarget);
+              });
+
+              if (!confirmed) {
+                const cancelError: any = new Error('Pending merge confirmation cancelled');
+                cancelError.__userCancelled = true;
+                throw cancelError;
+              }
+
+              updatePayload.pendingMergeConfirmed = true;
+              continue;
+            }
+
+            if (
+              status === 409 &&
+              code === 'CHECKPOINT_DECISION_REQUIRED' &&
+              !updatePayload.checkpointDecision
+            ) {
+              const preview = errData?.checkpointDecisionPreview as CheckpointDecisionPreview | undefined;
+              if (!preview?.fuelRecordId) throw updateError;
+
+              const decision = await new Promise<CheckpointDecisionChoice | null>((resolve) => {
+                checkpointDecisionRef.current = resolve;
+                setCheckpointDecisionPrompt(preview);
+              });
+
+              if (!decision) {
+                const cancelError: any = new Error('Checkpoint decision cancelled');
+                cancelError.__userCancelled = true;
+                throw cancelError;
+              }
+
+              updatePayload.checkpointDecision = decision;
+              continue;
+            }
+
             throw updateError;
           }
-
-          mergeTarget = {
-            truckNo: String(preview.truckNo || ''),
-            pendingDo: String(preview.pendingDo || 'pending DO'),
-            pendingFuelRecordId: String(preview.pendingFuelRecordId || ''),
-          };
-
-          const confirmed = await new Promise<boolean>((resolve) => {
-            pendingMergeDecisionRef.current = resolve;
-            setPendingMergePrompt(mergeTarget);
-          });
-
-          if (!confirmed) {
-            const cancelError: any = new Error('Pending merge confirmation cancelled');
-            cancelError.__userCancelled = true;
-            throw cancelError;
-          }
-
-          result = await deliveryOrdersAPI.update(orderId, {
-            ...(updatePayload as any),
-            pendingMergeConfirmed: true,
-          } as any);
+        }
+        if (!result) {
+          throw new Error('Delivery order update did not complete');
         }
         savedOrder = result.order;
         
@@ -946,6 +989,16 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
           }
           if (result.cascadeResults.lpoEntriesUpdated > 0) {
             console.log(`${result.cascadeResults.lpoEntriesUpdated} LPO entries updated`);
+          }
+          const fuelChanges: string[] = result.cascadeResults.fuelRecordChanges || [];
+          if (fuelChanges.some((c) => /Checkpoints reset/i.test(c))) {
+            toast.info('Fuel checkpoints were reset for the new truck. See Snapshots on the fuel record to undo.', {
+              autoClose: 9000,
+            });
+          } else if (fuelChanges.some((c) => /Checkpoints maintained/i.test(c))) {
+            toast.info('Fuel checkpoints kept on the new truck. A snapshot was saved for audit/undo.', {
+              autoClose: 7000,
+            });
           }
         }
 
@@ -1037,8 +1090,16 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         throw error;
       }
       if (error.response?.status === 409) {
-        setConflictData({ currentRecord: error.response?.data?.data?.current, pendingData: orderData });
-        queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+        const code = error.response?.data?.data?.code;
+        if (
+          code === 'PENDING_MERGE_CONFIRMATION_REQUIRED' ||
+          code === 'CHECKPOINT_DECISION_REQUIRED'
+        ) {
+          toast.error(error.response?.data?.message || 'Confirmation required to continue');
+        } else {
+          setConflictData({ currentRecord: error.response?.data?.data?.current, pendingData: orderData });
+          queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+        }
       } else if (error.response?.status === 423) {
         const lockHolder = error.response?.data?.data?.editLock?.lockedByName || 'another user';
         toast.error(`This delivery order is being edited by ${lockHolder}. Please try again later.`);
@@ -1059,6 +1120,18 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
     pendingMergeDecisionRef.current?.(false);
     pendingMergeDecisionRef.current = null;
     setPendingMergePrompt(null);
+  };
+
+  const handleCheckpointDecision = (decision: CheckpointDecisionChoice) => {
+    checkpointDecisionRef.current?.(decision);
+    checkpointDecisionRef.current = null;
+    setCheckpointDecisionPrompt(null);
+  };
+
+  const handleCheckpointDecisionCancel = () => {
+    checkpointDecisionRef.current?.(null);
+    checkpointDecisionRef.current = null;
+    setCheckpointDecisionPrompt(null);
   };
 
   // Cancel DO handler
@@ -1993,6 +2066,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                               AMENDED
                             </span>
                           )}
+                          {!order.isCancelled && order.hasTruckChangeAmendment && (
+                            <span
+                              className="px-2 py-0.5 text-[10px] font-bold bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 rounded-full text-center"
+                              title="This DO had a truck-number amendment cascaded to its fuel record"
+                            >
+                              TRUCK Δ
+                            </span>
+                          )}
                           <EditLockBadge editLock={(order as any).editLock} />
                         </div>
                       </div>
@@ -2202,6 +2283,14 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                                   title={`Amended ${order.editHistory!.length} time(s)${order.lastEditedAt ? ` — last on ${order.lastEditedAt}` : ''}${order.lastEditedBy ? ` by ${order.lastEditedBy}` : ''}`}
                                 >
                                   AMENDED
+                                </span>
+                              )}
+                              {!order.isCancelled && !order.isPendingDo && order.hasTruckChangeAmendment && (
+                                <span
+                                  className="px-1.5 py-0.5 text-[10px] font-bold bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 rounded"
+                                  title="This DO had a truck-number amendment cascaded to its fuel record"
+                                >
+                                  TRUCK Δ
                                 </span>
                               )}
                             </div>
@@ -2466,6 +2555,13 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
         variant="warning"
         onConfirm={handlePendingMergeConfirm}
         onCancel={handlePendingMergeCancel}
+      />
+
+      <TruckChangeCheckpointModal
+        open={!!checkpointDecisionPrompt}
+        preview={checkpointDecisionPrompt}
+        onDecision={handleCheckpointDecision}
+        onCancel={handleCheckpointDecisionCancel}
       />
     </div>
   );

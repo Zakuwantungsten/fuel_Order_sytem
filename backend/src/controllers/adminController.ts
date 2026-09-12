@@ -1393,6 +1393,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
         cashLpoLookbackDays: config.journeyConfig?.cashLpoLookbackDays ?? 40,
         lpoTruckLookupMonths: config.journeyConfig?.lpoTruckLookupMonths ?? 4,
         allowSuspendCompleted: config.journeyConfig?.allowSuspendCompleted === true,
+        allowUnlinkExportDo: config.journeyConfig?.allowUnlinkExportDo === true,
         searchConfig: {
           doMonths: config.journeyConfig?.searchConfig?.doMonths ?? 4,
           doMaxResults: config.journeyConfig?.searchConfig?.doMaxResults ?? 6,
@@ -1414,7 +1415,7 @@ export const getJourneyConfig = async (req: AuthRequest, res: Response): Promise
  */
 export const updateJourneyConfig = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { startColumns, superManagerStations, superManagerNotifyCustomZambia, managerLpoLookbackDays, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation, cashLpoLookbackDays, lpoTruckLookupMonths, searchConfig, allowSuspendCompleted } = req.body;
+    const { startColumns, superManagerStations, superManagerNotifyCustomZambia, managerLpoLookbackDays, autoDownloadDOPdf, autoDownloadLPOPdf, fuelAutomation, cashLpoLookbackDays, lpoTruckLookupMonths, searchConfig, allowSuspendCompleted, allowUnlinkExportDo } = req.body;
 
     const hasStartColumns = startColumns !== undefined;
     const hasSmStations = superManagerStations !== undefined;
@@ -1427,8 +1428,9 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
     const hasLpoTruckLookupMonths = lpoTruckLookupMonths !== undefined;
     const hasSearchConfig = searchConfig !== undefined;
     const hasAllowSuspendCompleted = allowSuspendCompleted !== undefined;
+    const hasAllowUnlinkExportDo = allowUnlinkExportDo !== undefined;
 
-    if (!hasStartColumns && !hasSmStations && !hasSmNotifyCustomZambia && !hasManagerLookback && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation && !hasCashLpoLookbackDays && !hasLpoTruckLookupMonths && !hasSearchConfig && !hasAllowSuspendCompleted) {
+    if (!hasStartColumns && !hasSmStations && !hasSmNotifyCustomZambia && !hasManagerLookback && !hasAutoDownloadDO && !hasAutoDownloadLPO && !hasFuelAutomation && !hasCashLpoLookbackDays && !hasLpoTruckLookupMonths && !hasSearchConfig && !hasAllowSuspendCompleted && !hasAllowUnlinkExportDo) {
       throw new ApiError(400, 'Provide at least one field to update');
     }
 
@@ -1485,6 +1487,10 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
 
     if (hasAllowSuspendCompleted && typeof allowSuspendCompleted !== 'boolean') {
       throw new ApiError(400, 'allowSuspendCompleted must be a boolean');
+    }
+
+    if (hasAllowUnlinkExportDo && typeof allowUnlinkExportDo !== 'boolean') {
+      throw new ApiError(400, 'allowUnlinkExportDo must be a boolean');
     }
 
     if (hasCashLpoLookbackDays) {
@@ -1553,6 +1559,9 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
       allowSuspendCompleted: hasAllowSuspendCompleted
         ? allowSuspendCompleted
         : (existing.allowSuspendCompleted === true),
+      allowUnlinkExportDo: hasAllowUnlinkExportDo
+        ? allowUnlinkExportDo
+        : (existing.allowUnlinkExportDo === true),
       searchConfig: {
         doMonths: hasSearchConfig && searchConfig.doMonths !== undefined ? Number(searchConfig.doMonths) : (existing.searchConfig?.doMonths ?? 4),
         doMaxResults: hasSearchConfig && searchConfig.doMaxResults !== undefined ? Number(searchConfig.doMaxResults) : (existing.searchConfig?.doMaxResults ?? 6),
@@ -1591,6 +1600,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
     if (hasCashLpoLookbackDays) detailParts.push(`cashLpoLookbackDays=${nextJourneyConfig.cashLpoLookbackDays}`);
     if (hasLpoTruckLookupMonths) detailParts.push(`lpoTruckLookupMonths=${nextJourneyConfig.lpoTruckLookupMonths}`);
     if (hasAllowSuspendCompleted) detailParts.push(`allowSuspendCompleted=${nextJourneyConfig.allowSuspendCompleted}`);
+    if (hasAllowUnlinkExportDo) detailParts.push(`allowUnlinkExportDo=${nextJourneyConfig.allowUnlinkExportDo}`);
     if (hasSearchConfig) {
       const changed = Object.keys(searchConfig).map((k) => `${k}=${searchConfig[k]}`).join(', ');
       detailParts.push(`searchConfig {${changed}}`);
@@ -1628,6 +1638,7 @@ export const updateJourneyConfig = async (req: AuthRequest, res: Response): Prom
         cashLpoLookbackDays: nextJourneyConfig.cashLpoLookbackDays,
         lpoTruckLookupMonths: nextJourneyConfig.lpoTruckLookupMonths,
         allowSuspendCompleted: nextJourneyConfig.allowSuspendCompleted === true,
+        allowUnlinkExportDo: nextJourneyConfig.allowUnlinkExportDo === true,
         searchConfig: nextJourneyConfig.searchConfig,
       },
     });

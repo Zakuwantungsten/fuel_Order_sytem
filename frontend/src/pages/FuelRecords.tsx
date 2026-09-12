@@ -30,8 +30,9 @@ import PendingDoFollowUpModal from '../components/PendingDoFollowUpModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useFuelRecordsList, useFuelRecordRoutes, useFuelRecordPeriods, useFuelRecordJourneyStatuses, useLPODropdown, fuelRecordKeys } from '../hooks/useFuelRecords';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
+import { deliveryOrderKeys } from '../hooks/useDeliveryOrders';
 import { replaceUrlPreservingState } from '../utils/historyState';
-import { pendingDoStatusLabel } from '../utils/pendingDo';
+import { pendingDoStatusLabel, isPendingReturnDo } from '../utils/pendingDo';
 import { formatTruckNumber } from '../utils/dataCleanup';
 
 // Map fuel record field names to their primary standard allocation key
@@ -147,6 +148,8 @@ const FuelRecords = () => {
   const queryClient = useQueryClient();
   const { isDark, user } = useAuth();
   const canUncancel = user?.role === 'super_admin' || user?.role === 'admin';
+  const canUnlinkExportDo =
+    user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'fuel_order_maker';
   const [searchTerm, setSearchTerm] = usePersistedState('fr:searchTerm', '');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FuelRecord | undefined>();
@@ -177,11 +180,17 @@ const FuelRecords = () => {
   const [uncompletePending, setUncompletePending] = useState<string | number | null>(null);
   const [suspendPending, setSuspendPending] = useState<string | number | null>(null);
   const [unsuspendPending, setUnsuspendPending] = useState<string | number | null>(null);
+  const [unlinkExportPending, setUnlinkExportPending] = useState<{
+    id: string | number;
+    returnDo: string;
+    truckNo: string;
+  } | null>(null);
   const [actionsRecord, setActionsRecord] = useState<FuelRecord | null>(null);
   const [actionsMenuPosition, setActionsMenuPosition] = useState<FuelRecordActionsPosition | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const { data: journeyConfig } = useJourneyConfig();
   const allowSuspendCompleted = journeyConfig?.allowSuspendCompleted === true;
+  const allowUnlinkExportDo = journeyConfig?.allowUnlinkExportDo === true;
   
   // Standard allocations (fetched from backend)
   const [standardAllocations, setStandardAllocations] = useState<StandardAllocations | null>(null);
@@ -932,6 +941,33 @@ const FuelRecords = () => {
     } finally {
       setIsActionLoading(false);
       setUnsuspendPending(null);
+    }
+  };
+
+  const handleUnlinkExportDo = (record: FuelRecord, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const id = recordIdOf(record);
+    const returnDo = String(record.returnDo || '').trim();
+    if (!id || !returnDo || isPendingReturnDo(returnDo)) return;
+    setUnlinkExportPending({ id, returnDo, truckNo: record.truckNo || '' });
+  };
+
+  const executeUnlinkExportDo = async () => {
+    if (!unlinkExportPending) return;
+    setIsActionLoading(true);
+    try {
+      await fuelRecordsAPI.unlinkExportDo(unlinkExportPending.id);
+      queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+      toast.success(
+        `Unlinked EXPORT DO ${unlinkExportPending.returnDo}. It can be linked again from DO Management.`
+      );
+    } catch (error: any) {
+      console.error('Error unlinking export DO:', error);
+      toast.error(error.response?.data?.message || 'Failed to unlink export DO');
+    } finally {
+      setIsActionLoading(false);
+      setUnlinkExportPending(null);
     }
   };
 
@@ -1704,6 +1740,14 @@ const FuelRecords = () => {
                               size="sm"
                             />
                           )}
+                          {!isCancelled && record.hasTruckChange && (
+                            <span
+                              className="px-2 py-0.5 text-xs font-semibold rounded-full bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-300"
+                              title="Truck-change snapshot history available in Fuel Details → Snapshots"
+                            >
+                              TRUCK Δ
+                            </span>
+                          )}
                           {!isCancelled && pendingDoStatusLabel(record) && (
                             <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
                               {pendingDoStatusLabel(record)}
@@ -2127,6 +2171,8 @@ const FuelRecords = () => {
         position={actionsMenuPosition}
         canUncancel={canUncancel}
         allowSuspendCompleted={allowSuspendCompleted}
+        allowUnlinkExportDo={allowUnlinkExportDo}
+        canUnlinkExportDo={canUnlinkExportDo}
         onClose={closeActionsMenu}
         onEdit={(record) => {
           closeActionsMenu();
@@ -2161,6 +2207,10 @@ const FuelRecords = () => {
           const id = recordIdOf(record);
           closeActionsMenu();
           if (id) handleUnsuspend(id);
+        }}
+        onUnlinkExportDo={(record) => {
+          closeActionsMenu();
+          handleUnlinkExportDo(record);
         }}
       />
 
@@ -2340,6 +2390,21 @@ const FuelRecords = () => {
         loading={isActionLoading}
         onConfirm={executeUnsuspend}
         onCancel={() => setUnsuspendPending(null)}
+      />
+      <ConfirmModal
+        open={unlinkExportPending !== null}
+        title="Unlink Export DO"
+        message={
+          unlinkExportPending
+            ? `Unlink EXPORT DO ${unlinkExportPending.returnDo} from truck ${unlinkExportPending.truckNo}? This restores the going from/to and removes return liters. The DO is not cancelled and can be linked again from DO Management.`
+            : ''
+        }
+        confirmLabel="Unlink Export DO"
+        cancelLabel="Keep Linked"
+        variant="warning"
+        loading={isActionLoading}
+        onConfirm={executeUnlinkExportDo}
+        onCancel={() => setUnlinkExportPending(null)}
       />
     </div>
   );

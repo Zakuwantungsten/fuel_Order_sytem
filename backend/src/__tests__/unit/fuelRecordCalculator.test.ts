@@ -1,5 +1,6 @@
 import {
   buildReturnUpdate,
+  buildExportReturnUnlinkUpdate,
   recalculateBalanceFromTotal,
   resolveStoredOutboundLiters,
   applyOutboundLitersToTotals,
@@ -25,6 +26,34 @@ describe('fuelRecordCalculator outbound / balance helpers', () => {
     expect(resolveStoredOutboundLiters({ outboundLiters: 500 })).toBe(500);
     expect(resolveStoredOutboundLiters({}, 400)).toBe(400);
     expect(resolveStoredOutboundLiters({})).toBe(0);
+  });
+
+  it('buildExportReturnUnlinkUpdate clears return leg and restores going from/to', () => {
+    const linked = {
+      ...baseRecord,
+      returnDo: 'EXP-100',
+      from: 'LUSAKA',
+      to: 'DAR',
+      originalGoingFrom: 'DAR',
+      originalGoingTo: 'KOLWEZI',
+      outboundLiters: 500,
+      totalLts: 2900,
+      zambiaReturn: 50,
+      darReturn: 20,
+    };
+    const { update, info } = buildExportReturnUnlinkUpdate(linked);
+    expect(update.returnDo).toBeNull();
+    expect(update.from).toBe('DAR');
+    expect(update.to).toBe('KOLWEZI');
+    expect(update.originalGoingFrom).toBeNull();
+    expect(update.originalGoingTo).toBeNull();
+    expect(update.outboundLiters).toBe(0);
+    expect(update.totalLts).toBe(2400);
+    expect(update.zambiaReturn).toBe(0);
+    expect(update.darReturn).toBe(0);
+    expect(update.balance).toBe(2500);
+    expect(info.removedReturnDo).toBe('EXP-100');
+    expect(info.exportRouteLiters).toBe(500);
   });
 
   it('applyOutboundLitersToTotals adds / subtracts / rolls back outbound on totalLts then recalculates balance', () => {
