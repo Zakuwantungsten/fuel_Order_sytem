@@ -168,11 +168,14 @@ const emitFuelRecordChange = async (fuelRecordId?: string): Promise<void> => {
  * IMPORT (going):
  *  - No return DO: update live from/to; set totalLts to IMPORT route liters; notify if missing.
  *  - Has return DO: do NOT change live from/to; update originalGoing*; total = newGoing + outbound.
+ *  - Truck / destination / loading-point amend: rematch extra from truck-batch config
+ *    (suffix + destination rules), same as DO create.
  *
  * EXPORT (outbound):
  *  - Always update live from/to to match export LP/dest.
  *  - Adjust totalLts by outbound delta (add/minus/full rollback if new route missing).
  *  - Recalculate balance from new totalLts. Never notify for missing outbound route.
+ *  - Truck amend: rematch extra using going destination (originalGoingTo), not export dest.
  *
  * SDO: no fuel interaction.
  */
@@ -186,6 +189,18 @@ const cascadeUpdateToFuelRecord = async (
   fuelRecordId?: string;
   changes?: string[];
   routeNotificationCreated?: boolean;
+  /** Fired post-commit (same as DO create) so txn rollback cannot leave orphan bells. */
+  pendingConfigNotification?: {
+    id: string;
+    missingFields: Array<'totalLiters' | 'extraFuel'>;
+    doNumber: string;
+    truckNo: string;
+    destination: string;
+    loadingPoint: string;
+    truckSuffix: string;
+    userRole?: string;
+    userId?: string;
+  };
   affectedFuelRecordIds?: string[];
   fuelAudit?: { resourceId: string; previous: Record<string, any>; next: Record<string, any> };
 }> => {
@@ -236,6 +251,12 @@ const cascadeUpdateToFuelRecord = async (
       !!updatedData.truckNo &&
       formatTruckNumber(updatedData.truckNo) !== formatTruckNumber(originalDO.truckNo);
 
+    const needsImportRouteRematch =
+      originalDO.importOrExport === 'IMPORT' && (destChanged || lpChanged);
+    // Extra is truck-suffix (+ going destination rules). Rematch when the truck
+    // changes, or when IMPORT going destination/LP changes (destination rules).
+    const needsExtraRematch = truckChanged || needsImportRouteRematch;
+
     // Truck moves must re-place the journey on the target truck's queue (append as
     // last queued if target has an active journey). Do this before route/liters
     // updates so subsequent balance math sees the correct truckNo.
@@ -282,7 +303,57 @@ const cascadeUpdateToFuelRecord = async (
       }
     }
 
-    if (originalDO.importOrExport === 'IMPORT' && (destChanged || lpChanged)) {
+    // Rematch extra before route/balance math so totalLts recalcs use the new value.
+    let extraBatchSuffix = '';
+    let extraDestForMatch = '';
+    if (needsExtraRematch) {
+      const { truckBatches, batchDestinationRules } = await loadFuelConfig();
+      // Prefer the amended truck even if journey reassignment was a no-op.
+      const truckForMatch = truckChanged
+        ? formatTruckNumber(updatedData.truckNo) || String(fuelRecord.truckNo || '')
+        : String(fuelRecord.truckNo || '');
+      if (originalDO.importOrExport === 'IMPORT') {
+        extraDestForMatch = String(
+          updatedData.destination || originalDO.destination || fuelRecord.to || ''
+        );
+      } else {
+        // EXPORT truck change: destination rules apply to the going leg.
+        extraDestForMatch = String(
+          (fuelRecord.originalGoingTo && String(fuelRecord.originalGoingTo).trim()) ||
+            fuelRecord.to ||
+            ''
+        );
+      }
+      const batchMatch = matchExtraFuel(
+        truckForMatch,
+        truckBatches,
+        extraDestForMatch,
+        batchDestinationRules
+      );
+      const rematchedExtra = batchMatch.matched ? batchMatch.extraFuel : null;
+      extraBatchSuffix = (
+        batchMatch.truckSuffix ||
+        truckForMatch.toLowerCase().split(' ').pop() ||
+        ''
+      ).toUpperCase();
+      const oldExtra = fuelRecord.extra;
+      updates.extra = rematchedExtra;
+      // Keep in-memory doc aligned for subsequent balance helpers.
+      fuelRecord.extra = rematchedExtra as any;
+      if (oldExtra !== rematchedExtra) {
+        changes.push(
+          `Extra Liters: ${oldExtra ?? 'NULL'}L → ${rematchedExtra ?? 'NULL'}L` +
+            (batchMatch.destinationOverride ? ' (destination override)' : '') +
+            (rematchedExtra === null ? ' (truck batch not found)' : '')
+        );
+        logger.info(
+          `Amend ${originalDO.doNumber}: extra ${oldExtra ?? 'NULL'} → ${rematchedExtra ?? 'NULL'}` +
+            ` (truck ${truckForMatch}, dest ${extraDestForMatch || '?'})`
+        );
+      }
+    }
+
+    if (needsImportRouteRematch) {
       const newLoadingPoint = updatedData.loadingPoint || originalDO.loadingPoint || '';
       const newDestination = updatedData.destination || originalDO.destination || '';
       const goingStart = determineJourneyStart(newLoadingPoint);
@@ -345,15 +416,15 @@ const cascadeUpdateToFuelRecord = async (
       }
 
       const oldTotalLts = fuelRecord.totalLts;
+      const extraForBalance =
+        updates.extra !== undefined ? updates.extra : fuelRecord.extra;
       if (routeMatch.matched) {
         const newTotalLts = hasReturn
           ? routeMatch.liters + previousOutbound
           : routeMatch.liters;
         updates.totalLts = newTotalLts;
-        updates.isLocked = false;
-        updates.pendingConfigReason = null;
         if (hasReturn) updates.outboundLiters = previousOutbound;
-        updates.balance = recalculateBalanceFromTotal(newTotalLts, fuelRecord.extra, fuelRecord);
+        updates.balance = recalculateBalanceFromTotal(newTotalLts, extraForBalance, fuelRecord);
         changes.push(
           `Total Liters: ${oldTotalLts ?? 'NULL'}L → ${newTotalLts}L` +
             (hasReturn && previousOutbound > 0
@@ -367,23 +438,16 @@ const cascadeUpdateToFuelRecord = async (
         );
       } else {
         updates.totalLts = null;
-        updates.isLocked = true;
-        updates.pendingConfigReason = 'missing_total_liters';
-        updates.balance = recalculateBalanceFromTotal(null, fuelRecord.extra, fuelRecord);
+        updates.balance = recalculateBalanceFromTotal(null, extraForBalance, fuelRecord);
         changes.push(
           `Total Liters: ${oldTotalLts ?? 'NULL'}L → NULL (going route not found in database)`
         );
         logger.warn(
           `⚠️ Going route not found for ${newLoadingPoint} → ${newDestination} - fuel record locked`
         );
-        (updates as any)._needsRouteNotification = {
+        (updates as any)._missingRoute = {
           destination: newDestination,
           loadingPoint: newLoadingPoint,
-          doNumber: originalDO.doNumber,
-          truckNo: fuelRecord.truckNo,
-          fuelRecordId: fuelRecord._id.toString(),
-          userRole: (updatedData as any).userRole,
-          userId: (updatedData as any).userId,
         };
       }
     }
@@ -443,40 +507,106 @@ const cascadeUpdateToFuelRecord = async (
       // Missing outbound route: silent — no lock, no notification
     }
 
+    // Reconcile lock + balance when extra and/or IMPORT going liters were rematched.
+    // EXPORT dest/LP-only amends keep prior lock behavior (no extra rematch).
+    if (needsExtraRematch || needsImportRouteRematch) {
+      const finalTotal = Object.prototype.hasOwnProperty.call(updates, 'totalLts')
+        ? updates.totalLts
+        : fuelRecord.totalLts;
+      const finalExtra = Object.prototype.hasOwnProperty.call(updates, 'extra')
+        ? updates.extra
+        : fuelRecord.extra;
+      const missingTotal = finalTotal === null || finalTotal === undefined;
+      const missingExtra = finalExtra === null || finalExtra === undefined;
+
+      if (missingTotal || missingExtra) {
+        updates.isLocked = true;
+        updates.pendingConfigReason =
+          missingTotal && missingExtra
+            ? 'both'
+            : missingTotal
+              ? 'missing_total_liters'
+              : 'missing_extra_fuel';
+      } else {
+        updates.isLocked = false;
+        updates.pendingConfigReason = null;
+      }
+
+      const newBalance = recalculateBalanceFromTotal(
+        missingTotal ? null : finalTotal,
+        finalExtra,
+        fuelRecord
+      );
+      if (updates.balance !== newBalance) {
+        updates.balance = newBalance;
+        if (!changes.some((c) => c.startsWith('Balance recalculated:'))) {
+          changes.push(`Balance recalculated: ${newBalance}L`);
+        } else {
+          // Replace stale balance line from route rematch with final value
+          for (let i = changes.length - 1; i >= 0; i--) {
+            if (changes[i].startsWith('Balance recalculated:')) {
+              changes[i] = `Balance recalculated: ${newBalance}L`;
+              break;
+            }
+          }
+        }
+      }
+
+      const missingFields: Array<'totalLiters' | 'extraFuel'> = [];
+      if (needsImportRouteRematch && (updates as any)._missingRoute && missingTotal) {
+        missingFields.push('totalLiters');
+      }
+      if (needsExtraRematch && missingExtra) {
+        missingFields.push('extraFuel');
+      }
+      delete (updates as any)._missingRoute;
+
+      if (missingFields.length > 0) {
+        const routeMeta = needsImportRouteRematch
+          ? {
+              destination: String(
+                updatedData.destination || originalDO.destination || extraDestForMatch || ''
+              ),
+              loadingPoint: String(
+                updatedData.loadingPoint || originalDO.loadingPoint || ''
+              ),
+            }
+          : {
+              destination: extraDestForMatch || String(originalDO.destination || ''),
+              loadingPoint: String(originalDO.loadingPoint || ''),
+            };
+        (updates as any)._needsConfigNotification = {
+          id: fuelRecord._id.toString(),
+          missingFields,
+          doNumber: originalDO.doNumber,
+          truckNo: String(fuelRecord.truckNo || ''),
+          destination: routeMeta.destination,
+          loadingPoint: routeMeta.loadingPoint,
+          truckSuffix: extraBatchSuffix,
+          userRole: (updatedData as any).userRole,
+          userId: (updatedData as any).userId,
+        };
+      }
+    }
+
     if (Object.keys(updates).length > 0) {
-      const needsRouteNotification = (updates as any)._needsRouteNotification;
-      delete (updates as any)._needsRouteNotification;
+      const needsConfigNotification = (updates as any)._needsConfigNotification;
+      delete (updates as any)._needsConfigNotification;
+      delete (updates as any)._missingRoute;
 
       await FuelRecord.findByIdAndUpdate(fuelRecord._id, updates, opts);
       logger.info(`Fuel record ${fuelRecord._id} updated due to DO changes: ${changes.join(', ')}`);
 
       const afterDoc = await FuelRecord.findById(fuelRecord._id).session(session || null);
 
-      if (needsRouteNotification) {
-        const { createMissingConfigNotification } = await import('./notificationController');
-        await createMissingConfigNotification(
-          needsRouteNotification.fuelRecordId,
-          ['totalLiters'],
-          {
-            doNumber: needsRouteNotification.doNumber,
-            truckNo: needsRouteNotification.truckNo,
-            destination: needsRouteNotification.destination,
-            loadingPoint: needsRouteNotification.loadingPoint,
-          },
-          username,
-          needsRouteNotification.userRole,
-          needsRouteNotification.userId
-        );
-        logger.info(
-          `Notifications created for missing going route: ${needsRouteNotification.loadingPoint || '?'} → ${needsRouteNotification.destination}`
-        );
-      }
-
+      // Do NOT create notifications here — caller fires them after the txn commits
+      // (mirrors DO create: lock inside txn, bell post-commit).
       return {
         updated: true,
         fuelRecordId: fuelRecord._id.toString(),
         changes,
-        routeNotificationCreated: !!needsRouteNotification,
+        routeNotificationCreated: !!needsConfigNotification,
+        pendingConfigNotification: needsConfigNotification || undefined,
         affectedFuelRecordIds: [...affectedFuelRecordIds],
         fuelAudit: {
           resourceId: fuelRecord._id.toString(),
@@ -486,7 +616,7 @@ const cascadeUpdateToFuelRecord = async (
       };
     }
 
-    // Truck-only amend: reassignment already applied above
+    // Truck-only amend: reassignment already applied above (extra rematch would have set updates)
     if (changes.length > 0) {
       logger.info(`Fuel record ${fuelRecord._id} updated due to DO changes: ${changes.join(', ')}`);
       const afterDoc = await FuelRecord.findById(fuelRecord._id).session(session || null);
@@ -2342,6 +2472,17 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       };
       pendingMerged?: boolean;
       pendingMergeSkippedReason?: string;
+      pendingConfigNotification?: {
+        id: string;
+        missingFields: Array<'totalLiters' | 'extraFuel'>;
+        doNumber: string;
+        truckNo: string;
+        destination: string;
+        loadingPoint: string;
+        truckSuffix: string;
+        userRole?: string;
+        userId?: string;
+      };
     } = {
       fuelRecordUpdated: false,
       fuelRecordChanges: [],
@@ -2506,6 +2647,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
             cascadeResults.fuelRecordChanges = fuelResult.changes || [];
             cascadeResults.fuelRecordId = fuelResult.fuelRecordId;
             cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
+            cascadeResults.pendingConfigNotification = fuelResult.pendingConfigNotification;
             mergeAffectedFuelRecordIds(fuelResult.affectedFuelRecordIds || []);
             if (fuelResult.fuelAudit) cascadeResults.fuelAudit = fuelResult.fuelAudit;
             if (fuelResult.routeNotificationCreated) {
@@ -2682,6 +2824,31 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     logger.info(`Delivery order updated: ${deliveryOrder.doNumber} by ${username}. Changes: ${JSON.stringify(changes)}`);
 
+    // Post-commit: missing-config bell (same path as DO create — Truck Batches / route alerts).
+    // Best-effort: must not undo the committed DO+fuel transaction.
+    if (cascadeResults.pendingConfigNotification) {
+      const n = cascadeResults.pendingConfigNotification;
+      const { createMissingConfigNotification } = await import('./notificationController');
+      await createMissingConfigNotification(
+        n.id,
+        n.missingFields,
+        {
+          doNumber: n.doNumber,
+          truckNo: n.truckNo,
+          destination: n.destination,
+          loadingPoint: n.loadingPoint,
+          truckSuffix: n.truckSuffix,
+        },
+        username,
+        n.userRole || userRole,
+        n.userId || req.user?.userId
+      ).catch((e: any) =>
+        logger.warn(
+          `Missing-config notification failed for amend ${n.doNumber}: ${e?.message || e}`
+        )
+      );
+    }
+
     // Log audit trail — store old/new maps so DO detail history can render real values
     if (changes.length > 0) {
       const previousFields: Record<string, any> = { doNumber: originalDO.doNumber, truckNo: originalDO.truckNo };
@@ -2732,7 +2899,13 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
 
     // Build response message
     let responseMessage = 'Delivery order updated successfully';
-    if (cascadeResults.routeNotificationCreated) {
+    if (cascadeResults.pendingConfigNotification) {
+      const fields = cascadeResults.pendingConfigNotification.missingFields;
+      const parts: string[] = [];
+      if (fields.includes('totalLiters')) parts.push('route total liters');
+      if (fields.includes('extraFuel')) parts.push('truck-batch extra liters');
+      responseMessage += `. Note: missing ${parts.join(' and ')} config — fuel record locked and notification created`;
+    } else if (cascadeResults.routeNotificationCreated) {
       responseMessage += '. Note: Route configuration not found - fuel record locked and notification created for admin';
     }
     if (cascadeResults.pendingMerged && pendingMergePreview) {
@@ -2745,11 +2918,14 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       responseMessage += '. Note: fuel-record automation is disabled — adjust the fuel record manually.';
     }
 
+    // Don't leak internal notification payload on the API response
+    const { pendingConfigNotification: _omitNotif, ...cascadeResultsForClient } = cascadeResults;
+
     res.status(200).json({
       success: true,
       message: responseMessage,
       data: deliveryOrder,
-      cascadeResults,
+      cascadeResults: cascadeResultsForClient,
     });
     emitDataChange('delivery_orders', 'update', deliveryOrder.toObject());
     const fuelIdsToEmit = cascadeResults.affectedFuelRecordIds.length
