@@ -10,7 +10,8 @@ import { FuelPriceHistory } from '../models/FuelPrice';
 import { emitDataChange } from '../services/websocket';
 import { syncConfigNotifications } from './notificationController';
 import logger from '../utils/logger';
-import { originsMatch } from '../utils/fuelRecordCalculator';
+import { originsMatch, normalizeTruckKey } from '../utils/fuelRecordCalculator';
+import { formatTruckNumber } from '../utils/formatters';
 
 /**
  * Add cache-busting headers to force immediate frontend refresh
@@ -211,6 +212,83 @@ export async function autoFillFuelRecordsForBatch(truckSuffix: string, extraLite
   } catch (error) {
     logger.error('Failed to auto-fill fuel records for batch:', error);
     // Don't throw — auto-fill failure should never break batch creation
+  }
+}
+
+/**
+ * When a special truck is configured, fill locked fuel records whose full plate
+ * matches (missing_extra_fuel / both).
+ */
+export async function autoFillFuelRecordsForSpecialTruck(
+  truckNo: string,
+  extraLiters: number,
+  username: string
+): Promise<void> {
+  try {
+    const key = normalizeTruckKey(formatTruckNumber(truckNo) || truckNo);
+    if (!key) return;
+
+    const lockedRecords = await FuelRecord.find({
+      isLocked: true,
+      pendingConfigReason: { $in: ['missing_extra_fuel', 'both'] },
+      isDeleted: false,
+      isCancelled: { $ne: true },
+    });
+
+    let updatedCount = 0;
+
+    for (const record of lockedRecords) {
+      const recordKey = normalizeTruckKey(record.truckNo);
+      if (recordKey !== key) continue;
+
+      const totalLts = record.totalLts;
+      const newExtra = extraLiters;
+      const stillMissingTotalLts = totalLts === null || totalLts === undefined;
+      const newPendingReason = stillMissingTotalLts ? 'missing_total_liters' : null;
+      const newIsLocked = stillMissingTotalLts;
+
+      const totalFuel = (totalLts || 0) + newExtra;
+      const totalCheckpoints =
+        Math.abs(record.mmsaYard || 0) +
+        Math.abs(record.tangaYard || 0) +
+        Math.abs(record.darYard || 0) +
+        Math.abs(record.tangaGoing || 0) +
+        Math.abs(record.darGoing || 0) +
+        Math.abs(record.moroGoing || 0) +
+        Math.abs(record.mbeyaGoing || 0) +
+        Math.abs(record.tdmGoing || 0) +
+        Math.abs(record.zambiaGoing || 0) +
+        Math.abs(record.congoFuel || 0) +
+        Math.abs(record.zambiaReturn || 0) +
+        Math.abs(record.tundumaReturn || 0) +
+        Math.abs(record.mbeyaReturn || 0) +
+        Math.abs(record.moroReturn || 0) +
+        Math.abs(record.darReturn || 0) +
+        Math.abs(record.tangaReturn || 0);
+      const newBalance = totalFuel - totalCheckpoints;
+
+      await FuelRecord.findByIdAndUpdate(record._id, {
+        extra: newExtra,
+        balance: newBalance,
+        isLocked: newIsLocked,
+        pendingConfigReason: newPendingReason,
+      });
+
+      await syncConfigNotifications(record._id.toString(), username);
+      updatedCount++;
+      logger.info(
+        `Auto-filled special-truck extra=${newExtra}L for fuel record ${record._id} (truck ${record.truckNo}, DO ${record.goingDo}). Balance: ${newBalance}L. Still locked: ${newIsLocked}`
+      );
+    }
+
+    if (updatedCount > 0) {
+      emitDataChange('fuel_records', 'update');
+      logger.info(
+        `Special truck "${key}" configured with ${extraLiters}L — auto-filled ${updatedCount} locked fuel record(s)`
+      );
+    }
+  } catch (error) {
+    logger.error('Failed to auto-fill fuel records for special truck:', error);
   }
 }
 
@@ -869,7 +947,7 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
       res.status(200).json({
         success: true,
         message: 'Truck batches retrieved successfully',
-        data: { truckBatches: {}, batchDestinationRules: {} },
+        data: { truckBatches: {}, batchDestinationRules: {}, specialTrucks: [] },
       });
       return;
     }
@@ -880,6 +958,7 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
       data: {
         truckBatches: config.truckBatches || {},
         batchDestinationRules: config.batchDestinationRules || {},
+        specialTrucks: config.specialTrucks || [],
       },
     });
   } catch (error: any) {

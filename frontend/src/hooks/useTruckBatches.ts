@@ -250,27 +250,171 @@ export function useDeleteBatchDestinationRule() {
   });
 }
 
+export function useAddSpecialTruck() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      truckNo: string;
+      extraLiters: number;
+      linkedBatchLiters?: number | null;
+      notes?: string;
+    }) => adminAPI.addSpecialTruck(data),
+    onSuccess: (_data, variables) => {
+      console.log(`✓ Special truck ${variables.truckNo} added (${variables.extraLiters}L)`);
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to add special truck:', error);
+    },
+  });
+}
+
+export function useUpdateSpecialTruck() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      truckNo: string;
+      extraLiters?: number;
+      linkedBatchLiters?: number | null;
+      notes?: string;
+    }) => adminAPI.updateSpecialTruck(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to update special truck:', error);
+    },
+  });
+}
+
+export function useRemoveSpecialTruck() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (truckNo: string) => adminAPI.removeSpecialTruck(truckNo),
+    onSuccess: (_data, truckNo) => {
+      console.log(`✓ Special truck ${truckNo} removed`);
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to remove special truck:', error);
+    },
+  });
+}
+
+export function useAddSpecialTruckDestinationRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { truckNo: string; destination: string; extraLiters: number }) =>
+      adminAPI.addSpecialTruckDestinationRule(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to add special truck destination rule:', error);
+    },
+  });
+}
+
+export function useDeleteSpecialTruckDestinationRule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { truckNo: string; destination: string }) =>
+      adminAPI.deleteSpecialTruckDestinationRule(data.truckNo, data.destination),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: truckBatchKeys.all });
+    },
+    onError: (error: any) => {
+      console.error('✗ Failed to delete special truck destination rule:', error);
+    },
+  });
+}
+
+function normalizeTruckKey(truckNo: string): string {
+  if (!truckNo) return '';
+  const cleaned = truckNo.replace(/\s+/g, '').toUpperCase();
+  const match = cleaned.match(/^T?(\d+)([A-Z]+)$/);
+  if (match) return `T${match[1]} ${match[2]}`;
+  const spaceMatch = truckNo.toUpperCase().match(/^T?(\d+)\s+([A-Z]+)$/);
+  if (spaceMatch) return `T${spaceMatch[1]} ${spaceMatch[2]}`;
+  return truckNo.replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
 /**
  * Helper function to get extra fuel from batches data.
- * Priority: truck-level rule → batch-level rule → batch default.
+ * Priority: special truck → truck-level rule → batch-level rule → batch default.
  */
 export function getExtraFuelFromBatches(
   truckNo: string,
   batches: TruckBatches | undefined,
   destination?: string,
-  batchDestinationRules?: { [extraLiters: string]: BatchDestinationRule[] }
+  batchDestinationRules?: { [extraLiters: string]: BatchDestinationRule[] },
+  specialTrucks?: Array<{
+    truckNo: string;
+    extraLiters: number;
+    linkedBatchLiters?: number | null;
+    destinationRules?: BatchDestinationRule[];
+  }>
 ): {
   extraFuel: number;
   matched: boolean;
   batchName?: string;
   truckSuffix: string;
   destinationOverride?: boolean;
+  specialTruck?: boolean;
 } {
+  const truckSuffix = truckNo.toLowerCase().split(' ').pop() || '';
+
+  if (specialTrucks && specialTrucks.length > 0) {
+    const key = normalizeTruckKey(truckNo);
+    const special = specialTrucks.find((t) => normalizeTruckKey(t.truckNo) === key);
+    if (special) {
+      if (destination) {
+        const normalizedDest = destination.toLowerCase().trim();
+        const ownRule = special.destinationRules?.find((rule) => {
+          const ruleDestination = rule.destination.toLowerCase().trim();
+          return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
+        });
+        if (ownRule) {
+          return {
+            extraFuel: ownRule.extraLiters,
+            matched: true,
+            batchName: 'special_truck',
+            truckSuffix,
+            destinationOverride: true,
+            specialTruck: true,
+          };
+        }
+        if (special.linkedBatchLiters != null && batchDestinationRules) {
+          const linkedRules = batchDestinationRules[String(special.linkedBatchLiters)];
+          const linkedRule = linkedRules?.find((rule) => {
+            const ruleDestination = rule.destination.toLowerCase().trim();
+            return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
+          });
+          if (linkedRule) {
+            return {
+              extraFuel: linkedRule.extraLiters,
+              matched: true,
+              batchName: `special_linked_batch_${special.linkedBatchLiters}`,
+              truckSuffix,
+              destinationOverride: true,
+              specialTruck: true,
+            };
+          }
+        }
+      }
+      return {
+        extraFuel: special.extraLiters,
+        matched: true,
+        batchName: 'special_truck',
+        truckSuffix,
+        specialTruck: true,
+      };
+    }
+  }
+
   if (!batches) {
     return { extraFuel: 0, matched: false, truckSuffix: '' };
   }
-
-  const truckSuffix = truckNo.toLowerCase().split(' ').pop() || '';
 
   if (!truckSuffix) {
     return { extraFuel: 0, matched: false, truckSuffix: '' };
@@ -284,7 +428,6 @@ export function getExtraFuelFromBatches(
       if (destination) {
         const normalizedDest = destination.toLowerCase().trim();
 
-        // 1. Truck-level destination rules (highest priority)
         if (truck.destinationRules && truck.destinationRules.length > 0) {
           const matchingRule = truck.destinationRules.find((rule: any) => {
             const ruleDestination = rule.destination.toLowerCase().trim();
@@ -301,7 +444,6 @@ export function getExtraFuelFromBatches(
           }
         }
 
-        // 2. Batch-level destination rules (middle priority)
         const batchRules = batchDestinationRules?.[extraLitersStr];
         if (batchRules && batchRules.length > 0) {
           const matchingBatchRule = batchRules.find((rule) => {
@@ -320,7 +462,6 @@ export function getExtraFuelFromBatches(
         }
       }
 
-      // 3. Batch default
       return {
         extraFuel: parseInt(extraLitersStr),
         matched: true,

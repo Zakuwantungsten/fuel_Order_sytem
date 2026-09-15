@@ -307,7 +307,7 @@ const cascadeUpdateToFuelRecord = async (
     let extraBatchSuffix = '';
     let extraDestForMatch = '';
     if (needsExtraRematch) {
-      const { truckBatches, batchDestinationRules } = await loadFuelConfig();
+      const { truckBatches, batchDestinationRules, specialTrucks } = await loadFuelConfig();
       // Prefer the amended truck even if journey reassignment was a no-op.
       const truckForMatch = truckChanged
         ? formatTruckNumber(updatedData.truckNo) || String(fuelRecord.truckNo || '')
@@ -328,7 +328,8 @@ const cascadeUpdateToFuelRecord = async (
         truckForMatch,
         truckBatches,
         extraDestForMatch,
-        batchDestinationRules
+        batchDestinationRules,
+        specialTrucks
       );
       const rematchedExtra = batchMatch.matched ? batchMatch.extraFuel : null;
       extraBatchSuffix = (
@@ -1389,7 +1390,17 @@ type UnlinkedExportNotif = {
 };
 
 /** Load active routes + truck-batch config once. Shared by single + bulk paths. */
-const loadFuelConfig = async (): Promise<{ routes: RouteLike[]; truckBatches: Record<string, any>; batchDestinationRules: Record<string, any> }> => {
+const loadFuelConfig = async (): Promise<{
+  routes: RouteLike[];
+  truckBatches: Record<string, any>;
+  batchDestinationRules: Record<string, any>;
+  specialTrucks: Array<{
+    truckNo: string;
+    extraLiters: number;
+    linkedBatchLiters?: number | null;
+    destinationRules?: Array<{ destination: string; extraLiters: number }>;
+  }>;
+}> => {
   const { SystemConfig } = await import('../models/SystemConfig');
   const [routeDocs, batchConfig] = await Promise.all([
     RouteConfig.find({ isActive: true }).lean(),
@@ -1399,6 +1410,7 @@ const loadFuelConfig = async (): Promise<{ routes: RouteLike[]; truckBatches: Re
     routes: routeDocs as unknown as RouteLike[],
     truckBatches: (batchConfig?.truckBatches as Record<string, any>) || {},
     batchDestinationRules: (batchConfig?.batchDestinationRules as Record<string, any>) || {},
+    specialTrucks: (batchConfig?.specialTrucks as any[]) || [],
   };
 };
 
@@ -1413,6 +1425,13 @@ type FuelSideEffectOpts = {
    */
   linkYardFuel?: boolean;
   username?: string;
+  /** Special trucks (full-plate overrides) for extra-fuel matching */
+  specialTrucks?: Array<{
+    truckNo: string;
+    extraLiters: number;
+    linkedBatchLiters?: number | null;
+    destinationRules?: Array<{ destination: string; extraLiters: number }>;
+  }>;
 };
 
 /** Yard-fuel linking is best-effort and must run after a successful DO+fuel commit. */
@@ -1507,7 +1526,13 @@ const applyImportFuelRecords = async (
     const routeMatch = matchRouteLiters(routes, order.loadingPoint || '', order.destination);
     const totalLiters = routeMatch.matched ? routeMatch.liters : null;
 
-    const batchMatch = matchExtraFuel(order.truckNo, truckBatches, order.destination, batchDestinationRules);
+    const batchMatch = matchExtraFuel(
+      order.truckNo,
+      truckBatches,
+      order.destination,
+      batchDestinationRules,
+      opts.specialTrucks || []
+    );
     // Mirror the client: unmatched batch → null extra → record is locked
     const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
 
@@ -1783,9 +1808,10 @@ export const createDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           const order = deliveryOrder.toObject() as any;
 
           if (needsImportFuel) {
-            const { routes, truckBatches, batchDestinationRules: bdr } = await loadFuelConfig();
+            const { routes, truckBatches, batchDestinationRules: bdr, specialTrucks } =
+              await loadFuelConfig();
             const importResult = await applyImportFuelRecords(
-              [order], routes, truckBatches, username, bdr, { session },
+              [order], routes, truckBatches, username, bdr, { session, specialTrucks },
             );
             newFuelId = importResult.createdFuelIds[0];
             lockedNotifs = importResult.lockedNotifs;
@@ -1992,15 +2018,13 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
   let routes: RouteLike[] = [];
   let truckBatches: Record<string, any> = {};
   let batchDestinationRules: Record<string, any> = {};
+  let specialTrucks: any[] = [];
   if (needsAtomicFuel) {
-    const { SystemConfig } = await import('../models/SystemConfig');
-    const [routeDocs, batchConfig] = await Promise.all([
-      RouteConfig.find({ isActive: true }).lean(),
-      SystemConfig.findOne({ configType: 'truck_batches', isDeleted: false }).lean(),
-    ]);
-    routes = routeDocs as unknown as RouteLike[];
-    truckBatches = (batchConfig?.truckBatches as Record<string, any>) || {};
-    batchDestinationRules = (batchConfig?.batchDestinationRules as Record<string, any>) || {};
+    const cfg = await loadFuelConfig();
+    routes = cfg.routes;
+    truckBatches = cfg.truckBatches;
+    batchDestinationRules = cfg.batchDestinationRules;
+    specialTrucks = cfg.specialTrucks;
   }
 
   // When export fuel automation is ON, drop exports that cannot be linked before
@@ -2084,7 +2108,7 @@ export const createBulkDeliveryOrders = async (req: AuthRequest, res: Response):
 
         if (importDOs.length > 0 && fuelFlags.doImportCreate) {
           const importResult = await applyImportFuelRecords(
-            importDOs, routes, truckBatches, username, batchDestinationRules, { session },
+            importDOs, routes, truckBatches, username, batchDestinationRules, { session, specialTrucks },
           );
           queuedCount = importResult.queuedCount;
           lockedNotifs.push(...importResult.lockedNotifs);
@@ -2573,14 +2597,15 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
             // EXPORT → IMPORT always creates a new going fuel record, even when doImportCreate is off.
             const shouldCreateImport = fuelAutomationFlags.doImportCreate || flippedFromExport;
             if (shouldCreateImport) {
-              const { routes, truckBatches, batchDestinationRules: bdr } = await loadFuelConfig();
+              const { routes, truckBatches, batchDestinationRules: bdr, specialTrucks } =
+                await loadFuelConfig();
               const importResult = await applyImportFuelRecords(
                 [deliveryOrder.toObject()],
                 routes,
                 truckBatches,
                 username,
                 bdr,
-                { session }
+                { session, specialTrucks }
               );
               if (importResult.createdFuelIds.length > 0) {
                 cascadeResults.fuelRecordUpdated = true;
@@ -2723,7 +2748,8 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
               );
               amendCascadeSkipped = false;
             } else {
-              const { routes, truckBatches, batchDestinationRules: bdr } = await loadFuelConfig();
+              const { routes, truckBatches, batchDestinationRules: bdr, specialTrucks } =
+                await loadFuelConfig();
               const routeMatch = matchRouteLiters(
                 routes,
                 deliveryOrder.loadingPoint || '',
@@ -2734,7 +2760,8 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
                 deliveryOrder.truckNo,
                 truckBatches,
                 deliveryOrder.destination,
-                bdr
+                bdr,
+                specialTrucks
               );
               const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
               const promoted = await promotePendingGoingToImport(
@@ -5872,7 +5899,7 @@ export const mergeDeliveryOrderToPending = async (req: AuthRequest, res: Respons
     }
 
     const pendingDo = kind === 'going' ? String(pending.goingDo || '') : String(pending.returnDo || '');
-    const { routes, truckBatches, batchDestinationRules } = await loadFuelConfig();
+    const { routes, truckBatches, batchDestinationRules, specialTrucks } = await loadFuelConfig();
 
     if (kind === 'going') {
       const source = await FuelRecord.findOne({
@@ -5924,7 +5951,8 @@ export const mergeDeliveryOrderToPending = async (req: AuthRequest, res: Respons
         deliveryOrder.truckNo,
         truckBatches,
         deliveryOrder.destination,
-        batchDestinationRules
+        batchDestinationRules,
+        specialTrucks
       );
       const extraFuel = batchMatch.matched ? batchMatch.extraFuel : null;
       const promoted = await promotePendingGoingToImport(

@@ -32,6 +32,21 @@ export interface ITruckBatch {
   addedAt: Date;
 }
 
+/**
+ * Special truck: matched by full plate number (not suffix).
+ * Used when a truck gets a different plate suffix from its purchase group
+ * but still needs custom extra liters (+ optional linked-batch dest rules).
+ */
+export interface ISpecialTruck {
+  truckNo: string; // Full plate, normalized e.g. "T103 XYZ"
+  extraLiters: number; // Special default extra fuel
+  linkedBatchLiters?: number | null; // Inherit that batch's batchDestinationRules
+  destinationRules?: IDestinationFuelRule[]; // Own destination overrides
+  notes?: string;
+  addedBy: string;
+  addedAt: Date;
+}
+
 // Per-yard time limit setting
 export interface IYardTimeLimitSetting {
   enabled: boolean;
@@ -269,6 +284,7 @@ export interface ISystemConfig {
   batchDestinationRules?: {
     [extraLiters: string]: IDestinationFuelRule[];  // Batch-level destination overrides
   };
+  specialTrucks?: ISpecialTruck[];
   standardAllocations?: IStandardAllocations;
   journeyConfig?: IJourneyConfig;
   yardFuelTimeLimit?: IYardFuelTimeLimitConfig;
@@ -322,6 +338,19 @@ const truckBatchSchema = new Schema<ITruckBatch>(
   { _id: false }
 );
 
+const specialTruckSchema = new Schema<ISpecialTruck>(
+  {
+    truckNo: { type: String, required: true },
+    extraLiters: { type: Number, required: true, min: 0, max: 10000 },
+    linkedBatchLiters: { type: Number, min: 0, max: 10000, default: null },
+    destinationRules: [destinationFuelRuleSchema],
+    notes: { type: String },
+    addedBy: { type: String, required: true },
+    addedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const standardAllocationsSchema = new Schema<IStandardAllocations>(
   {
     mmsaYard: { type: Number, default: 0 },
@@ -361,6 +390,10 @@ const systemConfigSchema = new Schema<ISystemConfigDocument>(
     batchDestinationRules: {
       type: Schema.Types.Mixed,  // Allow dynamic keys: { "120": [{destination, extraLiters}] }
       default: {},
+    },
+    specialTrucks: {
+      type: [specialTruckSchema],
+      default: [],
     },
     standardAllocations: standardAllocationsSchema,
     journeyConfig: {

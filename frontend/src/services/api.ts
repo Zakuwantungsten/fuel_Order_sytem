@@ -2061,9 +2061,23 @@ export interface BatchDestinationRule {
   extraLiters: number;
 }
 
+export interface SpecialTruck {
+  truckNo: string;
+  extraLiters: number;
+  linkedBatchLiters?: number | null;
+  destinationRules?: {
+    destination: string;
+    extraLiters: number;
+  }[];
+  notes?: string;
+  addedBy: string;
+  addedAt: string;
+}
+
 export interface TruckBatchConfig {
   truckBatches: TruckBatches;
   batchDestinationRules: { [extraLiters: string]: BatchDestinationRule[] };
+  specialTrucks?: SpecialTruck[];
 }
 
 export interface StandardAllocations {
@@ -2207,9 +2221,15 @@ export const adminAPI = {
   getTruckBatches: async (): Promise<TruckBatchConfig> => {
     const response = await apiClient.get('/config/truck-batches');
     const raw = response.data.data || {};
-    // Normalise: old API returned just the truckBatches map; new API returns { truckBatches, batchDestinationRules }
-    if (raw.truckBatches !== undefined) return raw as TruckBatchConfig;
-    return { truckBatches: raw, batchDestinationRules: {} };
+    // Normalise: old API returned just the truckBatches map; new API returns full config
+    if (raw.truckBatches !== undefined) {
+      return {
+        truckBatches: raw.truckBatches || {},
+        batchDestinationRules: raw.batchDestinationRules || {},
+        specialTrucks: raw.specialTrucks || [],
+      };
+    }
+    return { truckBatches: raw, batchDestinationRules: {}, specialTrucks: [] };
   },
 
   // Create new batch with custom liters
@@ -2289,6 +2309,53 @@ export const adminAPI = {
 
   deleteBatchDestinationRule: async (extraLiters: number, destination: string): Promise<TruckBatchConfig> => {
     const response = await apiClient.delete(`/admin/truck-batches/batch-destination-rules/${extraLiters}/${destination}`);
+    return response.data.data;
+  },
+
+  // Special trucks (full-plate overrides)
+  addSpecialTruck: async (data: {
+    truckNo: string;
+    extraLiters: number;
+    linkedBatchLiters?: number | null;
+    notes?: string;
+  }): Promise<TruckBatchConfig> => {
+    const response = await apiClient.post('/admin/truck-batches/special-trucks', data);
+    return response.data.data;
+  },
+
+  updateSpecialTruck: async (data: {
+    truckNo: string;
+    extraLiters?: number;
+    linkedBatchLiters?: number | null;
+    notes?: string;
+  }): Promise<TruckBatchConfig> => {
+    const response = await apiClient.put('/admin/truck-batches/special-trucks', data);
+    return response.data.data;
+  },
+
+  removeSpecialTruck: async (truckNo: string): Promise<TruckBatchConfig> => {
+    const response = await apiClient.delete(
+      `/admin/truck-batches/special-trucks/${encodeURIComponent(truckNo)}`
+    );
+    return response.data.data;
+  },
+
+  addSpecialTruckDestinationRule: async (data: {
+    truckNo: string;
+    destination: string;
+    extraLiters: number;
+  }): Promise<TruckBatchConfig> => {
+    const response = await apiClient.post('/admin/truck-batches/special-trucks/destination-rules', data);
+    return response.data.data;
+  },
+
+  deleteSpecialTruckDestinationRule: async (
+    truckNo: string,
+    destination: string
+  ): Promise<TruckBatchConfig> => {
+    const response = await apiClient.delete(
+      `/admin/truck-batches/special-trucks/${encodeURIComponent(truckNo)}/destination-rules/${encodeURIComponent(destination)}`
+    );
     return response.data.data;
   },
 

@@ -13,11 +13,16 @@ import {
   useDeleteBatch,
   useAddBatchDestinationRule,
   useDeleteBatchDestinationRule,
+  useAddSpecialTruck,
+  useRemoveSpecialTruck,
+  useAddSpecialTruckDestinationRule,
+  useDeleteSpecialTruckDestinationRule,
   truckBatchKeys,
 } from '../hooks/useTruckBatches';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
+import type { SpecialTruck } from '../services/api';
 
 interface DestinationRule {
   destination: string;
@@ -44,6 +49,10 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
   const deleteBatchMutation = useDeleteBatch();
   const addBatchRuleMutation = useAddBatchDestinationRule();
   const deleteBatchRuleMutation = useDeleteBatchDestinationRule();
+  const addSpecialTruckMutation = useAddSpecialTruck();
+  const removeSpecialTruckMutation = useRemoveSpecialTruck();
+  const addSpecialRuleMutation = useAddSpecialTruckDestinationRule();
+  const deleteSpecialRuleMutation = useDeleteSpecialTruckDestinationRule();
 
   // Real-time sync: refresh when other users modify truck batches
   const invalidateBatches = useCallback(() => {
@@ -60,6 +69,25 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
   const [newBatchLiters, setNewBatchLiters] = useState<number>(0);
   const [showEditBatchModal, setShowEditBatchModal] = useState(false);
   const [editingBatch, setEditingBatch] = useState<{ extraLiters: number; trucks: any[] } | null>(null);
+
+  // Special trucks (full-plate overrides)
+  const [showAddSpecialModal, setShowAddSpecialModal] = useState(false);
+  const [newSpecial, setNewSpecial] = useState({
+    truckNo: '',
+    extraLiters: 100,
+    linkedBatchLiters: '' as string | number,
+    notes: '',
+  });
+  const [showSpecialRulesModal, setShowSpecialRulesModal] = useState(false);
+  const [selectedSpecial, setSelectedSpecial] = useState<{
+    truckNo: string;
+    extraLiters: number;
+    linkedBatchLiters?: number | null;
+    rules: DestinationRule[];
+  } | null>(null);
+  const [newSpecialRule, setNewSpecialRule] = useState({ destination: '', extraLiters: 0 });
+  const [deleteSpecialTarget, setDeleteSpecialTarget] = useState<string | null>(null);
+  const [deleteSpecialRuleTarget, setDeleteSpecialRuleTarget] = useState<string | null>(null);
   
   // Open Add Truck modal with pre-filled suffix when navigated from a notification
   useEffect(() => {
@@ -336,6 +364,102 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
     }
   };
 
+  const handleAddSpecialTruck = async () => {
+    const truckNo = newSpecial.truckNo.trim();
+    if (!truckNo) {
+      toast.error('Please enter the full truck number (e.g. T103 XYZ)');
+      return;
+    }
+    if (newSpecial.extraLiters <= 0) {
+      toast.error('Extra liters must be greater than 0');
+      return;
+    }
+    try {
+      const linked =
+        newSpecial.linkedBatchLiters === '' || newSpecial.linkedBatchLiters === null
+          ? null
+          : Number(newSpecial.linkedBatchLiters);
+      await addSpecialTruckMutation.mutateAsync({
+        truckNo,
+        extraLiters: Number(newSpecial.extraLiters),
+        linkedBatchLiters: linked,
+        notes: newSpecial.notes.trim() || undefined,
+      });
+      setShowAddSpecialModal(false);
+      setNewSpecial({ truckNo: '', extraLiters: 100, linkedBatchLiters: '', notes: '' });
+      toast.success(`Special truck ${truckNo.toUpperCase()} added`);
+    } catch (error: any) {
+      toast.error(`Failed to add special truck: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const confirmDeleteSpecial = async () => {
+    if (!deleteSpecialTarget) return;
+    try {
+      await removeSpecialTruckMutation.mutateAsync(deleteSpecialTarget);
+      toast.success(`Special truck ${deleteSpecialTarget} removed`);
+    } catch (error: any) {
+      toast.error(`Failed to remove: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setDeleteSpecialTarget(null);
+    }
+  };
+
+  const handleManageSpecialRules = (truck: SpecialTruck) => {
+    setSelectedSpecial({
+      truckNo: truck.truckNo,
+      extraLiters: truck.extraLiters,
+      linkedBatchLiters: truck.linkedBatchLiters,
+      rules: [...(truck.destinationRules || [])],
+    });
+    setNewSpecialRule({ destination: '', extraLiters: truck.extraLiters });
+    setShowSpecialRulesModal(true);
+  };
+
+  const handleAddSpecialRule = async () => {
+    if (!selectedSpecial || !newSpecialRule.destination.trim()) {
+      toast.error('Please enter a destination');
+      return;
+    }
+    try {
+      await addSpecialRuleMutation.mutateAsync({
+        truckNo: selectedSpecial.truckNo,
+        destination: newSpecialRule.destination.trim(),
+        extraLiters: newSpecialRule.extraLiters,
+      });
+      setSelectedSpecial({
+        ...selectedSpecial,
+        rules: [
+          ...selectedSpecial.rules,
+          { destination: newSpecialRule.destination.trim(), extraLiters: newSpecialRule.extraLiters },
+        ],
+      });
+      setNewSpecialRule({ destination: '', extraLiters: selectedSpecial.extraLiters });
+      toast.success('Destination rule added');
+    } catch (error: any) {
+      toast.error(`Failed to add rule: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const confirmDeleteSpecialRule = async () => {
+    if (!selectedSpecial || !deleteSpecialRuleTarget) return;
+    const destination = deleteSpecialRuleTarget;
+    try {
+      await deleteSpecialRuleMutation.mutateAsync({
+        truckNo: selectedSpecial.truckNo,
+        destination,
+      });
+      setSelectedSpecial({
+        ...selectedSpecial,
+        rules: selectedSpecial.rules.filter((r) => r.destination !== destination),
+      });
+    } catch (error: any) {
+      toast.error(`Failed to delete rule: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setDeleteSpecialRuleTarget(null);
+    }
+  };
+
   const filterTrucks = (trucks: any[]) => {
     if (!searchQuery) return trucks;
     return trucks.filter(t => {
@@ -359,6 +483,17 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
 
   // Sort by extraLiters descending
   batchList.sort((a, b) => b.extraLiters - a.extraLiters);
+
+  const specialTrucks: SpecialTruck[] = batchConfig?.specialTrucks || [];
+  const filteredSpecialTrucks = specialTrucks.filter((t) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      t.truckNo.toLowerCase().includes(q) ||
+      String(t.extraLiters).includes(q) ||
+      (t.notes || '').toLowerCase().includes(q)
+    );
+  });
 
   const totalTrucks = batchList.reduce((sum, batch) => sum + batch.count, 0);
 
@@ -547,6 +682,13 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowAddSpecialModal(true)}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Special Truck
+            </button>
+            <button
               onClick={() => setShowAddTruckModal(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
@@ -564,7 +706,7 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
         </div>
 
         {/* Dynamic Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mt-4">
           <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
             <p className="text-xs text-gray-600 dark:text-gray-400">Total Batches</p>
             <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{batchList.length}</p>
@@ -572,6 +714,10 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
           <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
             <p className="text-xs text-gray-600 dark:text-gray-400">Total Trucks</p>
             <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{totalTrucks}</p>
+          </div>
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 rounded-lg p-3">
+            <p className="text-xs text-amber-700 dark:text-amber-300">Special Trucks</p>
+            <p className="text-xl font-bold text-amber-900 dark:text-amber-100">{specialTrucks.length}</p>
           </div>
           {batchList.slice(0, 2).map((batch) => (
             <div
@@ -601,6 +747,70 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
 
       {/* Dynamic Batches Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Special trucks card */}
+        <div className="bg-white dark:bg-gray-800 border-2 border-amber-200 dark:border-amber-800/60 rounded-xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-amber-100 dark:border-amber-900/40 bg-amber-50/80 dark:bg-amber-900/20 flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-base font-bold text-amber-900 dark:text-amber-100">Special Trucks</h3>
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                Full plate overrides · {specialTrucks.length} truck{specialTrucks.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAddSpecialModal(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 rounded-md"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add
+            </button>
+          </div>
+          <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
+            {filteredSpecialTrucks.length === 0 ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-3">
+                {searchQuery ? 'No matching special trucks' : 'No special trucks yet'}
+              </p>
+            ) : (
+              filteredSpecialTrucks.map((truck) => (
+                <div
+                  key={truck.truckNo}
+                  className="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/40 rounded-lg p-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">
+                        {truck.truckNo}
+                      </span>
+                      <div className="text-xs text-amber-700 dark:text-amber-300">
+                        {truck.extraLiters}L
+                        {truck.linkedBatchLiters != null ? ` · linked ${truck.linkedBatchLiters}L batch` : ''}
+                        {(truck.destinationRules?.length || 0) > 0
+                          ? ` · ${truck.destinationRules!.length} rule${truck.destinationRules!.length !== 1 ? 's' : ''}`
+                          : ''}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => handleManageSpecialRules(truck)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/40 rounded-md"
+                      >
+                        <MapPin className="w-3 h-3" />
+                        Rules
+                      </button>
+                      <button
+                        onClick={() => setDeleteSpecialTarget(truck.truckNo)}
+                        className={deleteButtonClass}
+                        title="Remove special truck"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
         {batchList.map((batch) => renderBatchCard(batch.extraLiters, batch.trucks))}
       </div>
 
@@ -1161,6 +1371,210 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
         onConfirm={confirmDeleteBatchRule}
         onCancel={() => setDeleteBatchRuleTarget(null)}
       />
+      <ConfirmModal
+        open={deleteSpecialTarget !== null}
+        title="Remove Special Truck"
+        message={
+          deleteSpecialTarget
+            ? `Remove special truck "${deleteSpecialTarget}"? Fuel matching will fall back to suffix batches.`
+            : ''
+        }
+        confirmLabel="Remove"
+        variant="danger"
+        loading={removeSpecialTruckMutation.isPending}
+        onConfirm={confirmDeleteSpecial}
+        onCancel={() => setDeleteSpecialTarget(null)}
+      />
+      <ConfirmModal
+        open={deleteSpecialRuleTarget !== null}
+        title="Remove Special Rule"
+        message={
+          deleteSpecialRuleTarget
+            ? `Remove the destination rule for "${deleteSpecialRuleTarget}" on this special truck?`
+            : ''
+        }
+        confirmLabel="Remove"
+        variant="danger"
+        loading={deleteSpecialRuleMutation.isPending}
+        onConfirm={confirmDeleteSpecialRule}
+        onCancel={() => setDeleteSpecialRuleTarget(null)}
+      />
+
+      {/* Add Special Truck Modal */}
+      {showAddSpecialModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Add Special Truck</h2>
+              <button onClick={() => setShowAddSpecialModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Full truck number
+                </label>
+                <input
+                  type="text"
+                  value={newSpecial.truckNo}
+                  onChange={(e) => setNewSpecial({ ...newSpecial, truckNo: e.target.value })}
+                  placeholder="e.g. T103 XYZ"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Extra liters
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={newSpecial.extraLiters || ''}
+                  onChange={(e) =>
+                    setNewSpecial({ ...newSpecial, extraLiters: parseInt(e.target.value) || 0 })
+                  }
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Link batch (inherit batch destination rules)
+                </label>
+                <select
+                  value={newSpecial.linkedBatchLiters === '' ? '' : String(newSpecial.linkedBatchLiters)}
+                  onChange={(e) =>
+                    setNewSpecial({
+                      ...newSpecial,
+                      linkedBatchLiters: e.target.value === '' ? '' : Number(e.target.value),
+                    })
+                  }
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100"
+                >
+                  <option value="">None</option>
+                  {batchList.map((b) => (
+                    <option key={b.extraLiters} value={b.extraLiters}>
+                      {b.extraLiters}L batch
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Notes (optional)
+                </label>
+                <input
+                  type="text"
+                  value={newSpecial.notes}
+                  onChange={(e) => setNewSpecial({ ...newSpecial, notes: e.target.value })}
+                  placeholder="e.g. late plate from 100L purchase group"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100"
+                />
+              </div>
+            </div>
+            <div className="p-5 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+              <button
+                onClick={() => setShowAddSpecialModal(false)}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddSpecialTruck}
+                disabled={addSpecialTruckMutation.isPending}
+                className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+              >
+                {addSpecialTruckMutation.isPending ? 'Adding…' : 'Add Special Truck'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Special truck destination rules modal */}
+      {showSpecialRulesModal && selectedSpecial && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    Destination Rules for {selectedSpecial.truckNo}
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Default: {selectedSpecial.extraLiters}L
+                    {selectedSpecial.linkedBatchLiters != null
+                      ? ` · inherits ${selectedSpecial.linkedBatchLiters}L batch rules when no own rule`
+                      : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowSpecialRulesModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newSpecialRule.destination}
+                  onChange={(e) =>
+                    setNewSpecialRule({ ...newSpecialRule, destination: e.target.value })
+                  }
+                  placeholder="Destination"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={newSpecialRule.extraLiters || ''}
+                  onChange={(e) =>
+                    setNewSpecialRule({
+                      ...newSpecialRule,
+                      extraLiters: parseInt(e.target.value) || 0,
+                    })
+                  }
+                  className="w-24 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-gray-100"
+                />
+                <button
+                  onClick={handleAddSpecialRule}
+                  disabled={addSpecialRuleMutation.isPending}
+                  className="px-3 py-2 text-sm bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50"
+                >
+                  Add
+                </button>
+              </div>
+              {selectedSpecial.rules.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                  No own destination rules yet
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {selectedSpecial.rules.map((rule) => (
+                    <div
+                      key={rule.destination}
+                      className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2"
+                    >
+                      <span className="text-sm text-gray-900 dark:text-gray-100">
+                        {rule.destination} → <strong>{rule.extraLiters}L</strong>
+                      </span>
+                      <button
+                        onClick={() => setDeleteSpecialRuleTarget(rule.destination)}
+                        className={deleteButtonClass}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

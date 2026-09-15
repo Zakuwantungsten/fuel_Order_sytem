@@ -33,6 +33,42 @@ export type TruckBatchesMap = Record<string, TruckBatchEntry[] | unknown>;
 /** batch-level destination rules map: { "100": [{destination, extraLiters}], ... } */
 export type BatchDestinationRulesMap = Record<string, Array<{ destination: string; extraLiters: number }> | unknown>;
 
+/** Special trucks matched by full plate number */
+export interface SpecialTruckEntry {
+  truckNo: string;
+  extraLiters: number;
+  linkedBatchLiters?: number | null;
+  destinationRules?: Array<{ destination: string; extraLiters: number }>;
+}
+
+/**
+ * Normalize a truck plate for special-truck exact matching.
+ * Mirrors formatTruckNumber: "t103xyz" → "T103 XYZ".
+ */
+export function normalizeTruckKey(truckNo: string | undefined | null): string {
+  if (!truckNo || typeof truckNo !== 'string') return '';
+  const cleaned = truckNo.replace(/\s+/g, '').toUpperCase();
+  const match = cleaned.match(/^T?(\d+)([A-Z]+)$/);
+  if (match) return `T${match[1]} ${match[2]}`;
+  const spaceMatch = truckNo.toUpperCase().match(/^T?(\d+)\s+([A-Z]+)$/);
+  if (spaceMatch) return `T${spaceMatch[1]} ${spaceMatch[2]}`;
+  return truckNo.replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function matchDestinationRule(
+  rules: Array<{ destination: string; extraLiters: number }> | undefined,
+  destination: string
+): { destination: string; extraLiters: number } | null {
+  if (!rules?.length || !destination) return null;
+  const normalizedDest = destination.toLowerCase().trim();
+  return (
+    rules.find((rule) => {
+      const ruleDestination = rule.destination.toLowerCase().trim();
+      return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
+    }) || null
+  );
+}
+
 export interface DeliveryOrderLike {
   date: string;
   truckNo: string;
@@ -118,17 +154,83 @@ export function matchRouteLiters(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Extra fuel matching — ports getExtraFuelFromBatches()
-// Dynamic batch search by truck suffix + optional destination overrides.
+// Priority:
+//   0. Special truck (full plate) → own dest rules → linked batch dest rules → special default
+//   1. Suffix truck destination rules
+//   2. Batch destination rules
+//   3. Batch default
 // ─────────────────────────────────────────────────────────────────────────────
 export function matchExtraFuel(
   truckNo: string,
   batches: TruckBatchesMap | undefined,
   destination?: string,
-  batchDestinationRules?: BatchDestinationRulesMap
-): { extraFuel: number; matched: boolean; batchName?: string; truckSuffix: string; destinationOverride?: boolean } {
-  if (!batches) return { extraFuel: 0, matched: false, truckSuffix: '' };
-
+  batchDestinationRules?: BatchDestinationRulesMap,
+  specialTrucks?: SpecialTruckEntry[] | null
+): {
+  extraFuel: number;
+  matched: boolean;
+  batchName?: string;
+  truckSuffix: string;
+  destinationOverride?: boolean;
+  specialTruck?: boolean;
+} {
   const truckSuffix = (truckNo || '').toLowerCase().split(' ').pop() || '';
+
+  // 0. Special truck — exact full-plate match
+  if (specialTrucks && specialTrucks.length > 0) {
+    const key = normalizeTruckKey(truckNo);
+    if (key) {
+      const special = specialTrucks.find((t) => normalizeTruckKey(t.truckNo) === key);
+      if (special) {
+        if (destination) {
+          const ownRule = matchDestinationRule(special.destinationRules, destination);
+          if (ownRule) {
+            return {
+              extraFuel: ownRule.extraLiters,
+              matched: true,
+              batchName: 'special_truck',
+              truckSuffix,
+              destinationOverride: true,
+              specialTruck: true,
+            };
+          }
+          if (
+            special.linkedBatchLiters != null &&
+            special.linkedBatchLiters !== undefined &&
+            batchDestinationRules
+          ) {
+            const linkedKey = String(special.linkedBatchLiters);
+            const linkedRules = batchDestinationRules[linkedKey];
+            if (Array.isArray(linkedRules)) {
+              const linkedRule = matchDestinationRule(
+                linkedRules as Array<{ destination: string; extraLiters: number }>,
+                destination
+              );
+              if (linkedRule) {
+                return {
+                  extraFuel: linkedRule.extraLiters,
+                  matched: true,
+                  batchName: `special_linked_batch_${linkedKey}`,
+                  truckSuffix,
+                  destinationOverride: true,
+                  specialTruck: true,
+                };
+              }
+            }
+          }
+        }
+        return {
+          extraFuel: special.extraLiters,
+          matched: true,
+          batchName: 'special_truck',
+          truckSuffix,
+          specialTruck: true,
+        };
+      }
+    }
+  }
+
+  if (!batches) return { extraFuel: 0, matched: false, truckSuffix };
   if (!truckSuffix) return { extraFuel: 0, matched: false, truckSuffix: '' };
 
   for (const [extraLitersStr, trucks] of Object.entries(batches)) {
@@ -137,33 +239,26 @@ export function matchExtraFuel(
     const truck = (trucks as TruckBatchEntry[]).find((t) => t.truckSuffix === truckSuffix);
     if (truck) {
       if (destination) {
-        const normalizedDest = destination.toLowerCase().trim();
-
-        // 1. Truck-level destination rules (highest priority)
-        if (truck.destinationRules && truck.destinationRules.length > 0) {
-          const matchingRule = truck.destinationRules.find((rule) => {
-            const ruleDestination = rule.destination.toLowerCase().trim();
-            return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
-          });
-          if (matchingRule) {
-            return {
-              extraFuel: matchingRule.extraLiters,
-              matched: true,
-              batchName: `batch_${extraLitersStr}`,
-              truckSuffix,
-              destinationOverride: true,
-            };
-          }
+        // 1. Truck-level destination rules (highest priority among suffix matches)
+        const matchingRule = matchDestinationRule(truck.destinationRules, destination);
+        if (matchingRule) {
+          return {
+            extraFuel: matchingRule.extraLiters,
+            matched: true,
+            batchName: `batch_${extraLitersStr}`,
+            truckSuffix,
+            destinationOverride: true,
+          };
         }
 
         // 2. Batch-level destination rules (middle priority)
         if (batchDestinationRules) {
           const batchRules = batchDestinationRules[extraLitersStr];
-          if (Array.isArray(batchRules) && batchRules.length > 0) {
-            const matchingBatchRule = batchRules.find((rule) => {
-              const ruleDestination = rule.destination.toLowerCase().trim();
-              return normalizedDest.includes(ruleDestination) || ruleDestination.includes(normalizedDest);
-            });
+          if (Array.isArray(batchRules)) {
+            const matchingBatchRule = matchDestinationRule(
+              batchRules as Array<{ destination: string; extraLiters: number }>,
+              destination
+            );
             if (matchingBatchRule) {
               return {
                 extraFuel: matchingBatchRule.extraLiters,
@@ -178,7 +273,12 @@ export function matchExtraFuel(
       }
 
       // 3. Batch default (lowest priority)
-      return { extraFuel: parseInt(extraLitersStr, 10), matched: true, batchName: `batch_${extraLitersStr}`, truckSuffix };
+      return {
+        extraFuel: parseInt(extraLitersStr, 10),
+        matched: true,
+        batchName: `batch_${extraLitersStr}`,
+        truckSuffix,
+      };
     }
   }
 

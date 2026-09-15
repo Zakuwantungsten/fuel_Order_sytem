@@ -217,6 +217,60 @@ router.delete(
   asyncHandler(adminController.deleteBatchDestinationRule)
 );
 
+// Special trucks (full-plate overrides)
+router.post(
+  '/truck-batches/special-trucks',
+  [
+    body('truckNo').notEmpty().withMessage('Truck number is required'),
+    body('extraLiters').isNumeric().isInt({ min: 0, max: 10000 })
+      .withMessage('Extra liters must be between 0 and 10000'),
+    body('linkedBatchLiters').optional({ nullable: true }),
+    body('notes').optional().isString(),
+  ],
+  validate,
+  asyncHandler(adminController.addSpecialTruck)
+);
+
+router.put(
+  '/truck-batches/special-trucks',
+  [
+    body('truckNo').notEmpty().withMessage('Truck number is required'),
+    body('extraLiters').optional().isNumeric().isInt({ min: 0, max: 10000 }),
+    body('linkedBatchLiters').optional({ nullable: true }),
+    body('notes').optional().isString(),
+  ],
+  validate,
+  asyncHandler(adminController.updateSpecialTruck)
+);
+
+router.delete(
+  '/truck-batches/special-trucks/:truckNo',
+  [param('truckNo').notEmpty().withMessage('Truck number is required')],
+  validate,
+  asyncHandler(adminController.removeSpecialTruck)
+);
+
+router.post(
+  '/truck-batches/special-trucks/destination-rules',
+  [
+    body('truckNo').notEmpty().withMessage('Truck number is required'),
+    body('destination').notEmpty().withMessage('Destination is required'),
+    body('extraLiters').isNumeric().withMessage('Extra liters must be a number'),
+  ],
+  validate,
+  asyncHandler(adminController.addSpecialTruckDestinationRule)
+);
+
+router.delete(
+  '/truck-batches/special-trucks/:truckNo/destination-rules/:destination',
+  [
+    param('truckNo').notEmpty().withMessage('Truck number is required'),
+    param('destination').notEmpty().withMessage('Destination is required'),
+  ],
+  validate,
+  asyncHandler(adminController.deleteSpecialTruckDestinationRule)
+);
+
 // =====================
 // Standard Allocations
 // =====================

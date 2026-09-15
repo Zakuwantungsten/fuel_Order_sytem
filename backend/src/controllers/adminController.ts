@@ -5,6 +5,8 @@ import { DEFAULT_FUEL_AUTOMATION, IFuelAutomationConfig } from '../models/System
 import { ApiError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils';
+import { formatTruckNumber } from '../utils/formatters';
+import { normalizeTruckKey } from '../utils/fuelRecordCalculator';
 import { databaseMonitor } from '../utils/databaseMonitor';
 import { AuditService } from '../utils/auditService';
 import emailService from '../services/emailService';
@@ -29,6 +31,15 @@ function setCacheBustingHeaders(res: Response): void {
     'Expires': '0',
     'X-Config-Updated': new Date().toISOString(),
   });
+}
+
+/** Consistent truck-batches API payload (includes special trucks). */
+function truckBatchesPayload(config: any) {
+  return {
+    truckBatches: config.truckBatches || {},
+    batchDestinationRules: config.batchDestinationRules || {},
+    specialTrucks: config.specialTrucks || [],
+  };
 }
 
 // Default configurations
@@ -520,6 +531,7 @@ export const getTruckBatches = async (req: AuthRequest, res: Response): Promise<
       data: {
         truckBatches: config.truckBatches || {},
         batchDestinationRules: config.batchDestinationRules || {},
+        specialTrucks: config.specialTrucks || [],
       },
     });
   } catch (error: any) {
@@ -1010,6 +1022,16 @@ export const updateBatch = async (req: AuthRequest, res: Response): Promise<void
     config.batchDestinationRules[newKey] = config.batchDestinationRules[oldKey] || [];
     delete config.batchDestinationRules[oldKey];
 
+    // Keep special trucks linked to this batch in sync
+    if (Array.isArray(config.specialTrucks)) {
+      for (const st of config.specialTrucks) {
+        if (Number(st.linkedBatchLiters) === Number(oldExtraLiters)) {
+          st.linkedBatchLiters = newExtraLiters;
+        }
+      }
+      config.markModified('specialTrucks');
+    }
+
     config.markModified('truckBatches');
     config.markModified('batchDestinationRules');
     config.lastUpdatedBy = req.user?.username || 'system';
@@ -1076,6 +1098,15 @@ export const deleteBatch = async (req: AuthRequest, res: Response): Promise<void
     if (config.batchDestinationRules) {
       delete config.batchDestinationRules[batchKey];
       config.markModified('batchDestinationRules');
+    }
+    // Clear links from special trucks that inherited this batch's rules
+    if (Array.isArray(config.specialTrucks)) {
+      for (const st of config.specialTrucks) {
+        if (Number(st.linkedBatchLiters) === Number(extraLiters)) {
+          st.linkedBatchLiters = null;
+        }
+      }
+      config.markModified('specialTrucks');
     }
     config.markModified('truckBatches');
     config.lastUpdatedBy = req.user?.username || 'system';
@@ -1264,6 +1295,323 @@ export const deleteBatchDestinationRule = async (req: AuthRequest, res: Response
       success: true,
       message: 'Batch destination rule deleted successfully',
       data: { truckBatches: config.truckBatches, batchDestinationRules: config.batchDestinationRules },
+    });
+    emitDataChange('truck_batches', 'update');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+// ─── Special trucks (full-plate overrides) ───────────────────────────────────
+
+/**
+ * Add a special truck matched by full plate number.
+ * POST /admin/truck-batches/special-trucks
+ */
+export const addSpecialTruck = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckNo, extraLiters, linkedBatchLiters, notes } = req.body;
+
+    if (!truckNo || extraLiters === undefined) {
+      throw new ApiError(400, 'Missing required fields: truckNo, extraLiters');
+    }
+    if (extraLiters < 0 || extraLiters > 10000) {
+      throw new ApiError(400, 'extraLiters must be between 0 and 10000');
+    }
+
+    const normalized = formatTruckNumber(truckNo) || normalizeTruckKey(truckNo);
+    if (!normalized) {
+      throw new ApiError(400, 'Invalid truck number');
+    }
+
+    let config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+    if (!config) {
+      config = await SystemConfig.create({
+        configType: 'truck_batches',
+        truckBatches: {},
+        specialTrucks: [],
+        lastUpdatedBy: req.user?.username || 'system',
+      });
+    }
+    if (!config.specialTrucks) config.specialTrucks = [];
+
+    const key = normalizeTruckKey(normalized);
+    if (config.specialTrucks.some((t: any) => normalizeTruckKey(t.truckNo) === key)) {
+      throw new ApiError(400, `Special truck "${normalized}" is already configured`);
+    }
+
+    let linked: number | null = null;
+    if (linkedBatchLiters !== undefined && linkedBatchLiters !== null && linkedBatchLiters !== '') {
+      linked = Number(linkedBatchLiters);
+      if (Number.isNaN(linked) || linked < 0) {
+        throw new ApiError(400, 'linkedBatchLiters must be a valid number');
+      }
+      if (!config.truckBatches?.[String(linked)]) {
+        throw new ApiError(400, `Linked batch ${linked}L does not exist`);
+      }
+    }
+
+    config.specialTrucks.push({
+      truckNo: normalized,
+      extraLiters: Number(extraLiters),
+      linkedBatchLiters: linked,
+      destinationRules: [],
+      notes: notes ? String(notes).trim() : undefined,
+      addedBy: req.user?.username || 'system',
+      addedAt: new Date(),
+    } as any);
+    config.markModified('specialTrucks');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    const { autoFillFuelRecordsForSpecialTruck } = await import('./configController');
+    await autoFillFuelRecordsForSpecialTruck(
+      normalized,
+      Number(extraLiters),
+      req.user?.username || 'system'
+    );
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'CREATE',
+      resourceType: 'SpecialTruck',
+      resourceId: normalized,
+      details: `Special truck "${normalized}" added with ${extraLiters}L` +
+        (linked != null ? ` (linked batch ${linked}L)` : ''),
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
+    setCacheBustingHeaders(res);
+    res.status(201).json({
+      success: true,
+      message: `Special truck ${normalized} added successfully`,
+      data: truckBatchesPayload(config),
+    });
+    emitDataChange('truck_batches', 'update');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Update a special truck (extra liters / linked batch / notes).
+ * PUT /admin/truck-batches/special-trucks
+ */
+export const updateSpecialTruck = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckNo, extraLiters, linkedBatchLiters, notes } = req.body;
+    if (!truckNo) throw new ApiError(400, 'truckNo is required');
+
+    const config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+    if (!config || !Array.isArray(config.specialTrucks)) {
+      throw new ApiError(404, 'Truck batches config not found');
+    }
+
+    const key = normalizeTruckKey(truckNo);
+    const truck = config.specialTrucks.find((t: any) => normalizeTruckKey(t.truckNo) === key);
+    if (!truck) throw new ApiError(404, `Special truck "${truckNo}" not found`);
+
+    if (extraLiters !== undefined) {
+      if (extraLiters < 0 || extraLiters > 10000) {
+        throw new ApiError(400, 'extraLiters must be between 0 and 10000');
+      }
+      truck.extraLiters = Number(extraLiters);
+    }
+
+    if (linkedBatchLiters !== undefined) {
+      if (linkedBatchLiters === null || linkedBatchLiters === '') {
+        truck.linkedBatchLiters = null;
+      } else {
+        const linked = Number(linkedBatchLiters);
+        if (Number.isNaN(linked) || linked < 0) {
+          throw new ApiError(400, 'linkedBatchLiters must be a valid number');
+        }
+        if (!config.truckBatches?.[String(linked)]) {
+          throw new ApiError(400, `Linked batch ${linked}L does not exist`);
+        }
+        truck.linkedBatchLiters = linked;
+      }
+    }
+
+    if (notes !== undefined) {
+      truck.notes = notes ? String(notes).trim() : undefined;
+    }
+
+    config.markModified('specialTrucks');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    setCacheBustingHeaders(res);
+    res.status(200).json({
+      success: true,
+      message: `Special truck ${truck.truckNo} updated successfully`,
+      data: truckBatchesPayload(config),
+    });
+    emitDataChange('truck_batches', 'update');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Remove a special truck.
+ * DELETE /admin/truck-batches/special-trucks/:truckNo
+ */
+export const removeSpecialTruck = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const truckNo = decodeURIComponent(req.params.truckNo || '');
+    if (!truckNo) throw new ApiError(400, 'truckNo is required');
+
+    const config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+    if (!config || !Array.isArray(config.specialTrucks)) {
+      throw new ApiError(404, 'Truck batches config not found');
+    }
+
+    const key = normalizeTruckKey(truckNo);
+    const before = config.specialTrucks.length;
+    const remaining = config.specialTrucks.filter(
+      (t: any) => normalizeTruckKey(t.truckNo) !== key
+    );
+    if (remaining.length === before) {
+      throw new ApiError(404, `Special truck "${truckNo}" not found`);
+    }
+    config.specialTrucks = remaining as any;
+
+    config.markModified('specialTrucks');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    await AuditService.log({
+      userId: req.user?.userId,
+      username: req.user?.username || 'system',
+      action: 'DELETE',
+      resourceType: 'SpecialTruck',
+      resourceId: truckNo,
+      details: `Special truck "${truckNo}" removed by ${req.user?.username}`,
+      ipAddress: req.ip,
+      severity: 'medium',
+    });
+
+    setCacheBustingHeaders(res);
+    res.status(200).json({
+      success: true,
+      message: `Special truck removed successfully`,
+      data: truckBatchesPayload(config),
+    });
+    emitDataChange('truck_batches', 'update');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Add destination rule for a special truck.
+ * POST /admin/truck-batches/special-trucks/destination-rules
+ */
+export const addSpecialTruckDestinationRule = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { truckNo, destination, extraLiters } = req.body;
+    if (!truckNo || !destination || extraLiters === undefined) {
+      throw new ApiError(400, 'Missing required fields: truckNo, destination, extraLiters');
+    }
+
+    const config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+    if (!config || !Array.isArray(config.specialTrucks)) {
+      throw new ApiError(404, 'Truck batches config not found');
+    }
+
+    const key = normalizeTruckKey(truckNo);
+    const truck = config.specialTrucks.find((t: any) => normalizeTruckKey(t.truckNo) === key);
+    if (!truck) throw new ApiError(404, `Special truck "${truckNo}" not found`);
+
+    if (!truck.destinationRules) truck.destinationRules = [];
+    const destNorm = String(destination).trim();
+    if (
+      truck.destinationRules.some(
+        (r: any) => r.destination.toLowerCase() === destNorm.toLowerCase()
+      )
+    ) {
+      throw new ApiError(400, `Destination rule for "${destNorm}" already exists on this special truck`);
+    }
+
+    truck.destinationRules.push({
+      destination: destNorm,
+      extraLiters: Number(extraLiters),
+    });
+    config.markModified('specialTrucks');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    setCacheBustingHeaders(res);
+    res.status(201).json({
+      success: true,
+      message: 'Special truck destination rule added',
+      data: truckBatchesPayload(config),
+    });
+    emitDataChange('truck_batches', 'update');
+  } catch (error: any) {
+    throw error;
+  }
+};
+
+/**
+ * Delete destination rule from a special truck.
+ * DELETE /admin/truck-batches/special-trucks/:truckNo/destination-rules/:destination
+ */
+export const deleteSpecialTruckDestinationRule = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const truckNo = decodeURIComponent(req.params.truckNo || '');
+    const destination = decodeURIComponent(req.params.destination || '');
+    if (!truckNo || !destination) {
+      throw new ApiError(400, 'truckNo and destination are required');
+    }
+
+    const config = await SystemConfig.findOne({
+      configType: 'truck_batches',
+      isDeleted: false,
+    });
+    if (!config || !Array.isArray(config.specialTrucks)) {
+      throw new ApiError(404, 'Truck batches config not found');
+    }
+
+    const key = normalizeTruckKey(truckNo);
+    const truck = config.specialTrucks.find((t: any) => normalizeTruckKey(t.truckNo) === key);
+    if (!truck) throw new ApiError(404, `Special truck "${truckNo}" not found`);
+
+    const before = (truck.destinationRules || []).length;
+    truck.destinationRules = (truck.destinationRules || []).filter(
+      (r: any) => r.destination.toLowerCase() !== destination.toLowerCase()
+    );
+    if ((truck.destinationRules || []).length === before) {
+      throw new ApiError(404, `Destination rule "${destination}" not found`);
+    }
+
+    config.markModified('specialTrucks');
+    config.lastUpdatedBy = req.user?.username || 'system';
+    await config.save();
+
+    setCacheBustingHeaders(res);
+    res.status(200).json({
+      success: true,
+      message: 'Special truck destination rule deleted',
+      data: truckBatchesPayload(config),
     });
     emitDataChange('truck_batches', 'update');
   } catch (error: any) {
