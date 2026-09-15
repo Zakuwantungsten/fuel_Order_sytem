@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Truck, Trash2, Plus, Fuel, Search, MapPin, X, Edit2 } from 'lucide-react';
+import { Truck, Trash2, Plus, Fuel, Search, MapPin, X, Edit2, SlidersHorizontal, ArrowRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 import ConfirmModal from '../components/SuperAdmin/ConfirmModal';
 import {
@@ -88,6 +88,9 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
   const [newSpecialRule, setNewSpecialRule] = useState({ destination: '', extraLiters: 0 });
   const [deleteSpecialTarget, setDeleteSpecialTarget] = useState<string | null>(null);
   const [deleteSpecialRuleTarget, setDeleteSpecialRuleTarget] = useState<string | null>(null);
+  const [expandedBatches, setExpandedBatches] = useState<Record<string, boolean>>({});
+  const [moveMenuKey, setMoveMenuKey] = useState<string | null>(null);
+  const CARD_PREVIEW_COUNT = 3;
   
   // Open Add Truck modal with pre-filled suffix when navigated from a notification
   useEffect(() => {
@@ -497,163 +500,205 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
 
   const totalTrucks = batchList.reduce((sum, batch) => sum + batch.count, 0);
 
-  // Shared icon-button styling so edit/delete actions look consistent across the tab.
-  const iconButtonBase =
-    'inline-flex items-center justify-center h-8 w-8 rounded-lg transition-colors ' +
+  // Shared icon-button styling — compact icon-only actions for card rows/headers
+  const iconBtn =
+    'inline-flex items-center justify-center h-7 w-7 rounded-md border transition-colors ' +
     'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ' +
-    'dark:focus-visible:ring-offset-gray-800 disabled:opacity-40 disabled:cursor-not-allowed';
-  const deleteButtonClass =
-    `${iconButtonBase} text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 ` +
-    'hover:bg-red-50 dark:hover:bg-red-900/30 focus-visible:ring-red-500';
+    'dark:focus-visible:ring-offset-gray-900 disabled:opacity-40 disabled:cursor-not-allowed';
+  const iconBtnGray =
+    `${iconBtn} border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-300 ` +
+    'bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:ring-gray-400';
+  const iconBtnBlue =
+    `${iconBtn} border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 ` +
+    'bg-blue-50/80 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 focus-visible:ring-blue-500';
+  const iconBtnRed =
+    `${iconBtn} border-red-300 dark:border-red-700 text-red-500 dark:text-red-400 ` +
+    'bg-transparent hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:ring-red-500';
+  // Keep deleteButtonClass alias for modals that still use the older style
+  const deleteButtonClass = iconBtnRed;
 
-  // Labeled outline buttons (icon + text) for the batch-level Modify / Delete actions.
-  const labelButtonBase =
-    'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border bg-white dark:bg-gray-800 ' +
-    'transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ' +
-    'dark:focus-visible:ring-offset-gray-800 disabled:opacity-40 disabled:cursor-not-allowed';
-  const modifyButtonClass =
-    `${labelButtonBase} border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 ` +
-    'hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-700 focus-visible:ring-blue-500';
-  const deleteLabelButtonClass =
-    `${labelButtonBase} border-gray-300 dark:border-gray-600 text-red-600 dark:text-red-400 ` +
-    'hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 dark:hover:border-red-700 focus-visible:ring-red-500';
+  const toggleBatchExpanded = (key: string) => {
+    setExpandedBatches((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const renderBatchCard = (batchSize: number, trucks: any[]) => {
     const filteredTrucks = filterTrucks(trucks);
+    const cardKey = `batch-${batchSize}`;
+    const isExpanded = !!expandedBatches[cardKey];
+    const visibleTrucks =
+      isExpanded || filteredTrucks.length <= CARD_PREVIEW_COUNT
+        ? filteredTrucks
+        : filteredTrucks.slice(0, CARD_PREVIEW_COUNT);
+    const moreCount = filteredTrucks.length - CARD_PREVIEW_COUNT;
+    const otherBatches = batchList.filter((b) => b.extraLiters !== batchSize);
+    const batchRuleCount = (batchDestinationRules[batchSize.toString()] ?? []).length;
 
     return (
       <div
         key={batchSize}
-        className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-4"
+        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden flex flex-col min-w-0"
       >
-        <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100 dark:border-gray-700/60">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-blue-600 rounded-lg shadow-sm">
-              <Fuel className="w-5 h-5 text-white" />
+        {/* Header */}
+        <div className="px-3.5 pt-3.5 pb-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2 min-w-0">
+              <Fuel className="w-4 h-4 text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100 leading-tight">
+                  {batchSize}L Extra Fuel
+                </h3>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
+                  {filteredTrucks.length} truck{filteredTrucks.length !== 1 ? 's' : ''} · going and returning
+                  {searchQuery && trucks.length !== filteredTrucks.length ? ` · ${trucks.length} total` : ''}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                {batchSize}L Extra Fuel
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {filteredTrucks.length} truck{filteredTrucks.length !== 1 ? 's' : ''} (going + returning)
-                {searchQuery && trucks.length !== filteredTrucks.length && ` · ${trucks.length} total`}
-              </p>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                onClick={() => handleManageBatchRules(batchSize)}
+                className={iconBtnGray}
+                aria-label={`Manage batch rules for ${batchSize}L`}
+                title={batchRuleCount > 0 ? `Batch rules (${batchRuleCount})` : 'Batch destination rules'}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => {
+                  setEditingBatch({ extraLiters: batchSize, trucks });
+                  setNewBatchLiters(batchSize);
+                  setShowEditBatchModal(true);
+                }}
+                className={iconBtnGray}
+                aria-label={`Modify ${batchSize}L batch`}
+                title="Modify batch"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => requestDeleteBatch(batchSize)}
+                className={iconBtnRed}
+                aria-label={`Delete ${batchSize}L batch`}
+                title="Delete batch"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleManageBatchRules(batchSize)}
-              className={`${labelButtonBase} border-gray-300 dark:border-gray-600 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-300 dark:hover:border-purple-700 focus-visible:ring-purple-500`}
-              aria-label={`Manage batch rules for ${batchSize}L`}
-              title="Manage batch destination rules"
-            >
-              <MapPin className="w-4 h-4" />
-              Batch Rules
-              {(batchDestinationRules[batchSize.toString()] ?? []).length > 0 && (
-                <span className="ml-1 inline-flex items-center justify-center w-4 h-4 text-xs font-bold bg-purple-600 text-white rounded-full">
-                  {(batchDestinationRules[batchSize.toString()] ?? []).length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => {
-                setEditingBatch({ extraLiters: batchSize, trucks });
-                setNewBatchLiters(batchSize);
-                setShowEditBatchModal(true);
-              }}
-              className={modifyButtonClass}
-              aria-label={`Modify ${batchSize}L batch`}
-              title="Modify batch"
-            >
-              <Edit2 className="w-4 h-4" />
-              Modify
-            </button>
-            <button
-              onClick={() => requestDeleteBatch(batchSize)}
-              className={deleteLabelButtonClass}
-              aria-label={`Delete ${batchSize}L batch`}
-              title="Delete batch"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
           </div>
         </div>
 
-        <div className="space-y-1.5 max-h-80 overflow-y-auto">
+        <div className="border-t border-gray-100 dark:border-gray-800" />
+
+        {/* Truck rows */}
+        <div className="flex-1">
           {filteredTrucks.length === 0 ? (
-            <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-3">
+            <p className="text-[12px] text-gray-500 dark:text-gray-400 text-center py-4 px-3">
               {searchQuery ? 'No matching trucks' : 'No trucks in this batch'}
             </p>
           ) : (
-            filteredTrucks.map((truck) => {
+            visibleTrucks.map((truck, idx) => {
               const suffix = getTruckSuffix(truck);
-              const hasRules = typeof truck !== 'string' && truck.destinationRules && truck.destinationRules.length > 0;
-              
+              const hasRules =
+                typeof truck !== 'string' &&
+                truck.destinationRules &&
+                truck.destinationRules.length > 0;
+              const moveKey = `${cardKey}:${suffix}`;
+              const showMoveMenu = moveMenuKey === moveKey;
+
               return (
                 <div
                   key={suffix}
-                  className="bg-gray-50 dark:bg-gray-700/50 border border-gray-100 dark:border-gray-700 rounded-lg p-2 hover:border-gray-200 dark:hover:border-gray-600 transition-colors"
+                  className={`px-3.5 py-2 flex items-center justify-between gap-2 ${
+                    idx < visibleTrucks.length - 1 || moreCount > 0
+                      ? 'border-b border-gray-100 dark:border-gray-800'
+                      : ''
+                  }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Truck className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">
-                          {suffix}
-                        </span>
-                        {hasRules && (
-                          <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
-                            <MapPin className="w-2.5 h-2.5" />
-                            <span>{truck.destinationRules.length} rule{truck.destinationRules.length !== 1 ? 's' : ''}</span>
+                  <div className="min-w-0">
+                    <span className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">
+                      {suffix}
+                    </span>
+                    {hasRules && (
+                      <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-tight">
+                        {truck.destinationRules.length} rule
+                        {truck.destinationRules.length !== 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0 relative">
+                    <button
+                      onClick={() => handleManageRules(truck, batchSize)}
+                      className={iconBtnBlue}
+                      title="Manage destination rules"
+                      aria-label={`Rules for ${suffix.toUpperCase()}`}
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                    </button>
+                    {otherBatches.length > 0 && (
+                      <div className="relative">
+                        <button
+                          onClick={() => setMoveMenuKey(showMoveMenu ? null : moveKey)}
+                          className={iconBtnGray}
+                          title="Move to another batch"
+                          aria-label={`Move truck ${suffix.toUpperCase()}`}
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                        {showMoveMenu && (
+                          <div className="absolute right-0 top-full mt-1 z-20 min-w-[7rem] py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
+                            {otherBatches.map((b) => (
+                              <button
+                                key={b.extraLiters}
+                                type="button"
+                                className="w-full text-left px-3 py-1.5 text-[12px] text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                onClick={() => {
+                                  setMoveTarget({ suffix, newBatch: b.extraLiters });
+                                  setMoveMenuKey(null);
+                                }}
+                              >
+                                Move to {b.extraLiters}L
+                              </button>
+                            ))}
                           </div>
                         )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => handleManageRules(truck, batchSize)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        title="Manage destination rules"
-                      >
-                        <MapPin className="w-3 h-3" />
-                        Rules
-                      </button>
-                      {batchList.filter(b => b.extraLiters !== batchSize).length > 0 && (
-                        <select
-                          defaultValue=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              setMoveTarget({ suffix, newBatch: parseInt(e.target.value) });
-                              e.target.value = '';
-                            }
-                          }}
-                          className="px-1.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600/60 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 cursor-pointer"
-                          title="Move to batch"
-                          aria-label={`Move truck ${suffix.toUpperCase()} to another batch`}
-                        >
-                          <option value="" disabled>→ Move</option>
-                          {batchList.filter(b => b.extraLiters !== batchSize).map(b => (
-                            <option key={b.extraLiters} value={b.extraLiters}>{b.extraLiters}L</option>
-                          ))}
-                        </select>
-                      )}
-                      <button
-                        onClick={() => setDeleteTruckTarget(suffix)}
-                        className={deleteButtonClass}
-                        aria-label={`Remove truck ${suffix.toUpperCase()} from batches`}
-                        title="Remove from batches"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    )}
+                    <button
+                      onClick={() => setDeleteTruckTarget(suffix)}
+                      className={iconBtnRed}
+                      aria-label={`Remove truck ${suffix.toUpperCase()} from batches`}
+                      title="Remove from batches"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               );
             })
           )}
         </div>
+
+        {!isExpanded && moreCount > 0 && (
+          <div className="px-3.5 py-2.5 flex justify-center border-t border-gray-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => toggleBatchExpanded(cardKey)}
+              className="px-3 py-1 text-[12px] font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              +{moreCount} more
+            </button>
+          </div>
+        )}
+        {isExpanded && filteredTrucks.length > CARD_PREVIEW_COUNT && (
+          <div className="px-3.5 py-2.5 flex justify-center border-t border-gray-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => toggleBatchExpanded(cardKey)}
+              className="px-3 py-1 text-[12px] font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              Show less
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -745,71 +790,121 @@ export default function TruckBatches({ initialSuffix, onSuffixConsumed }: TruckB
         </div>
       </div>
 
-      {/* Dynamic Batches Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Special trucks card */}
-        <div className="bg-white dark:bg-gray-800 border-2 border-amber-200 dark:border-amber-800/60 rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-amber-100 dark:border-amber-900/40 bg-amber-50/80 dark:bg-amber-900/20 flex items-center justify-between gap-2">
-            <div>
-              <h3 className="text-base font-bold text-amber-900 dark:text-amber-100">Special Trucks</h3>
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                Full plate overrides · {specialTrucks.length} truck{specialTrucks.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-            <button
-              onClick={() => setShowAddSpecialModal(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 rounded-md"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add
-            </button>
-          </div>
-          <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
-            {filteredSpecialTrucks.length === 0 ? (
-              <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-3">
-                {searchQuery ? 'No matching special trucks' : 'No special trucks yet'}
-              </p>
-            ) : (
-              filteredSpecialTrucks.map((truck) => (
-                <div
-                  key={truck.truckNo}
-                  className="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/40 rounded-lg p-2"
-                >
-                  <div className="flex items-center justify-between gap-2">
+      {/* Dynamic Batches Grid — equal-width cards, 4 per row on large screens */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        {/* Special trucks card — same chrome as batch cards */}
+        {(() => {
+          const cardKey = 'special';
+          const isExpanded = !!expandedBatches[cardKey];
+          const visible =
+            isExpanded || filteredSpecialTrucks.length <= CARD_PREVIEW_COUNT
+              ? filteredSpecialTrucks
+              : filteredSpecialTrucks.slice(0, CARD_PREVIEW_COUNT);
+          const moreCount = filteredSpecialTrucks.length - CARD_PREVIEW_COUNT;
+
+          return (
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden flex flex-col min-w-0">
+              <div className="px-3.5 pt-3.5 pb-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <Fuel className="w-4 h-4 text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
-                      <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">
-                        {truck.truckNo}
-                      </span>
-                      <div className="text-xs text-amber-700 dark:text-amber-300">
-                        {truck.extraLiters}L
-                        {truck.linkedBatchLiters != null ? ` · linked ${truck.linkedBatchLiters}L batch` : ''}
-                        {(truck.destinationRules?.length || 0) > 0
-                          ? ` · ${truck.destinationRules!.length} rule${truck.destinationRules!.length !== 1 ? 's' : ''}`
-                          : ''}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => handleManageSpecialRules(truck)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/40 rounded-md"
-                      >
-                        <MapPin className="w-3 h-3" />
-                        Rules
-                      </button>
-                      <button
-                        onClick={() => setDeleteSpecialTarget(truck.truckNo)}
-                        className={deleteButtonClass}
-                        title="Remove special truck"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <h3 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100 leading-tight">
+                        Special Trucks
+                      </h3>
+                      <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
+                        {specialTrucks.length} truck{specialTrucks.length !== 1 ? 's' : ''} · full plate overrides
+                      </p>
                     </div>
                   </div>
+                  <button
+                    onClick={() => setShowAddSpecialModal(true)}
+                    className={iconBtnGray}
+                    title="Add special truck"
+                    aria-label="Add special truck"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-800" />
+
+              <div className="flex-1">
+                {filteredSpecialTrucks.length === 0 ? (
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 text-center py-4 px-3">
+                    {searchQuery ? 'No matching special trucks' : 'No special trucks yet'}
+                  </p>
+                ) : (
+                  visible.map((truck, idx) => (
+                    <div
+                      key={truck.truckNo}
+                      className={`px-3.5 py-2 flex items-center justify-between gap-2 ${
+                        idx < visible.length - 1 || moreCount > 0
+                          ? 'border-b border-gray-100 dark:border-gray-800'
+                          : ''
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">
+                          {truck.truckNo}
+                        </span>
+                        <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-tight truncate">
+                          {truck.extraLiters}L
+                          {truck.linkedBatchLiters != null ? ` · linked ${truck.linkedBatchLiters}L` : ''}
+                          {(truck.destinationRules?.length || 0) > 0
+                            ? ` · ${truck.destinationRules!.length} rule${truck.destinationRules!.length !== 1 ? 's' : ''}`
+                            : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => handleManageSpecialRules(truck)}
+                          className={iconBtnBlue}
+                          title="Manage destination rules"
+                          aria-label={`Rules for ${truck.truckNo}`}
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteSpecialTarget(truck.truckNo)}
+                          className={iconBtnRed}
+                          title="Remove special truck"
+                          aria-label={`Remove ${truck.truckNo}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {!isExpanded && moreCount > 0 && (
+                <div className="px-3.5 py-2.5 flex justify-center border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => toggleBatchExpanded(cardKey)}
+                    className="px-3 py-1 text-[12px] font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    +{moreCount} more
+                  </button>
+                </div>
+              )}
+              {isExpanded && filteredSpecialTrucks.length > CARD_PREVIEW_COUNT && (
+                <div className="px-3.5 py-2.5 flex justify-center border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => toggleBatchExpanded(cardKey)}
+                    className="px-3 py-1 text-[12px] font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Show less
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {batchList.map((batch) => renderBatchCard(batch.extraLiters, batch.trucks))}
       </div>
