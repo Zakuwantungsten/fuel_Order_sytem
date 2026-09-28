@@ -5,11 +5,12 @@
  * what starts/completes a journey and promotes the next queued.
  */
 import { fuelRecordsAPI } from '../services/api';
+import { connectionFromError, preemptLookup } from './connectivityError';
 import type { FuelRecord } from '../types';
 import { fuelRecordIdOf } from '../services/yardLpoFetchService';
 import type { YardKey } from '../services/yardLpoFetchService';
 
-export type YardJourneyWarning = 'not_found' | 'no_active_record' | 'journey_completed' | null;
+export type YardJourneyWarning = 'not_found' | 'no_active_record' | 'journey_completed' | 'connection' | null;
 
 export interface YardJourneyLookupResult {
   success: boolean;
@@ -40,6 +41,19 @@ function isQueuedRecord(r: FuelRecord): boolean {
   return r.journeyStatus === 'queued';
 }
 
+function connectionResult(message: string): YardJourneyLookupResult {
+  return {
+    success: false,
+    warningType: 'connection',
+    message,
+    active: null,
+    queued: [],
+    selectedType: null,
+    selectedIndex: -1,
+    selected: null,
+  };
+}
+
 /**
  * Look up journeys for a truck and apply yard priority:
  * 1. If any queued → default Q1 (lowest queueOrder)
@@ -61,8 +75,19 @@ export async function fetchYardJourneysForTruck(truckNo: string): Promise<YardJo
     };
   }
 
+  const blocked = preemptLookup();
+  if (blocked) return connectionResult(blocked.message);
+
   // Yard mode: no month/date window — only active / queued / locked pending
-  const { data: fuelRecords } = await fuelRecordsAPI.getForLpoTruckLookup(trimmed, { mode: 'yard' });
+  let fuelRecords: FuelRecord[];
+  try {
+    const lookup = await fuelRecordsAPI.getForLpoTruckLookup(trimmed, { mode: 'yard' });
+    fuelRecords = lookup.data;
+  } catch (error) {
+    const conn = connectionFromError(error);
+    if (conn) return connectionResult(conn.message);
+    throw error;
+  }
   const records = (fuelRecords || []).filter((r: FuelRecord) => !r.isCancelled);
 
   if (records.length === 0) {
@@ -177,7 +202,17 @@ export async function fetchYardJourneyByDo(
     };
   }
 
-  const result = await fuelRecordsAPI.getByDoNumber(doUp);
+  const blocked = preemptLookup();
+  if (blocked) return connectionResult(blocked.message);
+
+  let result: Awaited<ReturnType<typeof fuelRecordsAPI.getByDoNumber>>;
+  try {
+    result = await fuelRecordsAPI.getByDoNumber(doUp);
+  } catch (error) {
+    const conn = connectionFromError(error);
+    if (conn) return connectionResult(conn.message);
+    throw error;
+  }
   if (!result?.fuelRecord) {
     return {
       success: false,

@@ -22,6 +22,9 @@ import {
 import type { YardKey } from '../services/yardLpoFetchService';
 import type { FuelRecord } from '../types';
 import { shouldOfferPendingGoingCreate, isPendingGoingCreateMonth } from '../utils/pendingDo';
+import { connectionFromError, connectionStatusLabel, preemptLookup } from '../utils/connectivityError';
+import { NETWORK_RECOVERED_EVENT } from '../services/networkSignals';
+import { LookupWaitHint } from './LookupWaitHint';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
 
@@ -298,6 +301,19 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
     const doUp = rawDo.trim().toUpperCase();
     if (!doUp || doUp === 'NIL' || doUp === 'N/A' || doUp.length < 3) return;
 
+    const blocked = preemptLookup();
+    if (blocked) {
+      updateRow(idx, {
+        autoFetching: false,
+        fetched: true,
+        warningType: 'connection',
+        warningMessage: blocked.message,
+        fuelRecord: null,
+        linked: false,
+      });
+      return;
+    }
+
     updateRow(idx, {
       autoFetching: true,
       fetched: false,
@@ -338,12 +354,13 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
         true,
         true, // fill truck from DO match
       );
-    } catch {
+    } catch (error) {
+      const conn = connectionFromError(error);
       updateRow(idx, {
         autoFetching: false,
         fetched: true,
-        warningType: 'not_found',
-        warningMessage: `Failed to look up DO ${doUp}`,
+        warningType: conn ? 'connection' : 'not_found',
+        warningMessage: conn?.message ?? `Failed to look up DO ${doUp}`,
         fuelRecord: null,
         linked: false,
       });
@@ -372,6 +389,22 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
     if (truckNo.length < 3) return;
 
     updateEntry(idx, 'truckNo', truckNo);
+
+    const blocked = preemptLookup();
+    if (blocked) {
+      updateRow(idx, {
+        autoFetching: false,
+        fetched: true,
+        warningType: 'connection',
+        warningMessage: blocked.message,
+        fuelRecord: null,
+        linked: false,
+        allJourneys: { active: null, queued: [] },
+        selectedJourneyType: null,
+        selectedJourneyIndex: -1,
+      });
+      return;
+    }
 
     updateRow(idx, {
       autoFetching: true,
@@ -414,12 +447,13 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
         result.selectedIndex,
         true,
       );
-    } catch {
+    } catch (error) {
+      const conn = connectionFromError(error);
       updateRow(idx, {
         autoFetching: false,
         fetched: true,
-        warningType: 'not_found',
-        warningMessage: 'Failed to look up truck journeys',
+        warningType: conn ? 'connection' : 'not_found',
+        warningMessage: conn?.message ?? 'Failed to look up truck journeys',
         fuelRecord: null,
         linked: false,
         allJourneys: { active: null, queued: [] },
@@ -438,6 +472,18 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchTruck]);
+
+  useEffect(() => {
+    const onRecovered = () => {
+      entries.forEach((entry, idx) => {
+        if (rows[idx]?.warningType === 'connection' && entry.truckNo.trim()) {
+          void fetchTruck(idx, entry.truckNo);
+        }
+      });
+    };
+    window.addEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+    return () => window.removeEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+  }, [entries, rows, fetchTruck]);
 
   const handleJourneySelect = (idx: number, type: 'active' | 'queued', qIdx = 0) => {
     const row = rows[idx];
@@ -667,8 +713,11 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
    * "Active", we avoid repeating that word — show the DO number (or "Linked"
    * once linked) instead so the row communicates something new.
    */
-  const statusLabel = (row: RowState, doNo: string): { text: string; tone: 'ok' | 'warn' | 'muted' | 'link' } => {
+  const statusLabel = (row: RowState, doNo: string): { text: string; tone: 'ok' | 'warn' | 'muted' | 'link' | 'error' } => {
     if (row.autoFetching) return { text: 'Looking up…', tone: 'muted' };
+    if (row.warningType === 'connection') {
+      return { text: connectionStatusLabel(row.warningMessage || ''), tone: 'error' };
+    }
     if (row.warningType === 'journey_completed') return { text: 'Completed', tone: 'warn' };
     if (row.warningType === 'no_active_record') return { text: 'No journey', tone: 'warn' };
     if (row.warningType === 'not_found') return { text: 'Not found', tone: 'warn' };
@@ -692,6 +741,8 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
         ? 'text-green-600 dark:text-green-400'
         : st.tone === 'warn'
         ? 'text-amber-600 dark:text-amber-400'
+        : st.tone === 'error'
+        ? 'text-red-600 dark:text-red-400'
         : st.tone === 'link'
         ? 'text-indigo-600 dark:text-indigo-400'
         : 'text-gray-400';
@@ -729,7 +780,17 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
             Q{qJ.queueOrder || qIdx + 1}
           </button>
         ))}
-        <span className={`text-[10px] font-semibold truncate ${toneClass}`} title={st.text}>{st.text}</span>
+        <span className={`text-[10px] font-semibold truncate ${toneClass}`} title={row.warningType === 'connection' ? row.warningMessage : st.text}>{st.text}</span>
+        {row.autoFetching && <LookupWaitHint active />}
+        {row.warningType === 'connection' && (
+          <button
+            type="button"
+            onClick={() => fetchTruck(idx, entries[idx]?.truckNo || '')}
+            className="text-[10px] font-semibold text-red-600 dark:text-red-400 underline"
+          >
+            Retry
+          </button>
+        )}
         {priorLpos[idx] && (() => {
           const prior = priorLpos[idx]!;
           const same = prior.newLiters > 0 && !prior.isDifferentAmount;

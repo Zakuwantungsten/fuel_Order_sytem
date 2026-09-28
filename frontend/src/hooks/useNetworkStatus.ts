@@ -4,13 +4,15 @@ import { getSocket, ensureWebSocketConnected } from '../services/websocket';
 import {
   NETWORK_ERROR_EVENT,
   NETWORK_RECOVERED_EVENT,
+  setConnectivityStatus,
   signalNetworkRecovered,
+  type ConnectivityStatus,
 } from '../services/networkSignals';
+
+export type { ConnectivityStatus };
 
 const POLL_MS = 3_000;
 const FETCH_TIMEOUT_MS = 3_000;
-
-export type ConnectivityStatus = 'online' | 'device-offline' | 'api-unreachable';
 
 async function checkApiReachable(): Promise<boolean> {
   const controller = new AbortController();
@@ -45,6 +47,7 @@ export function useNetworkStatus() {
   const reconnectedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const applyResult = useCallback((next: ConnectivityStatus) => {
+    setConnectivityStatus(next);
     const was = statusRef.current;
     statusRef.current = next;
     const wasDown = was !== 'online';

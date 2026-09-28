@@ -36,6 +36,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { readOfficerConfig } from '../hooks/useOfficerConfig';
 import UnifiedTabLoader from './SuperAdmin/common/UnifiedTabLoader';
 import { formatSearchCardDate, parseStoredRecordDate } from '../utils/timezone';
+import { connectionFromError, preemptLookup, SEARCH_TIMEOUT_MS } from '../utils/connectivityError';
+import { NETWORK_RECOVERED_EVENT } from '../services/networkSignals';
+import { LookupWaitHint } from './LookupWaitHint';
 
 interface OfficerOverviewProps {
   user: any;
@@ -133,6 +136,7 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<DOResult[]>([]);
+  const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchStats = useCallback(async () => {
@@ -153,8 +157,22 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
   // ─── Truck search ────────────────────────────────────────────────────────────
   const searchTrucks = useCallback(
     async (query: string) => {
-      if (!query.trim()) { setSearchResults([]); return; }
+      if (!query.trim()) {
+        setSearchResults([]);
+        setSearchNotice(null);
+        return;
+      }
+
+      const blocked = preemptLookup();
+      if (blocked) {
+        setSearching(false);
+        setSearchResults([]);
+        setSearchNotice(blocked.message);
+        return;
+      }
+
       setSearching(true);
+      setSearchNotice(null);
       try {
         const from = new Date();
         from.setMonth(from.getMonth() - config.searchMonths);
@@ -169,7 +187,7 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
           limit,
           sortBy: 'date',
           sortOrder: 'desc',
-        });
+        }, { timeout: SEARCH_TIMEOUT_MS });
 
         const rows: DOResult[] = (resp.data || []).map((d: any) => ({
           id: d._id || d.id,
@@ -185,8 +203,11 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
           metadata: d,
         }));
         setSearchResults(rows);
-      } catch {
+        setSearchNotice(null);
+      } catch (error) {
+        const conn = connectionFromError(error);
         setSearchResults([]);
+        setSearchNotice(conn?.message ?? 'Search failed. Try again.');
       } finally {
         setSearching(false);
       }
@@ -197,7 +218,7 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
   const handleSearchInput = (value: string) => {
     setSearchQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!value.trim()) { setSearchResults([]); return; }
+    if (!value.trim()) { setSearchResults([]); setSearchNotice(null); return; }
     debounceRef.current = setTimeout(() => searchTrucks(value), 300);
   };
 
@@ -212,10 +233,19 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
   const clearSearch = () => {
     setSearchQuery('');
     setSearchResults([]);
+    setSearchNotice(null);
     if (debounceRef.current) clearTimeout(debounceRef.current);
   };
 
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+
+  useEffect(() => {
+    const onRecovered = () => {
+      if (searchQuery.trim() && searchNotice) searchTrucks(searchQuery);
+    };
+    window.addEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+    return () => window.removeEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+  }, [searchNotice, searchQuery, searchTrucks]);
 
   if (loading) return <UnifiedTabLoader label="Loading overview..." />;
   if (error || !stats) {
@@ -369,6 +399,9 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
             </button>
           )}
         </div>
+        {searching && (
+          <LookupWaitHint active className="mt-1.5 block text-xs text-amber-700 dark:text-amber-400" />
+        )}
 
         {/* ── Search Results — Dashboard card-grid style ── */}
         {hasSearchResults && (
@@ -442,8 +475,31 @@ const OfficerOverview = ({ user, onNavigateToDO }: OfficerOverviewProps) => {
           </div>
         )}
 
-        {/* No results */}
-        {searchQuery && !searching && searchResults.length === 0 && (
+        {/* Connection failure — never present this as an empty search */}
+        {searchQuery && !searching && searchNotice && (
+          <div
+            className="mt-3 rounded-xl border p-5 text-center"
+            style={{
+              background: isDark ? 'rgba(127,29,29,0.25)' : '#FEF2F2',
+              borderColor: isDark ? '#7F1D1D' : '#FECACA',
+            }}
+          >
+            <p className="text-sm font-medium" style={{ color: isDark ? '#FECACA' : '#991B1B' }}>
+              {searchNotice}
+            </p>
+            <button
+              type="button"
+              onClick={() => searchTrucks(searchQuery)}
+              className="mt-2 text-xs font-semibold underline"
+              style={{ color: isDark ? '#FCA5A5' : '#B91C1C' }}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {/* No results — only after the server answered with zero rows */}
+        {searchQuery && !searching && !searchNotice && searchResults.length === 0 && (
           <div
             className="mt-3 rounded-xl border p-5 text-center"
             style={{

@@ -1,5 +1,6 @@
 import type { FuelRecord } from '../types';
 import { fuelRecordsAPI } from '../services/api';
+import { connectionFromError, preemptLookup } from './connectivityError';
 
 export interface TruckFetchResult {
   fuelRecord: FuelRecord | null;
@@ -10,7 +11,7 @@ export interface TruckFetchResult {
   balance: number;
   message: string;
   success: boolean;
-  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | null;
+  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | 'connection' | null;
   ambiguous?: boolean;
   matches?: (TruckFetchResult & { truckNo?: string; direction?: 'going' | 'returning' })[];
   queueInfo?: {
@@ -78,6 +79,21 @@ export async function fetchTruckForLpo(
       balance: 0,
       message: 'Enter a valid truck number',
       success: false,
+    };
+  }
+
+  const blocked = preemptLookup();
+  if (blocked) {
+    return {
+      fuelRecord: null,
+      goingDo: 'NIL',
+      returnDo: 'NIL',
+      destination: 'NIL',
+      goingDestination: 'NIL',
+      balance: 0,
+      message: blocked.message,
+      success: false,
+      warningType: 'connection',
     };
   }
 
@@ -209,6 +225,7 @@ export async function fetchTruckForLpo(
       allJourneys: { active: activeRecord, queued: queuedJourneys },
     };
   } catch (error) {
+    const conn = connectionFromError(error);
     console.error('Error fetching truck data:', error);
     return {
       fuelRecord: null,
@@ -217,8 +234,9 @@ export async function fetchTruckForLpo(
       destination: 'NIL',
       goingDestination: 'NIL',
       balance: 0,
-      message: 'Error fetching truck data',
+      message: conn?.message ?? 'Error fetching truck data',
       success: false,
+      warningType: conn ? 'connection' : undefined,
     };
   }
 }
@@ -239,6 +257,21 @@ export async function fetchDoForLpo(
       balance: 0,
       message: isSpecialDo(doNumber) ? 'No delivery order assigned' : 'Enter a valid DO number',
       success: false,
+    };
+  }
+
+  const blocked = preemptLookup();
+  if (blocked) {
+    return {
+      fuelRecord: null,
+      goingDo: 'NIL',
+      returnDo: 'NIL',
+      destination: 'NIL',
+      goingDestination: 'NIL',
+      balance: 0,
+      message: blocked.message,
+      success: false,
+      warningType: 'connection',
     };
   }
 
@@ -265,6 +298,7 @@ export async function fetchDoForLpo(
       matches: result.matches.map((m) => buildDoResult(m.fuelRecord, m.direction)),
     };
   } catch (error) {
+    const conn = connectionFromError(error);
     console.error('Error fetching fuel record by DO:', error);
     return {
       fuelRecord: null,
@@ -273,8 +307,9 @@ export async function fetchDoForLpo(
       destination: 'NIL',
       goingDestination: 'NIL',
       balance: 0,
-      message: `Error fetching DO ${doNumber}`,
+      message: conn?.message ?? `Error fetching DO ${doNumber}`,
       success: false,
+      warningType: conn ? 'connection' : undefined,
     };
   }
 }

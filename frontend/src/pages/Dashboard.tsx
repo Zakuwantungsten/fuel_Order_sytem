@@ -34,6 +34,9 @@ import { useAuth } from '../contexts/AuthContext';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
 import QueryErrorState from '../components/QueryErrorState';
 import { formatSearchCardDate, parseStoredRecordDate } from '../utils/timezone';
+import { connectionFromError, preemptLookup, SEARCH_TIMEOUT_MS } from '../utils/connectivityError';
+import { NETWORK_RECOVERED_EVENT } from '../services/networkSignals';
+import { LookupWaitHint } from '../components/LookupWaitHint';
 
 /** Station LPO multi-line palette (matches fuel-consumption style). */
 const STATION_LINE_COLORS = ['#1e3a5f', '#3b82f6', '#f97316', '#8b5cf6', '#22c55e', '#0891b2'];
@@ -162,7 +165,9 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     queryFn: () => dashboardAPI.getStats(),
     staleTime: 2 * 60 * 1000,
   });
-  const error: string | null = statsError ? 'Failed to load dashboard data' : null;
+  const error: string | null = statsError
+    ? (connectionFromError(statsError)?.message ?? 'Failed to load dashboard data')
+    : null;
 
   const { data: chartData = DEFAULT_CHART_DATA } = useQuery({
     queryKey: ['dashboard-chart-data'],
@@ -197,6 +202,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     } catch { return { dos: [], lpos: [], fuels: [] }; }
   });
   const [searching, setSearching] = useState(false);
+  const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [stationLpoRange, setStationLpoRange] = useState<'month' | '3months' | 'year'>('year');
 
@@ -229,72 +235,56 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     const query = (queryOverride ?? searchQuery).trim();
     if (!query) {
       setSearchResults({ dos: [], lpos: [], fuels: [] });
+      setSearchNotice(null);
       return;
     }
-    
+
+    const blocked = preemptLookup();
+    if (blocked) {
+      setSearching(false);
+      setSearchResults({ dos: [], lpos: [], fuels: [] });
+      setSearchNotice(blocked.message);
+      return;
+    }
+
     setSearching(true);
-    
+    setSearchNotice(null);
+
+    const searchOpts = { timeout: SEARCH_TIMEOUT_MS };
+    const run = async (request: Promise<{ data: any[] }>) => {
+      try {
+        const response = await request;
+        return { data: response.data || [], failure: null as string | null };
+      } catch (error) {
+        const conn = connectionFromError(error);
+        return { data: [] as any[], failure: conn?.message ?? 'Search failed. Try again.' };
+      }
+    };
+
     try {
-      // Limits and date windows are enforced server-side when dashboardSearch=true
       const [dosResponse, lposResponse, fuelsResponse] = await Promise.all([
-        deliveryOrdersAPI.getAll({
+        run(deliveryOrdersAPI.getAll({
           search: query,
           dashboardSearch: true,
           sortBy: 'date',
-          sortOrder: 'desc'
-        }).catch((err) => {
-          console.error('DO search error:', err);
-          return { data: [] };
-        }),
-
-        lposAPI.getAll({
+          sortOrder: 'desc',
+        }, searchOpts)),
+        run(lposAPI.getAll({
           search: query,
           dashboardSearch: true,
-        }).catch((err) => {
-          console.error('LPO search error:', err);
-          return { data: [] };
-        }),
-
-        fuelRecordsAPI.getAll({
+        }, searchOpts)),
+        run(fuelRecordsAPI.getAll({
           search: query,
           dashboardSearch: true,
           sortBy: 'date',
-          sortOrder: 'desc'
-        }).catch((err) => {
-          console.error('Fuel search error:', err);
-          return { data: [] };
-        })
+          sortOrder: 'desc',
+        }, searchOpts)),
       ]);
 
-      console.log('Raw API responses:', {
-        dosResponse,
-        lposResponse,
-        fuelsResponse
-      });
+      const dosData = dosResponse.data;
+      const lposData = lposResponse.data;
+      const fuelsData = fuelsResponse.data;
 
-      // Log detailed LPO response structure
-      console.log('LPO Response Details:', {
-        fullResponse: lposResponse,
-        dataField: lposResponse.data,
-        dataType: typeof lposResponse.data,
-        isArray: Array.isArray(lposResponse.data),
-        pagination: (lposResponse as any).pagination
-      });
-
-      // API functions return { data: Array, pagination?: ... } structure directly
-      const dosData = dosResponse.data || [];
-      const lposData = lposResponse.data || [];
-      const fuelsData = fuelsResponse.data || [];
-
-      console.log('Extracted data arrays:', {
-        dos: dosData.length,
-        lpos: lposData.length,
-        fuels: fuelsData.length
-      });
-
-      console.log('Sample data:', { lpo: lposData[0], do: dosData[0], fuel: fuelsData[0] });
-
-      // Process DO results - backend already filtered, no client-side filtering needed
       const dosResults: SearchResult[] = dosData
         .map((DO: any, index: number) => {
           const importExportLabel = DO.importOrExport === 'IMPORT' ? '📥 Import' : '📤 Export';
@@ -309,8 +299,6 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           };
         });
 
-      // Process LPO results. Prefer the stored YYYY-MM-DD `date` field — actualDate
-      // can be wrong when the backend hook treated year-month-day as day-month.
       const lposResults: SearchResult[] = lposData
         .map((lpo: any, index: number) => {
           const createdYear = lpo.createdAt ? new Date(lpo.createdAt).getFullYear() : undefined;
@@ -330,7 +318,6 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           };
         });
 
-      // Process Fuel Records results
       const fuelsResults: SearchResult[] = fuelsData
         .map((fuel: FuelRecord, index: number) => ({
           id: `fuel-${fuel._id || fuel.id || index}`,
@@ -342,30 +329,51 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           metadata: fuel
         }));
 
-      console.log('Processed results:', {
-        dos: dosResults.length,
-        lpos: lposResults.length,
-        fuels: fuelsResults.length
-      });
+      const failures = [dosResponse.failure, lposResponse.failure, fuelsResponse.failure].filter(Boolean) as string[];
+      const anyRows = dosResults.length + lposResults.length + fuelsResults.length > 0;
 
-      setSearchResults({ 
-        dos: dosResults, 
-        lpos: lposResults, 
-        fuels: fuelsResults 
+      setSearchResults({
+        dos: dosResults,
+        lpos: lposResults,
+        fuels: fuelsResults,
       });
+      if (failures.length === 3 || (failures.length > 0 && !anyRows)) {
+        setSearchNotice(failures[0]);
+      } else if (failures.length > 0) {
+        setSearchNotice(`${failures[0]} Some sections could not be searched.`);
+      } else {
+        setSearchNotice(null);
+      }
     } catch (err) {
+      const conn = connectionFromError(err);
       console.error('Failed to perform unified search:', err);
       setSearchResults({ dos: [], lpos: [], fuels: [] });
+      setSearchNotice(conn?.message ?? 'Search failed. Try again.');
     } finally {
       setSearching(false);
     }
   };
+
+  const performSearchRef = useRef(performUnifiedSearch);
+  performSearchRef.current = performUnifiedSearch;
+  const searchNoticeRef = useRef(searchNotice);
+  searchNoticeRef.current = searchNotice;
+
+  useEffect(() => {
+    const onRecovered = () => {
+      const query = searchQuery.trim();
+      if (query && searchNoticeRef.current) performSearchRef.current(query);
+    };
+    window.addEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+    return () => window.removeEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+  }, [searchQuery]);
 
   // Clear search query and results, also wipes sessionStorage
   const handleClearSearch = () => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     setSearchQuery('');
     setSearchResults({ dos: [], lpos: [], fuels: [] });
+    setSearchNotice(null);
     try {
       sessionStorage.removeItem('dashboard_search_query');
       sessionStorage.removeItem('dashboard_search_results');
@@ -380,6 +388,7 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
     
     if (!value.trim()) {
       setSearchResults({ dos: [], lpos: [], fuels: [] });
+      setSearchNotice(null);
       return;
     }
     
@@ -611,23 +620,28 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
           </div>
         </div>
 
-        <div className="relative flex-1 min-w-[180px] max-w-md mx-auto">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search DO, LPO, or truck number…"
-            value={searchQuery}
-            onChange={(e) => handleSearchInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && performUnifiedSearch(searchQuery)}
-            className="w-full h-[42px] pl-10 pr-10 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition"
-          />
-          {searching ? (
-            <Loader className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-primary-500" />
-          ) : hasResults ? (
-            <button onClick={handleClearSearch} title="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
-              <X className="w-4 h-4" />
-            </button>
-          ) : null}
+        <div className="flex-1 min-w-[180px] max-w-md mx-auto">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search DO, LPO, or truck number…"
+              value={searchQuery}
+              onChange={(e) => handleSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && performUnifiedSearch(searchQuery)}
+              className="w-full h-[42px] pl-10 pr-10 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition"
+            />
+            {searching ? (
+              <Loader className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-primary-500" />
+            ) : hasResults ? (
+              <button onClick={handleClearSearch} title="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                <X className="w-4 h-4" />
+              </button>
+            ) : null}
+          </div>
+          {searching && (
+            <LookupWaitHint active className="mt-1.5 block text-xs text-amber-700 dark:text-amber-400" />
+          )}
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
@@ -780,8 +794,22 @@ const Dashboard = ({ onNavigate }: DashboardProps = {}) => {
         </div>
       )}
 
-      {/* No Results Message */}
-      {searchQuery && !searching && 
+      {/* Connection or timeout — not an empty search */}
+      {searchQuery && !searching && searchNotice && (
+        <div className={`${CARD} p-5 text-center border-red-200 dark:border-red-800`}>
+          <p className="text-sm font-medium text-red-800 dark:text-red-200">{searchNotice}</p>
+          <button
+            type="button"
+            onClick={() => performUnifiedSearch(searchQuery)}
+            className="mt-2 text-xs font-semibold text-red-700 underline dark:text-red-300"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {/* No Results Message — only after every section answered with nothing */}
+      {searchQuery && !searching && !searchNotice && 
        searchResults.dos.length === 0 && 
        searchResults.lpos.length === 0 && 
        searchResults.fuels.length === 0 && (

@@ -1,4 +1,5 @@
 import { fuelRecordsAPI } from './api';
+import { assertLookupReachable, connectionFromError, SEARCH_TIMEOUT_MS } from '../utils/connectivityError';
 import type { YardFuelTimeLimitConfig } from './api';
 import type { FuelRecord } from '../types';
 
@@ -53,6 +54,7 @@ export async function fetchYardRecordByDo(doNumber: string): Promise<{
     return { fuelRecord: null, matches: [], ambiguous: false };
   }
 
+  assertLookupReachable();
   const result = await fuelRecordsAPI.getByDoNumber(doUp);
   if (!result?.fuelRecord) {
     return { fuelRecord: null, matches: [], ambiguous: false };
@@ -105,16 +107,21 @@ export async function fetchYardTruckCandidates(
   const trimmed = truckNo.trim();
   if (trimmed.length < 3) return { candidates: [] };
 
+  assertLookupReachable();
+
   let active: FuelRecord[] = [];
   try {
     const { data } = await fuelRecordsAPI.getForLpoTruckLookup(trimmed, { mode: 'yard' });
     active = (data || []).filter((r) => !r.isCancelled);
-  } catch {
+  } catch (error) {
+    // A dead or slow link must not fall through into a second request that
+    // then looks like "no trucks".
+    if (connectionFromError(error)) throw error;
     const response = await fuelRecordsAPI.getAll({
       truckNo: trimmed,
       excludeCancelled: 'true',
       limit: 50,
-    });
+    }, { timeout: SEARCH_TIMEOUT_MS });
     active = (response.data || []).filter((r) => !r.isCancelled);
   }
 

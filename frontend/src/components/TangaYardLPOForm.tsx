@@ -22,6 +22,9 @@ import type { TangaLPO, TangaLPOEntry, FuelRecord } from '../types';
 import { useGridNav } from '../hooks/useGridNav';
 import { shouldOfferPendingGoingCreate, isPendingGoingCreateMonth } from '../utils/pendingDo';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import { connectionFromError, preemptLookup } from '../utils/connectivityError';
+import { NETWORK_RECOVERED_EVENT } from '../services/networkSignals';
+import { LookupWaitHint } from './LookupWaitHint';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
 
 interface Props {
@@ -40,7 +43,8 @@ interface RowState {
   fuelRecord: FuelRecord | null;
   fuelRecordId?: string | number;
   alreadyDispensed: number;
-  warningType?: 'not_found' | 'needs_choice' | null;
+  warningType?: 'not_found' | 'needs_choice' | 'connection' | null;
+  warningMessage?: string;
   linked: boolean;
   candidates: FuelRecord[];
   creatingPendingDo?: boolean;
@@ -58,6 +62,12 @@ const makeEmptyRow = (): RowState => ({
 
 function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
+}
+
+function lookupRowFailure(error: unknown): { warningType: 'connection' | 'not_found'; warningMessage?: string } {
+  const conn = connectionFromError(error);
+  if (conn) return { warningType: 'connection', warningMessage: conn.message };
+  return { warningType: 'not_found' };
 }
 
 const normalizeTruckInput = (raw: string) => formatTruckNumber(raw).toUpperCase();
@@ -234,9 +244,18 @@ export default function TangaYardLPOForm({
 
     updateEntry(idx, 'truckNo', truckNo);
 
+    const blocked = preemptLookup();
+    if (blocked) {
+      updateRow(idx, {
+        autoFetching: false, fetched: true, warningType: 'connection', warningMessage: blocked.message,
+        fuelRecord: null, candidates: [], linked: false,
+      });
+      return;
+    }
+
     updateRow(idx, {
       autoFetching: true, fetched: false, fuelRecord: null, fuelRecordId: undefined,
-      warningType: null, linked: false, candidates: [], alreadyDispensed: 0,
+      warningType: null, warningMessage: undefined, linked: false, candidates: [], alreadyDispensed: 0,
     });
 
     try {
@@ -244,16 +263,17 @@ export default function TangaYardLPOForm({
 
       if (!candidates.length) {
         updateRow(idx, {
-          autoFetching: false, fetched: true, warningType: 'not_found',
+          autoFetching: false, fetched: true, warningType: 'not_found', warningMessage: undefined,
           fuelRecord: null, candidates: [], linked: false,
         });
         return;
       }
 
       applyCandidate(idx, candidates[0], candidates);
-    } catch {
+    } catch (error) {
+      const failure = lookupRowFailure(error);
       updateRow(idx, {
-        autoFetching: false, fetched: true, warningType: 'not_found',
+        autoFetching: false, fetched: true, ...failure,
         fuelRecord: null, candidates: [], linked: false,
       });
     }
@@ -387,9 +407,18 @@ export default function TangaYardLPOForm({
     if (!doUp || doUp === 'NIL' || doUp === 'N/A' || doUp.length < 3) return;
     const openModalIfMany = opts?.openModalIfMany ?? true;
 
+    const blocked = preemptLookup();
+    if (blocked) {
+      updateRow(idx, {
+        autoFetching: false, fetched: true, warningType: 'connection', warningMessage: blocked.message,
+        fuelRecord: null, candidates: [], linked: false,
+      });
+      return;
+    }
+
     updateRow(idx, {
       autoFetching: true, fetched: false, fuelRecord: null, fuelRecordId: undefined,
-      warningType: null, linked: false, candidates: [], alreadyDispensed: 0,
+      warningType: null, warningMessage: undefined, linked: false, candidates: [], alreadyDispensed: 0,
     });
 
     try {
@@ -423,13 +452,26 @@ export default function TangaYardLPOForm({
       }
 
       applyCandidate(idx, fuelRecord, matches);
-    } catch {
+    } catch (error) {
+      const failure = lookupRowFailure(error);
       updateRow(idx, {
-        autoFetching: false, fetched: true, warningType: 'not_found',
+        autoFetching: false, fetched: true, ...failure,
         fuelRecord: null, candidates: [], linked: false,
       });
     }
   }, [applyCandidate]);
+
+  useEffect(() => {
+    const onRecovered = () => {
+      entries.forEach((entry, idx) => {
+        if (rows[idx]?.warningType === 'connection' && entry.truckNo.trim()) {
+          void fetchTruck(idx, entry.truckNo);
+        }
+      });
+    };
+    window.addEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+    return () => window.removeEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+  }, [entries, rows, fetchTruck]);
 
   const handleDoChange = useCallback((idx: number, value: string) => {
     const doUp = value.toUpperCase();
@@ -834,7 +876,7 @@ export default function TangaYardLPOForm({
                 const isSelected = selectedRows.has(idx);
                 const showFuel = row.fetched && !row.warningType && !!row.fuelRecord;
                 const showDispense = row.fetched && !row.warningType && row.linked;
-                const accent = row.warningType ? '#e2b24a' : (showFuel ? '#5a9be0' : 'transparent');
+                const accent = row.warningType === 'connection' ? '#dc2626' : row.warningType ? '#e2b24a' : (showFuel ? '#5a9be0' : 'transparent');
                 const chosenId = row.fuelRecord ? fuelRecordIdOf(row.fuelRecord) : '';
 
                 return (
@@ -876,6 +918,9 @@ export default function TangaYardLPOForm({
                           {row.autoFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                         </button>
                       </div>
+                      {row.autoFetching && (
+                        <LookupWaitHint active className="mt-1 block text-[10px] text-amber-700" />
+                      )}
                     </div>
 
                     {/* Fuel Record */}
@@ -940,6 +985,20 @@ export default function TangaYardLPOForm({
                             {row.candidates.length} records — pick one
                           </span>
                         </button>
+                      ) : row.warningType === 'connection' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5px', background: '#fdecec', border: '1px solid #f5c2c2', borderRadius: '6px', padding: '4px 7px' }}>
+                            <AlertTriangle className="w-3 h-3" style={{ color: '#b42318', flexShrink: 0, marginTop: 1 }} />
+                            <span style={{ fontSize: '11px', color: '#b42318', fontWeight: 500 }}>{row.warningMessage || "Can't reach the server"}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => fetchTruck(idx, entry.truckNo)}
+                            style={{ fontSize: '10px', fontWeight: 600, color: '#b42318', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', textDecoration: 'underline', width: 'fit-content' }}
+                          >
+                            Try again
+                          </button>
+                        </div>
                       ) : row.warningType === 'not_found' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#fdf4e3', border: '1px solid #f2e0b8', borderRadius: '6px', padding: '4px 7px' }}>
@@ -1105,7 +1164,9 @@ export default function TangaYardLPOForm({
               const row = rows[idx] || makeEmptyRow();
               const isSelected = selectedRows.has(idx);
               const borderCls =
-                row.fetched && !row.warningType
+                row.warningType === 'connection'
+                  ? 'border-red-300 dark:border-red-700'
+                  : row.fetched && !row.warningType
                   ? 'border-blue-300 dark:border-blue-700'
                   : row.warningType
                   ? 'border-amber-300 dark:border-amber-700'
@@ -1227,6 +1288,24 @@ export default function TangaYardLPOForm({
                         {row.candidates.length} records — pick one
                       </span>
                     </button>
+                  )}
+                  {row.autoFetching && (
+                    <LookupWaitHint active className="mb-2 block text-[11px] text-amber-700 dark:text-amber-400" />
+                  )}
+                  {row.fetched && row.warningType === 'connection' && (
+                    <div className="flex flex-col gap-1.5 mb-2">
+                      <div className="flex items-start gap-1.5 px-2.5 py-1.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-[11px] text-red-700 dark:text-red-300">{row.warningMessage || "Can't reach the server"}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fetchTruck(idx, entry.truckNo)}
+                        className="text-[11px] font-semibold text-red-700 dark:text-red-300 underline w-fit"
+                      >
+                        Try again
+                      </button>
+                    </div>
                   )}
                   {row.fetched && row.warningType === 'not_found' && (
                     <div className="flex flex-col gap-1.5 mb-2">

@@ -28,6 +28,9 @@ import ForwardLPOModal from './ForwardLPOModal';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
 import { toast } from 'react-toastify';
 import { isReturnDoMissing, pendingDoStatusLabel, isPendingDo, shouldOfferPendingGoingCreate } from '../utils/pendingDo';
+import { connectionFromError, preemptLookup } from '../utils/connectivityError';
+import { NETWORK_RECOVERED_EVENT } from '../services/networkSignals';
+import { LookupWaitHint } from './LookupWaitHint';
 import { evaluateFormula } from '../utils/evaluateFormula';
 
 // STATIONS array removed - now using dynamic stations from database
@@ -77,7 +80,7 @@ interface TruckFetchResult {
   balance: number;
   message: string;
   success: boolean;
-  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | 'ambiguous_truck' | null;
+  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | 'ambiguous_truck' | 'connection' | null;
   // Set when the same DO is on more than one truck/journey (dirty imported data).
   // The caller must let the user pick rather than silently committing the primary.
   ambiguous?: boolean;
@@ -112,7 +115,7 @@ interface EntryAutoFillData {
   entryType?: 'regular' | 'da' | 'ref' | 'nil';
   referenceDoNo?: string;  // For DA: the real journey DO number
   // Warning states for trucks without valid fuel records
-  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | 'ambiguous_truck' | null;
+  warningType?: 'not_found' | 'journey_completed' | 'no_active_record' | 'ambiguous_do' | 'ambiguous_truck' | 'connection' | null;
   warningMessage?: string;
   // Journey navigation: track available journeys and current selection
   allJourneys?: {
@@ -1384,6 +1387,21 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       };
     }
 
+    const blocked = preemptLookup();
+    if (blocked) {
+      return {
+        fuelRecord: null,
+        goingDo: 'NIL',
+        returnDo: 'NIL',
+        destination: 'NIL',
+        goingDestination: 'NIL',
+        balance: 0,
+        message: blocked.message,
+        success: false,
+        warningType: 'connection',
+      };
+    }
+
     try {
       const { data: fuelRecords, meta } = await fuelRecordsAPI.getForLpoTruckLookup(truckNo.trim());
       const lookupMonths = meta.lookupMonths ?? lpoTruckLookupMonths;
@@ -1648,6 +1666,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         activeMatches,
       };
     } catch (error) {
+      const conn = connectionFromError(error);
       console.error('Error fetching truck data:', error);
       return {
         fuelRecord: null,
@@ -1656,8 +1675,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         destination: 'NIL',
         goingDestination: 'NIL',
         balance: 0,
-        message: 'Error fetching truck data',
-        success: false
+        message: conn?.message ?? 'Error fetching truck data',
+        success: false,
+        warningType: conn ? 'connection' as const : undefined,
       };
     }
   }, [lpoTruckLookupMonths]);
@@ -1685,6 +1705,21 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       };
     }
 
+    const blocked = preemptLookup();
+    if (blocked) {
+      return {
+        fuelRecord: null,
+        goingDo: 'NIL',
+        returnDo: 'NIL',
+        destination: 'NIL',
+        goingDestination: 'NIL',
+        balance: 0,
+        message: blocked.message,
+        success: false,
+        warningType: 'connection',
+      };
+    }
+
     try {
       const result = await fuelRecordsAPI.getByDoNumber(doNumber.trim().toUpperCase());
 
@@ -1709,6 +1744,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         matches: result.matches.map(m => buildDoResult(m.fuelRecord, m.direction)),
       };
     } catch (error) {
+      const conn = connectionFromError(error);
       console.error('Error fetching fuel record by DO:', error);
       return {
         fuelRecord: null,
@@ -1717,8 +1753,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         destination: 'NIL',
         goingDestination: 'NIL',
         balance: 0,
-        message: `Error fetching DO ${doNumber}`,
-        success: false
+        message: conn?.message ?? `Error fetching DO ${doNumber}`,
+        success: false,
+        warningType: conn ? 'connection' as const : undefined,
       };
     }
   }, []);
@@ -2813,6 +2850,20 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       }));
     }
   };
+
+  const retryLookupsRef = useRef<() => void>(() => {});
+  retryLookupsRef.current = () => {
+    (formData.entries || []).forEach((entry, index) => {
+      if (entryAutoFillData[index]?.warningType === 'connection' && entry?.truckNo) {
+        void handleTruckNoChange(index, entry.truckNo);
+      }
+    });
+  };
+  useEffect(() => {
+    const onRecovered = () => retryLookupsRef.current();
+    window.addEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+    return () => window.removeEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+  }, []);
 
   /**
    * Explicitly set the entry mode for a row via the per-row mode chip.
@@ -4271,6 +4322,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     const dupInfo = duplicateWarnings.get(entry?.truckNo || '');
     const hasDup = !!dupInfo && formData.station?.toUpperCase() !== 'CASH';
     return !!(
+      af.loading ||
       (af as EntryAutoFillData).entryType === 'da' ||
       (af as EntryAutoFillData).entryType === 'ref' ||
       (af.warningType && !af.loading && (entry?.truckNo?.length || 0) >= 5) ||
@@ -5407,16 +5459,30 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     </div>
 
                     {/* Warnings (only show when needed) */}
-                    {(hasNoRecordWarning || isExactDuplicate || isDifferentAmount || mobileReturnDoMissing) && (
+                    {(autoFill.loading || hasNoRecordWarning || isExactDuplicate || isDifferentAmount || mobileReturnDoMissing) && (
                       <div className="mb-1.5 text-[10px] leading-tight flex flex-col gap-0.5">
                         {mobileReturnDoMissing && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 w-fit" title="No Return DO found in the fuel record — cannot submit">
                             ⛔ No Return DO
                           </span>
                         )}
+                        {autoFill.loading && (
+                          <LookupWaitHint active className="text-[10px] text-amber-700 dark:text-amber-400" />
+                        )}
                         {hasNoRecordWarning && (autoFill.warningMessage?.includes('DUPLICATE')
                           ? <span className="text-red-600 dark:text-red-400 font-semibold">⚠️ Duplicate — use different truck</span>
-                          : <span className="text-amber-600 dark:text-amber-400">
+                          : autoFill.warningType === 'connection' ? (
+                            <span className="text-red-700 dark:text-red-300">
+                              {autoFill.warningMessage || "Can't reach the server"}
+                              <button
+                                type="button"
+                                onClick={() => handleTruckNoChange(index, entry?.truckNo || '')}
+                                className="ml-1 underline font-semibold"
+                              >
+                                Try again
+                              </button>
+                            </span>
+                          ) : <span className="text-amber-600 dark:text-amber-400">
                               {autoFill.warningType === 'not_found' && '⚠️ No record — manual entry allowed'}
                               {autoFill.warningType === 'journey_completed' && '⚠️ Journey complete (0L)'}
                               {autoFill.warningType === 'no_active_record' && '⚠️ No active journey'}
@@ -5845,10 +5911,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                   </span>
                                 )}
                                 {/* No fuel record / in-form duplicate warning */}
+                                {autoFill.loading && (
+                                  <LookupWaitHint active className="text-[10px] text-amber-700 dark:text-amber-400" />
+                                )}
                                 {hasNoRecordWarning && (
-                                  <div className="text-amber-600 dark:text-amber-400" title={autoFill.warningMessage}>
+                                  <div className={autoFill.warningType === 'connection' ? 'text-red-700 dark:text-red-300' : 'text-amber-600 dark:text-amber-400'} title={autoFill.warningMessage}>
                                     {autoFill.warningMessage?.includes('DUPLICATE') ? (
                                       <span className="text-red-600 dark:text-red-400 font-semibold">⚠️ Already entered</span>
+                                    ) : autoFill.warningType === 'connection' ? (
+                                      <span>
+                                        {autoFill.warningMessage || "Can't reach the server"}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleTruckNoChange(index, entry?.truckNo || '')}
+                                          className="ml-1 underline font-semibold"
+                                        >
+                                          Try again
+                                        </button>
+                                      </span>
                                     ) : (
                                       <>
                                         {autoFill.warningType === 'not_found' && '⚠️ No record found'}
@@ -5858,6 +5938,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                         {autoFill.warningType === 'ambiguous_truck' && '⚠️ Truck has multiple active journeys — pick one'}
                                       </>
                                     )}
+                                    {autoFill.warningType !== 'connection' && (
                                     <span className="block text-[10px] text-gray-500 dark:text-gray-400">
                                       {autoFill.warningMessage?.includes('DUPLICATE')
                                         ? 'Remove duplicate or use different truck'
@@ -5865,6 +5946,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                           ? 'Pick the journey for this order'
                                           : 'Manual entry allowed'}
                                     </span>
+                                    )}
                                   </div>
                                 )}
                                 {/* Duplicate allocation warning */}

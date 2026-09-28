@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { measureSettingsAction } from './settingsTelemetry';
 import { API_TIMEOUT_MS, signalNetworkError } from './networkSignals';
+import { SEARCH_TIMEOUT_MS } from '../utils/connectivityError';
 import { 
   DeliveryOrder, 
   LPOEntry, 
@@ -261,8 +262,14 @@ export interface ExportLinkCandidate {
 
 // Delivery Orders API
 export const deliveryOrdersAPI = {
-  getAll: async (filters?: any): Promise<{ data: DeliveryOrder[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
-    const response = await apiClient.get('/delivery-orders', { params: filters });
+  getAll: async (
+    filters?: any,
+    request?: { timeout?: number }
+  ): Promise<{ data: DeliveryOrder[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
+    const response = await apiClient.get('/delivery-orders', {
+      params: filters,
+      ...(request?.timeout != null ? { timeout: request.timeout } : {}),
+    });
     // Check if response has pagination metadata (server-side pagination)
     if (response.data.data?.pagination) {
       return {
@@ -770,8 +777,14 @@ export const amendedDOsAPI = {
 
 // LPOs API — reads from /lpo-documents/entries (flat aggregation over LPOSummary)
 export const lposAPI = {
-  getAll: async (filters?: any): Promise<{ data: LPOEntry[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
-    const response = await apiClient.get('/lpo-documents/entries', { params: filters });
+  getAll: async (
+    filters?: any,
+    request?: { timeout?: number }
+  ): Promise<{ data: LPOEntry[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
+    const response = await apiClient.get('/lpo-documents/entries', {
+      params: filters,
+      ...(request?.timeout != null ? { timeout: request.timeout } : {}),
+    });
     if (response.data.data?.pagination) {
       return {
         data: response.data.data.data || [],
@@ -1358,8 +1371,14 @@ export interface FuelRecordDetails {
 
 // Fuel Records API
 export const fuelRecordsAPI = {
-  getAll: async (filters?: any): Promise<{ data: FuelRecord[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
-    const response = await apiClient.get('/fuel-records', { params: filters });
+  getAll: async (
+    filters?: any,
+    request?: { timeout?: number }
+  ): Promise<{ data: FuelRecord[]; pagination?: { page: number; limit: number; total: number; totalPages: number } }> => {
+    const response = await apiClient.get('/fuel-records', {
+      params: filters,
+      ...(request?.timeout != null ? { timeout: request.timeout } : {}),
+    });
     // Check if response has pagination metadata (server-side pagination)
     if (response.data.data?.pagination) {
       return {
@@ -1452,7 +1471,9 @@ export const fuelRecordsAPI = {
     try {
       // URL-encode the DO number to handle slashes (e.g., "0003/26" -> "0003%2F26")
       const encodedDoNumber = encodeURIComponent(doNumber);
-      const response = await apiClient.get(`/fuel-records/do/${encodedDoNumber}`);
+      const response = await apiClient.get(`/fuel-records/do/${encodedDoNumber}`, {
+        timeout: SEARCH_TIMEOUT_MS,
+      });
       if (response.data.data) {
         const fuelRecord = response.data.data;
         // Use the detected direction from the backend
@@ -1496,6 +1517,7 @@ export const fuelRecordsAPI = {
     const encoded = encodeURIComponent(truckNo.trim());
     const response = await apiClient.get(`/fuel-records/lpo-truck-lookup/${encoded}`, {
       params: opts?.mode ? { mode: opts.mode } : undefined,
+      timeout: SEARCH_TIMEOUT_MS,
     });
     return {
       data: response.data.data || [],

@@ -1635,7 +1635,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             allJourneys: result.allJourneys,
           },
         }));
-        if (result.message) toast.info(result.message);
+        if (result.message) {
+          if (result.warningType === 'connection') toast.error(result.message);
+          else toast.info(result.message);
+        }
         return;
       }
       applyJourneyToRow(
@@ -1701,7 +1704,10 @@ const LPOSheetView: React.FC<LPOSheetViewProps> = ({ sheet, workbookId, onUpdate
             warningType: result.warningType || null,
           },
         }));
-        if (result.message) toast.info(result.message);
+        if (result.message) {
+          if (result.warningType === 'connection') toast.error(result.message);
+          else toast.info(result.message);
+        }
         return;
       }
       applyJourneyToRow(index, result);

@@ -1,6 +1,7 @@
 import { YardFuelDispense, FuelRecord } from '../types';
 import { yardFuelAPI, fuelRecordsAPI } from './api';
 import { formatTruckNumber } from '../utils/dataCleanup';
+import { assertLookupReachable, connectionFromError, SEARCH_TIMEOUT_MS } from '../utils/connectivityError';
 
 /**
  * Service for handling yard fuel dispensing operations
@@ -15,16 +16,18 @@ export const yardFuelService = {
    * No date restriction - searches all records
    */
   searchActiveFuelRecords: async (truckNo: string): Promise<FuelRecord[]> => {
+    assertLookupReachable();
     try {
-      const response = await fuelRecordsAPI.getAll({ 
+      const response = await fuelRecordsAPI.getAll({
         truckNo,
         limit: 10000
-      });
+      }, { timeout: SEARCH_TIMEOUT_MS });
       const fuelRecords = response.data;
-      
+
       // Filter out cancelled fuel records (backend now does this by default)
       return fuelRecords.filter((r: FuelRecord) => !r.isCancelled);
     } catch (error) {
+      if (connectionFromError(error)) throw error;
       console.error('Error searching active fuel records:', error);
       return [];
     }
@@ -53,6 +56,7 @@ export const yardFuelService = {
         hasActiveRecord: false,
       };
     } catch (error) {
+      if (connectionFromError(error)) throw error;
       console.error('Error searching truck info:', error);
       return {
         truckNo: formatTruckNumber(truckNo),
