@@ -32,6 +32,7 @@ import {
 import {
   isYardStation,
   canonicalYardStation,
+  yardFuelFieldForStation,
   YARD_DEFAULT_ORDER_OF,
 } from '../utils/yardStations';
 import { normalizeYardEntriesForSummary } from '../services/yardUnifiedLpoService';
@@ -152,7 +153,8 @@ function resolveFuelRecordFieldForEntry(
   const direction: 'going' | 'returning' =
     directionFromDo
     || (entry.journeyDirection === 'returning' ? 'returning' : 'going');
-  return resolveFuelRecordFieldFromStationDirection(stationMapping, lpoStation, direction);
+  return resolveFuelRecordFieldFromStationDirection(stationMapping, lpoStation, direction)
+    || yardFuelFieldForStation(lpoStation);
 }
 
 interface PriorOrderMatch {
@@ -2512,7 +2514,7 @@ export const checkDuplicateAllocation = async (req: AuthRequest, res: Response):
       stationMapping,
       station as string,
       direction
-    );
+    ) || yardFuelFieldForStation(station as string);
 
     if (!fuelRecordField) {
       res.status(200).json({

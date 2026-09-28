@@ -5126,6 +5126,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 yard={isDarYardStation(formData.station) ? 'darYard' : 'tangaYard'}
                 date={formData.date || ''}
                 disabled={isSubmitting}
+                excludeLpoId={initialData?.id?.toString()}
                 initialEntries={yardDraftEntries}
                 onSummaryChange={setYardSummary}
                 onEntriesChange={setYardDraftEntries}

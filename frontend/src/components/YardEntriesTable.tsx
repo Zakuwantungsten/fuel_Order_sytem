@@ -7,7 +7,8 @@
 import { useState, useCallback, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
 import { Plus, Trash2, Loader2, Search, Eye, CheckCircle, UserPlus } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { configAPI, fuelRecordsAPI } from '../services/api';
+import { configAPI, fuelRecordsAPI, lpoDocumentsAPI } from '../services/api';
+import { YARD_STATION } from '../utils/yardStations';
 import FuelRecordInspectModal from './FuelRecordInspectModal';
 import { useGridNav } from '../hooks/useGridNav';
 import {
@@ -119,17 +120,26 @@ function entryDiff(e: DraftEntry): number {
   return +(Number(e.liters) - effectiveDispense(e)).toFixed(2);
 }
 
+interface PriorYardLpo {
+  lpoNo: string;
+  liters: number;
+  isDifferentAmount: boolean;
+  newLiters: number;
+}
+
 interface Props {
   yard: YardKey;
   date: string;
   disabled?: boolean;
+  /** Current LPO id when editing, so the row does not flag itself. */
+  excludeLpoId?: string;
   initialEntries?: YardDraftEntry[];
   onSummaryChange?: (summary: { count: number; total: number; totalLiters: number }) => void;
   onEntriesChange?: (entries: YardDraftEntry[]) => void;
 }
 
 const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
-  yard, date, disabled, initialEntries, onSummaryChange, onEntriesChange,
+  yard, date, disabled, excludeLpoId, initialEntries, onSummaryChange, onEntriesChange,
 }, ref) => {
   const [entries, setEntries] = useState<DraftEntry[]>(() =>
     initialEntries && initialEntries.length > 0
@@ -155,6 +165,7 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
   useEffect(() => { yardNav.flushPendingFocus(); }, [entries.length]);
 
   const accent = yard === 'darYard' ? '#16a34a' : '#1d6fc9';
+  const [priorLpos, setPriorLpos] = useState<Record<number, PriorYardLpo | null>>({});
 
   useEffect(() => {
     const yardCode = yard === 'darYard' ? 'DAR' : 'TANGA';
@@ -165,6 +176,48 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
       }
     }).catch(() => {});
   }, [yard]);
+
+  useEffect(() => {
+    const station = yard === 'darYard' ? YARD_STATION.DAR : YARD_STATION.TANGA;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const next: Record<number, PriorYardLpo | null> = {};
+      await Promise.all(entries.map(async (entry, index) => {
+        const truckNo = (entry.truckNo || '').trim();
+        const doNo = (entry.doNo || '').trim();
+        if (truckNo.length < 4 || !doNo || doNo.toUpperCase() === 'NIL') {
+          next[index] = null;
+          return;
+        }
+        try {
+          const result = await lpoDocumentsAPI.checkDuplicateAllocation(
+            truckNo,
+            station,
+            excludeLpoId,
+            entry.liters,
+            doNo,
+            'going',
+          );
+          const existing = result.hasDuplicate ? result.existingLpos[0] : undefined;
+          next[index] = existing
+            ? {
+                lpoNo: existing.lpoNo,
+                liters: existing.entries[0]?.liters || 0,
+                isDifferentAmount: result.isDifferentAmount,
+                newLiters: entry.liters,
+              }
+            : null;
+        } catch {
+          next[index] = null;
+        }
+      }));
+      if (!cancelled) setPriorLpos(next);
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [entries, yard, excludeLpoId]);
 
   const updateEntry = (idx: number, field: keyof DraftEntry, value: string | number | null) => {
     setEntries(prev => prev.map((e, i) => {
@@ -677,6 +730,24 @@ const YardEntriesTable = forwardRef<YardEntriesTableHandle, Props>(({
           </button>
         ))}
         <span className={`text-[10px] font-semibold truncate ${toneClass}`} title={st.text}>{st.text}</span>
+        {priorLpos[idx] && (() => {
+          const prior = priorLpos[idx]!;
+          const same = prior.newLiters > 0 && !prior.isDifferentAmount;
+          const topUp = prior.newLiters > 0 && prior.isDifferentAmount;
+          const text = same
+            ? `Same amount in LPO #${prior.lpoNo} (${prior.liters}L)`
+            : topUp
+            ? `Top-up +${prior.newLiters}L (LPO #${prior.lpoNo} ${prior.liters}L)`
+            : `LPO #${prior.lpoNo} (${prior.liters}L)`;
+          return (
+            <span
+              className={`text-[10px] font-semibold ${same ? 'text-red-600 dark:text-red-400' : topUp ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'}`}
+              title={text}
+            >
+              {text}
+            </span>
+          );
+        })()}
         {isPendingGoingCreateMonth(date) && shouldOfferPendingGoingCreate({
           warningType: row.warningType,
           active: row.allJourneys.active,
