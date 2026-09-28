@@ -14,6 +14,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { fuelRecordKeys } from '../hooks/useFuelRecords';
 import { deliveryOrderKeys } from '../hooks/useDeliveryOrders';
 import FuelRecordExportLinkModal from './FuelRecordExportLinkModal';
+import LPOEntryReview from './LPOEntryReview';
+import type { LPOReviewRow } from './LPOEntryReview';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import {
   getAvailableCancellationPoints,
@@ -288,6 +290,7 @@ const LPO_RD_STYLES = `
 .lpo-rd .row-orange{background:#fff8f1;} .dark .lpo-rd .row-orange{background:rgba(249,115,22,.11);}
 .lpo-rd .row-amber{background:#fffaf0;} .dark .lpo-rd .row-amber{background:rgba(245,158,11,.12);}
 .lpo-rd .row-red{background:#fef2f2;} .dark .lpo-rd .row-red{background:rgba(239,68,68,.11);}
+.lpo-rd .row-focus{box-shadow:inset 0 0 0 2px #4f46e5;}
 .lpo-rd .amount-cell{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;font-weight:600;color:#0f1729;}
 .dark .lpo-rd .amount-cell{color:#e2e8f0;}
 .lpo-rd .mode-chip{font-size:10px;font-weight:700;border:1px solid #dde3ec;border-radius:6px;padding:4px 4px;background:#fff;color:#64748b;outline:none;cursor:pointer;}
@@ -536,6 +539,9 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     truckNo: string;
     loading: boolean;
   }>({ open: false, index: -1, truckNo: '', loading: false });
+
+  const [supplyTab, setSupplyTab] = useState<'entries' | 'review'>('entries');
+  const [focusedEntryIndex, setFocusedEntryIndex] = useState<number | null>(null);
 
   // Link an unlinked EXPORT DO onto a return row that has no return DO
   const [returnExportLink, setReturnExportLink] = useState<{
@@ -1351,6 +1357,15 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       if (missingReturnRefreshTimer.current) clearTimeout(missingReturnRefreshTimer.current);
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (supplyTab !== 'entries' || focusedEntryIndex == null) return;
+    const nodes = document.querySelectorAll(`[data-lpo-entry="${focusedEntryIndex}"]`);
+    const visible = Array.from(nodes).find((node) => (node as HTMLElement).offsetParent !== null) || nodes[0];
+    visible?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const timer = setTimeout(() => setFocusedEntryIndex(null), 2500);
+    return () => clearTimeout(timer);
+  }, [supplyTab, focusedEntryIndex]);
 
   // Fetch truck data when truck number changes
   // Search logic: current month → previous month → month before that
@@ -5146,6 +5161,22 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />Checking duplicates…
                 </span>
               )}
+              <div className="inline-flex rounded-[8px] border border-[#e6eaf1] dark:border-[#334155] p-0.5 bg-white dark:bg-[#0f172a]">
+                <button
+                  type="button"
+                  onClick={() => setSupplyTab('entries')}
+                  className={`h-7 px-2.5 rounded-[6px] text-[11.5px] font-bold ${supplyTab === 'entries' ? 'bg-[#4f46e5] text-white' : 'text-[#64748b] dark:text-gray-300'}`}
+                >
+                  Entries
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSupplyTab('review')}
+                  className={`h-7 px-2.5 rounded-[6px] text-[11.5px] font-bold ${supplyTab === 'review' ? 'bg-[#4f46e5] text-white' : 'text-[#64748b] dark:text-gray-300'}`}
+                >
+                  Review
+                </button>
+              </div>
               <div className="flex-1 h-px bg-[#eef1f6] dark:bg-[#1e293b] min-w-[20px]" />
               {currentStationHasFormula && (formData.entries?.length || 0) > 0 ? (
                 <button
@@ -5165,6 +5196,52 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               )}
             </div>
 
+            <div className={supplyTab === 'review' ? undefined : 'hidden'}>
+              <LPOEntryReview
+                rows={(formData.entries || []).flatMap((entry, index): LPOReviewRow[] => {
+                  if (!entry) return [];
+                  const autoFill = entryAutoFillData[index];
+                  const record = autoFill?.fuelRecord || null;
+                  const direction = autoFill?.direction || 'going';
+                  return [{
+                    index,
+                    truckNo: entry.truckNo || '',
+                    doNo: entry.doNo || '',
+                    entryType: autoFill?.entryType || 'regular',
+                    direction,
+                    loadingPoint: (record?.originalGoingFrom || record?.from || '').trim(),
+                    destination: String(direction === 'going'
+                      ? (record?.originalGoingTo || autoFill?.goingDestination || record?.to || entry.dest || '')
+                      : (record?.to || entry.dest || '')
+                    ).trim(),
+                    totalLts: record ? (record.totalLts ?? null) : null,
+                    balance: record ? (record.balance ?? null) : null,
+                    hasFuelRecord: !!record,
+                    fuelRecord: record,
+                    canView: !!record,
+                    canLink: offerReturnExportLink(index),
+                    canPendingGoing: direction === 'going' && canOfferPendingGoing(index),
+                    canPendingReturn: direction === 'returning' && !!autoFill?.returnDoMissing && !!record && (autoFill?.entryType || 'regular') === 'regular',
+                  }];
+                })}
+                onView={handleInspectRecord}
+                onDelete={handleRemoveEntry}
+                onOpenEntry={(index) => {
+                  setSupplyTab('entries');
+                  setFocusedEntryIndex(index);
+                }}
+                onLink={openReturnExportLink}
+                onPendingGoing={requestCreatePendingGoingDo}
+                onPendingReturn={requestCreatePendingReturnDo}
+                onEditSelected={(indexes) => {
+                  setSelectedEntries(new Set(indexes));
+                  setSupplyTab('entries');
+                }}
+                onClearSelection={() => setSelectedEntries(new Set())}
+              />
+            </div>
+
+            {supplyTab === 'entries' && <>
             {/* Bulk action bar — visible when 1+ entries are selected */}
             {selectedEntries.size > 0 && (
               <div className="flex flex-wrap items-center gap-2.5 mb-3 px-3.5 py-2.5 rounded-[11px] bg-[#eef0fe] dark:bg-indigo-900/20 border border-[#d9dcfb] dark:border-indigo-800">
@@ -5246,7 +5323,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   || (autoFill.warningType === 'ambiguous_truck' && !autoFill.loading);
                 const mobileReturnDoMissing = autoFill.direction === 'returning' && autoFill.returnDoMissing && !!autoFill.fuelRecord;
                 return (
-                  <div key={index} className={`border rounded-lg p-2 transition-colors ${
+                  <div key={index} data-lpo-entry={index} className={`border rounded-lg p-2 transition-colors ${focusedEntryIndex === index ? 'row-focus ' : ''}${
                     autoFill.entryType === 'ref' ? 'border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/10'
                     : autoFill.entryType === 'da' ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10'
                     : mobileReturnDoMissing ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10'
@@ -5541,7 +5618,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                         || (autoFill.warningType === 'ambiguous_do' && !autoFill.loading)
                         || (autoFill.warningType === 'ambiguous_truck' && !autoFill.loading);
                       return (
-                        <tr key={index} className={`lpo-row ${
+                        <tr key={index} data-lpo-entry={index} className={`lpo-row ${focusedEntryIndex === index ? 'row-focus ' : ''}${
                           (autoFill as EntryAutoFillData).entryType === 'ref' ? 'row-orange'
                           : (autoFill as EntryAutoFillData).entryType === 'da' ? 'row-blue'
                           : isExactDuplicate ? 'row-red'
@@ -5999,6 +6076,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
               </div>
              </div>
             </div>
+            </>}
           </div>
           </>
           )}
