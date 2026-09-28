@@ -430,6 +430,29 @@ export const deliveryOrdersAPI = {
     return response.data;
   },
 
+  // Unlinked EXPORT DOs that can be attached as the return DO of this fuel record.
+  listUnlinkedExportsForFuelRecord: async (fuelRecordId: string): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      alreadyHasReturnDo: boolean;
+      candidates: Array<{
+        id: string;
+        doNumber: string;
+        date: string;
+        truckNo: string;
+        loadingPoint: string;
+        destination: string;
+        clientName: string;
+        exportRouteLiters: number;
+        routeMatched: boolean;
+      }>;
+    };
+  }> => {
+    const response = await apiClient.get(`/delivery-orders/unlinked-exports/${fuelRecordId}`);
+    return response.data;
+  },
+
   // Link an EXPORT DO to a specific, user-chosen fuel record.
   confirmExportLink: async (id: string | number, fuelRecordId: string): Promise<{
     success: boolean;

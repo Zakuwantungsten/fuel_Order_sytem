@@ -5615,6 +5615,113 @@ const findExportLinkCandidates = async (truckNo: string): Promise<any[]> => {
     .lean();
 };
 
+const exportDoTruckFilter = (truckNo: string): Record<string, unknown> | null => {
+  const normalized = normalizeTruckNo(truckNo);
+  if (!normalized) return null;
+  const m = normalized.match(/^(T?\d+)([A-Z]+)$/);
+  const pattern = m ? `^${m[1]}[\\s-]*${m[2]}$` : `^${normalized}$`;
+  return { truckNo: { $regex: new RegExp(pattern, 'i') } };
+};
+
+/**
+ * EXPORT DOs for this fuel record's truck that are not yet linked as a return DO.
+ * Inverse of previewExportLinkCandidates: the LPO row already has the fuel record
+ * and the user picks the export DO. Dry run — performs no writes.
+ */
+export const listUnlinkedExportsForFuelRecord = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { fuelRecordId } = req.params;
+    const fuelRecord = await FuelRecord.findOne({
+      _id: fuelRecordId,
+      isDeleted: false,
+      isCancelled: { $ne: true },
+    }).lean();
+    if (!fuelRecord) {
+      throw new ApiError(404, 'Fuel record not found');
+    }
+
+    const alreadyHasReturnDo = !isReturnDoOpen(
+      (fuelRecord as any).returnDo,
+      (fuelRecord as any).isPendingReturn
+    );
+    if (alreadyHasReturnDo) {
+      res.status(200).json({
+        success: true,
+        message: 'Fuel record already has a return DO',
+        data: { alreadyHasReturnDo: true, candidates: [] },
+      });
+      return;
+    }
+
+    const truckFilter = exportDoTruckFilter(String((fuelRecord as any).truckNo || ''));
+    if (!truckFilter) {
+      res.status(200).json({
+        success: true,
+        message: 'Fuel record has no truck number',
+        data: { alreadyHasReturnDo: false, candidates: [] },
+      });
+      return;
+    }
+
+    const base = {
+      ...truckFilter,
+      importOrExport: 'EXPORT',
+      doType: 'DO',
+      isCancelled: { $ne: true },
+      isDeleted: { $ne: true },
+    };
+    const [active, archived] = await Promise.all([
+      DeliveryOrder.find(base).sort({ date: -1 }).limit(50).lean(),
+      ArchivedDeliveryOrder.find(base).sort({ date: -1 }).limit(50).lean(),
+    ]);
+
+    const seen = new Set<string>();
+    const orders = [...active, ...archived].filter((order: any) => {
+      const key = String(order.doNumber || '');
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const doNumbers = orders.map((order: any) => order.doNumber);
+    const linked = doNumbers.length
+      ? await FuelRecord.find({ returnDo: { $in: doNumbers }, isDeleted: false }).select('returnDo').lean()
+      : [];
+    const linkedSet = new Set(linked.map((record: any) => record.returnDo));
+
+    const { routes } = await loadFuelConfig();
+    const candidates = orders
+      .filter((order: any) => !linkedSet.has(order.doNumber))
+      .slice(0, 50)
+      .map((order: any) => {
+        const routeMatch = matchExportRouteLiters(
+          routes,
+          order.loadingPoint || '',
+          order.destination || ''
+        );
+        return {
+          id: String(order._id),
+          doNumber: order.doNumber,
+          date: order.date,
+          truckNo: order.truckNo,
+          loadingPoint: order.loadingPoint || '',
+          destination: order.destination || '',
+          clientName: order.clientName || '',
+          exportRouteLiters: routeMatch.matched ? routeMatch.liters : 0,
+          routeMatched: routeMatch.matched,
+        };
+      });
+
+    res.status(200).json({
+      success: true,
+      message: `${candidates.length} unlinked EXPORT DO(s) for truck ${(fuelRecord as any).truckNo}`,
+      data: { alreadyHasReturnDo: false, candidates },
+    });
+  } catch (error: any) {
+    throw error;
+  }
+};
+
 /**
  * Preview the going fuel record(s) an EXPORT DO can be linked to, so the UI can
  * show a list view and let the user choose + inspect before committing. Dry run —

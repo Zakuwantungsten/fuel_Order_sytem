@@ -3,6 +3,7 @@ import { deliveryOrderController } from '../controllers';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { exportRateLimiter } from '../middleware/rateLimiters';
+import { param } from 'express-validator';
 import { deliveryOrderValidation, commonValidation } from '../middleware/validation';
 import { validate } from '../utils/validate';
 
@@ -65,6 +66,15 @@ router.get(
 router.get('/', commonValidation.pagination, validate, asyncHandler(deliveryOrderController.getAllDeliveryOrders));
 router.get('/next-do-number', asyncHandler(deliveryOrderController.getNextDONumber));
 router.get('/trucks', asyncHandler(deliveryOrderController.getAllTrucks));
+// Unlinked EXPORT DOs for a fuel record's truck (LPO return-row link).
+// Must stay before /:id so "unlinked-exports" is not parsed as an id.
+router.get(
+  '/unlinked-exports/:fuelRecordId',
+  authorize('super_admin', 'admin', 'fuel_order_maker'),
+  param('fuelRecordId').isMongoId().withMessage('Invalid fuel record id'),
+  validate,
+  asyncHandler(deliveryOrderController.listUnlinkedExportsForFuelRecord)
+);
 router.get('/truck/:truckNo', asyncHandler(deliveryOrderController.getDeliveryOrdersByTruck));
 router.get('/truck/:truckNo/current-journey', asyncHandler(deliveryOrderController.getCurrentJourneyByTruck));
 

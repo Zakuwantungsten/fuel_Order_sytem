@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight, MessageSquare, Clock, RefreshCw } from 'lucide-react';
+import { X, Plus, Trash2, Loader2, CheckCircle, ArrowLeft, ArrowRight, AlertTriangle, Ban, Eye, Fuel, ChevronDown, Check, Save, Lock, FileCheck2, GitFork, Banknote, PlusCircle, ClipboardPaste, CheckCheck, ArrowLeftRight, MessageSquare, Clock, RefreshCw, Link2 } from 'lucide-react';
 import type { LPOSummary, LPODetail, FuelRecord, CancellationPoint, FuelStationConfig } from '../types';
 import { lpoDocumentsAPI, fuelRecordsAPI, resourceLockAPI } from '../services/api';
 import YardEntriesTable from './YardEntriesTable';
@@ -10,6 +10,10 @@ import { useEditLockSession } from '../hooks/useEditLockSession';
 import { formatTruckNumber } from '../utils/dataCleanup';
 import { useActiveFuelStations, fuelStationKeys } from '../hooks/useFuelStations';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
+import { fuelRecordKeys } from '../hooks/useFuelRecords';
+import { deliveryOrderKeys } from '../hooks/useDeliveryOrders';
+import FuelRecordExportLinkModal from './FuelRecordExportLinkModal';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import {
   getAvailableCancellationPoints,
@@ -533,6 +537,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     loading: boolean;
   }>({ open: false, index: -1, truckNo: '', loading: false });
 
+  // Link an unlinked EXPORT DO onto a return row that has no return DO
+  const [returnExportLink, setReturnExportLink] = useState<{
+    open: boolean;
+    index: number;
+    fuelRecordId: string;
+    truckNo: string;
+  }>({ open: false, index: -1, fuelRecordId: '', truckNo: '' });
+
   // Multi-select state for bulk editing
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
   const [bulkLiters, setBulkLiters] = useState('');
@@ -744,12 +756,19 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const customRateRef = React.useRef(customRate);
   const noStationDefaultLitersRef = React.useRef(noStationDefaultLiters);
   const noStationRateRef = React.useRef(noStationRate);
+  const entryAutoFillDataRef = React.useRef(entryAutoFillData);
+  const formEntriesRef = React.useRef(formData.entries);
+  const directionRefreshGen = React.useRef<Record<number, number>>({});
+  const missingReturnRefreshTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshRowsMissingReturnDoRef = React.useRef<() => Promise<void>>(async () => {});
   cashDefaultLitersRef.current = cashDefaultLiters;
   cashRateRef.current = cashRate;
   customDefaultLitersRef.current = customDefaultLiters;
   customRateRef.current = customRate;
   noStationDefaultLitersRef.current = noStationDefaultLiters;
   noStationRateRef.current = noStationRate;
+  entryAutoFillDataRef.current = entryAutoFillData;
+  formEntriesRef.current = formData.entries;
 
   // Close dropdowns when clicking outside
   React.useEffect(() => {
@@ -915,6 +934,8 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
 
   // Load stations from database using React Query
   const queryClient = useQueryClient();
+  const { user: authUser } = useAuth();
+  const canLinkExportDO = ['super_admin', 'admin', 'fuel_order_maker'].includes(authUser?.role || '');
   const { data: fuelStations, isLoading: loadingStations } = useActiveFuelStations();
   // Memoize so the reference stays stable across renders (especially while the query
   // is loading and `fuelStations` is undefined). A fresh `[]` each render would make
@@ -1305,6 +1326,31 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       fetchNextLpoNumber();
     }
   }, 'lpo-detail-next-number');
+
+  // A link made in DO Management updates the fuel record. Refresh return rows
+  // that are still missing a return DO so the form picks it up without a reload.
+  const scheduleMissingReturnRefresh = () => {
+    if (missingReturnRefreshTimer.current) clearTimeout(missingReturnRefreshTimer.current);
+    missingReturnRefreshTimer.current = setTimeout(() => {
+      void refreshRowsMissingReturnDoRef.current();
+    }, 400);
+  };
+
+  useRealtimeSync('fuel_records', (event) => {
+    if (!isOpen || event?.action !== 'update') return;
+    scheduleMissingReturnRefresh();
+  }, 'lpo-detail-return-link');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    scheduleMissingReturnRefresh();
+    const onFocus = () => scheduleMissingReturnRefresh();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      if (missingReturnRefreshTimer.current) clearTimeout(missingReturnRefreshTimer.current);
+    };
+  }, [isOpen]);
 
   // Fetch truck data when truck number changes
   // Search logic: current month → previous month → month before that
@@ -3005,6 +3051,159 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
   };
 
+  // Write a direction onto a row from a fuel record (cached or freshly fetched).
+  const commitEntryDirection = (
+    index: number,
+    newDirection: 'going' | 'returning',
+    fuelRecord: FuelRecord,
+    storedGoingDestination: string | undefined,
+    journeys?: EntryAutoFillData['allJourneys']
+  ) => {
+    const returnDoMissing = isReturnDoMissing(fuelRecord.returnDo as string);
+    const doNumber = newDirection === 'going'
+      ? fuelRecord.goingDo
+      : (returnDoMissing ? '' : fuelRecord.returnDo as string);
+    const destinationForAllocation = newDirection === 'going'
+      ? (storedGoingDestination || fuelRecord.originalGoingTo || fuelRecord.to)
+      : fuelRecord.to;
+
+    const defaults = formData.station
+      ? getStationDefaults(
+          formData.station,
+          newDirection,
+          destinationForAllocation,
+          fuelRecord.totalLts ?? undefined,
+          fuelRecord.extra ?? undefined,
+          fuelRecord.balance ?? undefined
+        )
+      : { liters: noStationDefaultLiters, rate: noStationRate };
+
+    const litersToSet = defaults.liters;
+    const queued = journeys?.queued || [];
+    const selectedType: 'active' | 'queued' = fuelRecord.journeyStatus === 'queued' ? 'queued' : 'active';
+    const selectedIndex = selectedType === 'queued'
+      ? Math.max(0, queued.findIndex((q) => fuelRecordKey(q) === fuelRecordKey(fuelRecord)))
+      : -1;
+
+    setFormData(prev => {
+      const newEntries = [...(prev.entries || [])];
+      if (!newEntries[index]) {
+        newEntries[index] = {
+          doNo: '',
+          truckNo: '',
+          liters: 0,
+          rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
+          amount: 0,
+          dest: 'NIL',
+        };
+      }
+      newEntries[index] = {
+        ...newEntries[index],
+        doNo: doNumber || '',
+        dest: destinationForAllocation,
+        liters: litersToSet,
+        amount: litersToSet * defaults.rate
+      };
+      const total = newEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+      return { ...prev, entries: newEntries, total };
+    });
+
+    setEntryAutoFillData(prev => ({
+      ...prev,
+      [index]: {
+        ...prev[index],
+        direction: newDirection,
+        loading: false,
+        fuelRecord,
+        fuelRecordId: fuelRecordKey(fuelRecord) || prev[index]?.fuelRecordId,
+        goingDestination: storedGoingDestination || fuelRecord.originalGoingTo || fuelRecord.to,
+        returnDoMissing: newDirection === 'returning' ? returnDoMissing : prev[index]?.returnDoMissing,
+        formulaStatus: defaults.formulaStatus || null,
+        formulaMessage: defaults.formulaMessage,
+        ...(journeys ? {
+          allJourneys: journeys,
+          selectedJourneyType: selectedType,
+          selectedJourneyIndex: selectedIndex,
+          fetched: true,
+        } : {}),
+      }
+    }));
+  };
+
+  // Re-read the truck's fuel record, then apply a direction. Used when toggling
+  // to Return and after an export DO is linked, so a return DO added elsewhere
+  // shows up without reloading the form.
+  const refreshEntryDirection = async (
+    index: number,
+    direction: 'going' | 'returning',
+    opts?: { onlyIfReturnAppears?: boolean; showLoading?: boolean }
+  ) => {
+    const gen = (directionRefreshGen.current[index] || 0) + 1;
+    directionRefreshGen.current[index] = gen;
+    const prevAf = entryAutoFillDataRef.current[index];
+    const truckNo = formatTruckNumber((formEntriesRef.current?.[index]?.truckNo || '').trim());
+    let fuelRecord = prevAf?.fuelRecord || null;
+    let storedGoingDestination = prevAf?.goingDestination;
+    let journeys = prevAf?.allJourneys;
+
+    if (!fuelRecord) {
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: { ...prev[index], direction, loading: false },
+      }));
+      return;
+    }
+
+    if (opts?.showLoading) {
+      setEntryAutoFillData(prev => ({
+        ...prev,
+        [index]: { ...prev[index], loading: true },
+      }));
+    }
+
+    if (truckNo.length >= 4) {
+      try {
+        const result = await fetchTruckData(truckNo);
+        if (directionRefreshGen.current[index] !== gen) return;
+        const fresh = pickRefreshedFuelRecord(prevAf, result);
+        if (fresh) {
+          fuelRecord = fresh;
+          storedGoingDestination = fresh.originalGoingTo || fresh.to || result.goingDestination;
+          journeys = result.allJourneys;
+        }
+      } catch {
+        if (directionRefreshGen.current[index] !== gen) return;
+      }
+    }
+
+    if (directionRefreshGen.current[index] !== gen) return;
+    if (opts?.onlyIfReturnAppears && isReturnDoMissing(fuelRecord.returnDo as string)) {
+      setEntryAutoFillData(prev => {
+        if (!prev[index]?.loading) return prev;
+        return { ...prev, [index]: { ...prev[index], loading: false } };
+      });
+      return;
+    }
+    commitEntryDirection(index, direction, fuelRecord, storedGoingDestination, journeys);
+  };
+
+  const refreshRowsMissingReturnDo = async () => {
+    const autofill = entryAutoFillDataRef.current;
+    const entries = formEntriesRef.current || [];
+    const targets: number[] = [];
+    entries.forEach((entry, index) => {
+      const af = autofill[index];
+      if (!entry || !af?.fuelRecord) return;
+      if ((af.entryType || 'regular') !== 'regular') return;
+      if (af.direction !== 'returning' || !af.returnDoMissing) return;
+      const truckNo = formatTruckNumber((entry.truckNo || '').trim());
+      if (truckNo.length < 4) return;
+      targets.push(index);
+    });
+    await Promise.all(targets.map((index) => refreshEntryDirection(index, 'returning', { onlyIfReturnAppears: true })));
+  };
+  refreshRowsMissingReturnDoRef.current = refreshRowsMissingReturnDo;
+
   // Toggle direction (going/returning) for an entry
   const toggleDirection = async (index: number) => {
     const currentDirection = entryAutoFillData[index]?.direction || 'going';
@@ -3026,85 +3225,27 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
     }
 
     const fuelRecord = entryAutoFillData[index]?.fuelRecord;
-    const storedGoingDestination = entryAutoFillData[index]?.goingDestination;
-
-    // Update the DO number and liters based on new direction
-    if (fuelRecord) {
-      // Check the raw DB field — blank/NIL only. PR#### pending return counts as present.
-      const returnDoMissing = isReturnDoMissing(fuelRecord.returnDo as string);
-
-      // When toggling to returning with no return DO, leave the field blank so the
-      // user immediately sees something is wrong rather than seeing the going DO.
-      const doNumber = newDirection === 'going'
-        ? fuelRecord.goingDo
-        : (returnDoMissing ? '' : fuelRecord.returnDo as string);
-
-      // IMPORTANT: Use correct destination based on direction
-      // For going: use originalGoingTo (stored goingDestination) to get original going destination
-      // For returning: use the current 'to' field
-      const destinationForAllocation = newDirection === 'going'
-        ? (storedGoingDestination || fuelRecord.originalGoingTo || fuelRecord.to)
-        : fuelRecord.to;
-
-      const defaults = formData.station
-        ? getStationDefaults(
-            formData.station,
-            newDirection,
-            destinationForAllocation,
-            fuelRecord.totalLts ?? undefined,
-            fuelRecord.extra ?? undefined,
-            fuelRecord.balance ?? undefined
-          )
-        : { liters: noStationDefaultLiters, rate: noStationRate };
-
-      let litersToSet = defaults.liters;
-
-      // USE CALLBACK FORM to avoid race conditions
-      setFormData(prev => {
-        const newEntries = [...(prev.entries || [])];
-
-        // Ensure entry exists
-        if (!newEntries[index]) {
-          newEntries[index] = {
-            doNo: '',  // Start empty
-            truckNo: '',
-            liters: 0,
-            rate: prev.station ? getStationDefaults(prev.station, 'going').rate : 1.2,
-            amount: 0,
-            dest: 'NIL',
-          };
-        }
-
-        newEntries[index] = {
-          ...newEntries[index],
-          doNo: doNumber,
-          dest: destinationForAllocation,  // Update destination based on direction
-          liters: litersToSet,
-          amount: litersToSet * defaults.rate
-        };
-
-        const total = newEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
-        return { ...prev, entries: newEntries, total };
-      });
-
-      // Update autofill data with new direction, balance info, and explicit returnDoMissing
-      setEntryAutoFillData(prev => ({
-        ...prev,
-        [index]: {
-          ...prev[index],
-          direction: newDirection,
-          returnDoMissing: newDirection === 'returning' ? returnDoMissing : prev[index]?.returnDoMissing,
-          formulaStatus: defaults.formulaStatus || null,
-          formulaMessage: defaults.formulaMessage,
-        }
-      }));
-    } else {
-      // Just update direction if no fuel record
+    if (!fuelRecord) {
+      directionRefreshGen.current[index] = (directionRefreshGen.current[index] || 0) + 1;
       setEntryAutoFillData(prev => ({
         ...prev,
         [index]: { ...prev[index], direction: newDirection }
       }));
+      return;
     }
+
+    if (newDirection === 'returning') {
+      await refreshEntryDirection(index, 'returning', { showLoading: true });
+      return;
+    }
+
+    directionRefreshGen.current[index] = (directionRefreshGen.current[index] || 0) + 1;
+    commitEntryDirection(
+      index,
+      'going',
+      fuelRecord,
+      entryAutoFillData[index]?.goingDestination
+    );
   };
 
   /** Pending going DO create is only allowed when the LPO date is in the current calendar month. Return pending is allowed any month. */
@@ -3127,6 +3268,25 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       active: autoFill?.allJourneys?.active ?? null,
       queued: autoFill?.allJourneys?.queued || [],
     });
+  };
+
+  const offerReturnExportLink = (index: number) => {
+    if (!canLinkExportDO) return false;
+    const autoFill = entryAutoFillData[index];
+    if ((autoFill?.entryType || 'regular') !== 'regular') return false;
+    if (autoFill?.direction !== 'returning' || !autoFill.returnDoMissing || !autoFill.fuelRecord) return false;
+    return true;
+  };
+
+  const openReturnExportLink = (index: number) => {
+    const autoFill = entryAutoFillData[index];
+    const fuelRecordId = fuelRecordKey(autoFill?.fuelRecord) || String(autoFill?.fuelRecordId || '');
+    const truckNo = formatTruckNumber(formData.entries?.[index]?.truckNo || '');
+    if (!fuelRecordId) {
+      toast.error('No fuel record to link');
+      return;
+    }
+    setReturnExportLink({ open: true, index, fuelRecordId, truckNo });
   };
 
   /**
@@ -5241,7 +5401,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                     </div>
                     {/* Card actions */}
                     <div className="flex items-center gap-2 pt-1.5 mt-1.5 border-t border-gray-200 dark:border-gray-600">
-                      {canOfferPendingGoing(index) && (
+                      {canOfferPendingGoing(index) && !offerReturnExportLink(index) && (
                         <button
                           type="button"
                           onClick={() => requestCreatePendingGoingDo(index)}
@@ -5250,6 +5410,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           className="shrink-0 p-1.5 rounded-lg text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors disabled:opacity-50"
                         >
                           <PlusCircle className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {offerReturnExportLink(index) && (
+                        <button
+                          type="button"
+                          onClick={() => openReturnExportLink(index)}
+                          disabled={autoFill.loading}
+                          title="Link export DO as the return DO"
+                          className="shrink-0 p-1.5 rounded-lg text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors disabled:opacity-50"
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                       <button
@@ -5753,7 +5924,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             <span className="inline-flex gap-1 justify-end">
-                              {canOfferPendingGoing(index) && (
+                              {canOfferPendingGoing(index) && !offerReturnExportLink(index) && (
                                 <button
                                   type="button"
                                   onClick={() => requestCreatePendingGoingDo(index)}
@@ -5762,6 +5933,17 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                                   title="Create pending going DO (PG####)"
                                 >
                                   <PlusCircle className="w-4 h-4" />
+                                </button>
+                              )}
+                              {offerReturnExportLink(index) && (
+                                <button
+                                  type="button"
+                                  onClick={() => openReturnExportLink(index)}
+                                  disabled={autoFill.loading}
+                                  className="icon-btn text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 disabled:opacity-50"
+                                  title="Link export DO as the return DO"
+                                >
+                                  <Link2 className="w-4 h-4" />
                                 </button>
                               )}
                               {/* Inspect button - Quick view fuel record */}
@@ -5919,6 +6101,21 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           </div>
         </form>
       </div>
+
+      <FuelRecordExportLinkModal
+        isOpen={returnExportLink.open}
+        fuelRecordId={returnExportLink.fuelRecordId}
+        truckNo={returnExportLink.truckNo}
+        onClose={() => setReturnExportLink({ open: false, index: -1, fuelRecordId: '', truckNo: '' })}
+        onLinked={() => {
+          const index = returnExportLink.index;
+          if (index >= 0) {
+            void refreshEntryDirection(index, 'returning', { showLoading: true });
+          }
+          queryClient.invalidateQueries({ queryKey: fuelRecordKeys.all });
+          queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+        }}
+      />
 
       {/* Confirm pending going DO create */}
       <div onClick={e => e.stopPropagation()}>
