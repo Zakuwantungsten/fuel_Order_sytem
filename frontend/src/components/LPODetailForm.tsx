@@ -2319,8 +2319,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
       return { ...prev, entries: newEntriesArray };
     });
     
-    // Capture the source row's mode before updating state so the setTimeout can use it.
+    // Capture the source row's mode and direction before updating state so the
+    // setTimeout can use them. The fetch closure still sees the pre-paste snapshot.
     const sourceMode = entryAutoFillData[index]?.entryType;
+    const sourceDirection = entryAutoFillData[index]?.direction || 'going';
 
     // Update auto-fill data for all entries - use callback to ensure we have latest state
     setEntryAutoFillData(prev => {
@@ -2334,11 +2336,12 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         }
       });
 
-      // Initialize auto-fill data for all pasted entries, inheriting the source row's mode
+      // Initialize auto-fill data for all pasted entries, inheriting the source row's mode and direction
       const inheritedEntryType = prev[index]?.entryType;
+      const inheritedDirection = prev[index]?.direction || 'going';
       for (let i = 0; i < formattedTrucks.length; i++) {
         newAutoFillData[index + i] = {
-          direction: 'going',
+          direction: inheritedDirection,
           loading: false,
           fetched: false,
           fuelRecord: null,
@@ -2372,9 +2375,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
         // Stagger each fetch to avoid overwhelming the server
         setTimeout(() => {
           console.log(`Fetching truck ${formattedTruckNo} at index ${targetIndex}`); // Debug log
-          // Pass sourceMode so handleTruckNoChange respects nil/ref even when its
-          // closure still sees the pre-paste snapshot of entryAutoFillData.
-          handleTruckNoChange(targetIndex, formattedTruckNo, sourceMode);
+          // Pass sourceMode and sourceDirection so the fetch respects nil/ref and
+          // the source row's direction even when its closure still sees the
+          // pre-paste snapshot of entryAutoFillData.
+          handleTruckNoChange(targetIndex, formattedTruckNo, sourceMode, sourceDirection);
 
           // Reset flag after last fetch is scheduled
           if (i === formattedTrucks.length - 1) {
@@ -2550,9 +2554,10 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   const applyTruckFetchResult = (
     index: number,
     formattedTruckNo: string,
-    result: TruckFetchResult
+    result: TruckFetchResult,
+    directionOverride?: 'going' | 'returning'
   ) => {
-    const direction = entryAutoFillData[index]?.direction || 'going';
+    const direction = directionOverride || entryAutoFillData[index]?.direction || 'going';
     const doNumber = direction === 'going' ? result.goingDo : (result.returnDo || result.goingDo);
 
     const returnDoMissing = isReturnDoMissing(result.returnDo);
@@ -2639,7 +2644,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
   };
 
   // Handle truck number change with auto-fetch
-  const handleTruckNoChange = async (index: number, truckNo: string, modeOverride?: EntryMode) => {
+  const handleTruckNoChange = async (index: number, truckNo: string, modeOverride?: EntryMode, directionOverride?: 'going' | 'returning') => {
     // Format the truck number to standard format: T(number)(space)(letters) and uppercase
     const formattedTruckNo = formatTruckNumber(truckNo).toUpperCase();
     
@@ -2731,7 +2736,7 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
           return;
         }
 
-        applyTruckFetchResult(index, formattedTruckNo, result);
+        applyTruckFetchResult(index, formattedTruckNo, result, directionOverride);
 
         delete fetchDebounceTimers.current[index];
       }, 300);

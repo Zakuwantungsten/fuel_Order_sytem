@@ -8,8 +8,7 @@
 > **Rule for every change:** behaviour for end users must stay identical. New
 > code only changes *what happens under failure / load*, never the happy path.
 
-Status legend: ✅ done · ⬜ todo · 🔒 blocked by an earlier phase
-
+Status legend: ✅ done · ⬜ todo · 🔒 blocked by an earl
 ---
 
 ## Phase 0 — Stop the bleeding (DONE)
