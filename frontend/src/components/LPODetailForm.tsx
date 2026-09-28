@@ -5233,10 +5233,14 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                 onLink={openReturnExportLink}
                 onPendingGoing={requestCreatePendingGoingDo}
                 onPendingReturn={requestCreatePendingReturnDo}
+                selectedIndexes={Array.from(selectedEntries)}
+                onSelectedChange={(indexes) => setSelectedEntries(new Set(indexes))}
                 onEditSelected={(indexes) => {
                   setSelectedEntries(new Set(indexes));
                   setSupplyTab('entries');
                 }}
+                onToggleSelected={handleBulkToggleDirection}
+                onDeleteSelected={handleBulkDelete}
                 onClearSelection={() => setSelectedEntries(new Set())}
               />
             </div>

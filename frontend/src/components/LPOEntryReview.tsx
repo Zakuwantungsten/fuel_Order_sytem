@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Clock, Eye, Link2, Locate, PlusCircle, Trash2, X } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, Clock, Eye, Link2, Locate, PlusCircle, Trash2, X } from 'lucide-react';
 import type { FuelRecord } from '../types';
 
 const REVIEW_CHECKPOINTS: { field: string; label: string }[] = [
@@ -50,7 +50,11 @@ interface LPOEntryReviewProps {
   onLink: (index: number) => void;
   onPendingGoing: (index: number) => void;
   onPendingReturn: (index: number) => void;
+  selectedIndexes: number[];
+  onSelectedChange: (indexes: number[]) => void;
   onEditSelected: (indexes: number[]) => void;
+  onToggleSelected: () => void;
+  onDeleteSelected: () => void;
   onClearSelection: () => void;
 }
 
@@ -338,7 +342,11 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   onLink,
   onPendingGoing,
   onPendingReturn,
+  selectedIndexes,
+  onSelectedChange,
   onEditSelected,
+  onToggleSelected,
+  onDeleteSelected,
   onClearSelection,
 }) => {
   const [loadingPoints, setLoadingPoints] = useState<string[]>([]);
@@ -347,14 +355,13 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   const [balances, setBalances] = useState<string[]>([]);
   const [checkpointPick, setCheckpointPick] = useState<string[] | null>(null);
   const [checkpointLiters, setCheckpointLiters] = useState<string[]>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>('truck');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const selectAllRef = useRef<HTMLInputElement>(null);
   const selectAllMobileRef = useRef<HTMLInputElement>(null);
+  const selected = useMemo(() => new Set(selectedIndexes), [selectedIndexes]);
 
   const clearSelected = () => {
-    setSelected((prev) => (prev.size === 0 ? prev : new Set()));
     onClearSelection();
   };
 
@@ -466,16 +473,14 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   }, [selectedVisible, allVisibleSelected]);
 
   const toggleVisible = () => {
-    setSelected(allVisibleSelected ? new Set() : new Set(visibleIndexes));
+    onSelectedChange(allVisibleSelected ? [] : visibleIndexes);
   };
 
   const toggleRow = (index: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
+    const next = new Set(selected);
+    if (next.has(index)) next.delete(index);
+    else next.add(index);
+    onSelectedChange(Array.from(next));
   };
 
   const th = (key: SortKey, label: string, align: 'left' | 'right' = 'left') => (
@@ -534,9 +539,23 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
           <button
             type="button"
             onClick={() => onEditSelected(Array.from(selected))}
-            className="h-[28px] px-2.5 rounded-[7px] bg-[#4f46e5] hover:bg-[#4338ca] text-white text-[11.5px] font-bold"
+            className="inline-flex items-center h-[28px] px-2.5 rounded-[7px] bg-[#4f46e5] hover:bg-[#4338ca] text-white text-[11.5px] font-bold"
           >
             Edit in table
+          </button>
+          <button
+            type="button"
+            onClick={onToggleSelected}
+            className="inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-[7px] bg-[#dbe4ff] dark:bg-blue-900/40 text-[#1d4ed8] dark:text-blue-300 text-[11.5px] font-bold"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5" />Toggle direction
+          </button>
+          <button
+            type="button"
+            onClick={onDeleteSelected}
+            className="inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-[7px] bg-[#fde2e2] dark:bg-red-900/40 text-[#b91c1c] dark:text-red-300 text-[11.5px] font-bold"
+          >
+            <Trash2 className="w-3.5 h-3.5" />Delete
           </button>
           <button
             type="button"
