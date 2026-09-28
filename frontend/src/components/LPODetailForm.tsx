@@ -4963,9 +4963,24 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
             <div className="flex items-center gap-2 mb-3.5 flex-wrap">
               <span className="text-[11px] font-bold tracking-[.08em] uppercase text-[#4f46e5] dark:text-indigo-400">02</span>
               <span className="text-[14px] font-bold text-[#0f1729] dark:text-gray-100">Fuel supply details</span>
-              {(() => { const n = (formData.entries?.filter(e => e != null).length || 0); return (
-                <span className="text-[12px] text-[#9aa6b6] font-medium">{n} {n === 1 ? 'truck' : 'trucks'}</span>
-              ); })()}
+              {(() => {
+                const entries = formData.entries || [];
+                let n = 0;
+                let going = 0;
+                let returning = 0;
+                entries.forEach((entry, index) => {
+                  if (entry == null) return;
+                  n += 1;
+                  if (entryAutoFillData[index]?.direction === 'returning') returning += 1;
+                  else going += 1;
+                });
+                return (
+                  <>
+                    <span className="text-[12px] text-[#9aa6b6] font-medium">{n} {n === 1 ? 'truck' : 'trucks'}</span>
+                    <span className="text-[12px] text-[#9aa6b6] font-medium">{going} going, {returning} returning</span>
+                  </>
+                );
+              })()}
               {isCheckingDuplicates && (
                 <span className="text-[12px] text-[#9aa6b6] inline-flex items-center gap-1">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />Checking duplicates…
