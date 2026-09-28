@@ -144,10 +144,14 @@ function resolveFuelRecordFieldFromCancellationPoint(cancellationPoint: string):
 function resolveFuelRecordFieldForEntry(
   stationMapping: Record<string, { going?: string; returning?: string }>,
   lpoStation: string,
-  entry: { journeyDirection?: string }
+  entry: { journeyDirection?: string; dispensedCheckpoint?: string | null },
+  directionFromDo?: 'going' | 'returning'
 ): string | null {
+  const dispensed = (entry.dispensedCheckpoint || '').trim();
+  if (dispensed) return dispensed;
   const direction: 'going' | 'returning' =
-    entry.journeyDirection === 'returning' ? 'returning' : 'going';
+    directionFromDo
+    || (entry.journeyDirection === 'returning' ? 'returning' : 'going');
   return resolveFuelRecordFieldFromStationDirection(stationMapping, lpoStation, direction);
 }
 
@@ -200,6 +204,35 @@ async function findPriorOrdersAtCheckpoint(options: {
 
   const lpos = await LPOSummary.find(query).lean();
   const stationMapping = await getStationToFuelFieldMapping();
+
+  // Older rows have no dispensedCheckpoint. The DO on the fuel record says
+  // whether that order filled the going or the return column.
+  const dosNeedingDirection = new Set<string>();
+  for (const lpo of lpos) {
+    for (const entry of lpo.entries as any[]) {
+      const doNoRaw = (entry?.doNo || '').trim();
+      if (!doNoRaw || doNoRaw.toUpperCase() === 'NIL') continue;
+      if ((entry?.dispensedCheckpoint || '').trim()) continue;
+      dosNeedingDirection.add(doNoRaw);
+    }
+  }
+  const directionByTruckDo = new Map<string, 'going' | 'returning'>();
+  if (dosNeedingDirection.size > 0) {
+    const doList = Array.from(dosNeedingDirection);
+    const records = await FuelRecord.find({
+      isDeleted: false,
+      isCancelled: { $ne: true },
+      $or: [{ goingDo: { $in: doList } }, { returnDo: { $in: doList } }],
+    }).select('truckNo goingDo returnDo').lean();
+    for (const record of records) {
+      const truck = normalizeTruckNo(record.truckNo || '');
+      const going = (record.goingDo || '').replace(/\s+/g, '').toUpperCase();
+      const returning = (record.returnDo || '').replace(/\s+/g, '').toUpperCase();
+      if (going) directionByTruckDo.set(`${truck}|${going}`, 'going');
+      if (returning && returning !== going) directionByTruckDo.set(`${truck}|${returning}`, 'returning');
+    }
+  }
+
   const matchingLpos: PriorOrderMatch[] = [];
 
   for (const lpo of lpos) {
@@ -209,10 +242,12 @@ async function findPriorOrdersAtCheckpoint(options: {
 
       if (checkDoNo && checkDoNo !== 'NIL') {
         const entryDoNormalized = (e.doNo || 'NIL').replace(/\s+/g, '').toUpperCase();
-        if (entryDoNormalized !== checkDoNo) return false;
+        if (entryDoNormalized !== checkDoNo.replace(/\s+/g, '')) return false;
       }
 
-      const entryField = resolveFuelRecordFieldForEntry(stationMapping, lpo.station, e);
+      const entryDoNormalized = (e.doNo || '').replace(/\s+/g, '').toUpperCase();
+      const directionFromDo = directionByTruckDo.get(`${entryTruckNormalized}|${entryDoNormalized}`);
+      const entryField = resolveFuelRecordFieldForEntry(stationMapping, lpo.station, e, directionFromDo);
       return entryField === fuelRecordField;
     });
 
