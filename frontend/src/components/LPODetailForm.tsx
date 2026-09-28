@@ -5161,18 +5161,18 @@ const LPODetailForm: React.FC<LPODetailFormProps> = ({
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />Checking duplicates…
                 </span>
               )}
-              <div className="inline-flex rounded-[8px] border border-[#e6eaf1] dark:border-[#334155] p-0.5 bg-white dark:bg-[#0f172a]">
+              <div className="grid grid-cols-2 w-full md:inline-flex md:w-auto rounded-[8px] border border-[#e6eaf1] dark:border-[#334155] p-0.5 bg-white dark:bg-[#0f172a]">
                 <button
                   type="button"
                   onClick={() => setSupplyTab('entries')}
-                  className={`h-7 px-2.5 rounded-[6px] text-[11.5px] font-bold ${supplyTab === 'entries' ? 'bg-[#4f46e5] text-white' : 'text-[#64748b] dark:text-gray-300'}`}
+                  className={`inline-flex items-center justify-center w-full md:w-auto h-[30px] md:h-7 !py-0 px-2.5 rounded-[6px] text-[12px] md:text-[11.5px] font-semibold leading-none ${supplyTab === 'entries' ? 'bg-[#4f46e5] text-white' : 'text-[#64748b] dark:text-gray-300'}`}
                 >
                   Entries
                 </button>
                 <button
                   type="button"
                   onClick={() => setSupplyTab('review')}
-                  className={`h-7 px-2.5 rounded-[6px] text-[11.5px] font-bold ${supplyTab === 'review' ? 'bg-[#4f46e5] text-white' : 'text-[#64748b] dark:text-gray-300'}`}
+                  className={`inline-flex items-center justify-center w-full md:w-auto h-[30px] md:h-7 !py-0 px-2.5 rounded-[6px] text-[12px] md:text-[11.5px] font-semibold leading-none ${supplyTab === 'review' ? 'bg-[#4f46e5] text-white' : 'text-[#64748b] dark:text-gray-300'}`}
                 >
                   Review
                 </button>

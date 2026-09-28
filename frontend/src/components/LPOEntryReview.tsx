@@ -149,13 +149,30 @@ function rowHasCheckpointLiter(
   return selected.some((value) => values.has(value));
 }
 
+function DoModeValue({ row }: { row: LPOReviewRow }) {
+  if (row.entryType === 'regular') {
+    return <span className="text-[12px] font-semibold text-[#0f1729] dark:text-gray-100">{row.doNo.trim() || '—'}</span>;
+  }
+  return (
+    <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
+      row.entryType === 'da' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200'
+      : row.entryType === 'ref' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200'
+      : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200'
+    }`}>
+      {doOrModeLabel(row)}
+    </span>
+  );
+}
+
 function FilterMenu({
   label,
   active,
+  align = 'start',
   children,
 }: {
   label: string;
   active: boolean;
+  align?: 'start' | 'end';
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -170,21 +187,21 @@ function FilterMenu({
   }, [open]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative min-w-0 w-full md:w-auto" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className={`inline-flex items-center gap-1 h-[30px] px-2.5 rounded-[7px] border text-[11.5px] font-semibold ${
+        className={`inline-flex items-center justify-between gap-1 h-[30px] w-full md:w-auto px-2.5 rounded-[7px] border text-[11.5px] font-semibold ${
           active
             ? 'border-[#c7ccf8] bg-[#eef0fe] text-[#4338ca] dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-200'
             : 'border-[#e6eaf1] bg-white text-[#64748b] dark:border-[#334155] dark:bg-[#0f172a] dark:text-gray-300'
         }`}
       >
-        {label}
-        <ChevronDown className="w-3.5 h-3.5" />
+        <span className="truncate">{label}</span>
+        <ChevronDown className="w-3.5 h-3.5 shrink-0" />
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 min-w-[200px] max-h-64 overflow-y-auto rounded-[10px] border border-[#e6eaf1] dark:border-[#334155] bg-white dark:bg-[#0f172a] shadow-lg p-1.5">
+        <div className={`absolute z-30 mt-1 min-w-[200px] max-w-[min(280px,calc(100vw-2rem))] max-h-64 overflow-y-auto rounded-[10px] border border-[#e6eaf1] dark:border-[#334155] bg-white dark:bg-[#0f172a] shadow-lg p-1.5 ${align === 'end' ? 'right-0 md:left-0 md:right-auto' : 'left-0'}`}>
           {children}
         </div>
       )}
@@ -227,6 +244,92 @@ function CheckList({
   );
 }
 
+function ReviewRowActions({
+  row,
+  layout = 'icons',
+  onView,
+  onDelete,
+  onOpenEntry,
+  onLink,
+  onPendingGoing,
+  onPendingReturn,
+}: {
+  row: LPOReviewRow;
+  layout?: 'icons' | 'bar';
+  onView: (index: number) => void;
+  onDelete: (index: number) => void;
+  onOpenEntry: (index: number) => void;
+  onLink: (index: number) => void;
+  onPendingGoing: (index: number) => void;
+  onPendingReturn: (index: number) => void;
+}) {
+  if (layout === 'bar') {
+    const barBtn = 'flex-1 min-w-0 px-2 py-1.5 text-[11px] font-medium rounded-lg inline-flex items-center justify-center gap-1 transition-colors';
+    return (
+      <div className="flex items-center gap-1.5 w-full">
+        <button type="button" title="Show this truck on the entry table" onClick={() => onOpenEntry(row.index)} className={`${barBtn} text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30`}>
+          <Locate className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Locate</span>
+        </button>
+        <button type="button" title={row.canView ? 'Inspect fuel record' : 'No fuel record'} disabled={!row.canView} onClick={() => onView(row.index)} className={`${barBtn} ${row.canView ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30' : 'text-blue-400 dark:text-blue-700 bg-blue-50/50 dark:bg-blue-900/10 opacity-40 cursor-not-allowed'}`}>
+          <Eye className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Inspect</span>
+        </button>
+        {row.canLink && (
+          <button type="button" title="Link export DO as the return DO" onClick={() => onLink(row.index)} className={`${barBtn} text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40`}>
+            <Link2 className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Link</span>
+          </button>
+        )}
+        {row.canPendingGoing && (
+          <button type="button" title="Create pending going DO (PG####)" onClick={() => onPendingGoing(row.index)} className={`${barBtn} text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40`}>
+            <PlusCircle className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Pending</span>
+          </button>
+        )}
+        {row.canPendingReturn && (
+          <button type="button" title="Create pending return DO (PR####)" onClick={() => onPendingReturn(row.index)} className={`${barBtn} text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40`}>
+            <Clock className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Pending</span>
+          </button>
+        )}
+        <button type="button" title="Remove entry" onClick={() => onDelete(row.index)} className={`${barBtn} text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30`}>
+          <Trash2 className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Delete</span>
+        </button>
+      </div>
+    );
+  }
+  return (
+    <span className="inline-flex gap-1 justify-end">
+      <button type="button" className="icon-btn text-[#2563eb] dark:text-blue-400" title="Show this truck on the entry table" onClick={() => onOpenEntry(row.index)}>
+        <Locate className="w-4 h-4" />
+      </button>
+      <button type="button" className="icon-btn text-[#2563eb] dark:text-blue-400 disabled:opacity-40" title={row.canView ? 'Inspect fuel record' : 'No fuel record'} disabled={!row.canView} onClick={() => onView(row.index)}>
+        <Eye className="w-4 h-4" />
+      </button>
+      {row.canLink && (
+        <button type="button" className="icon-btn text-indigo-600 dark:text-indigo-400" title="Link export DO as the return DO" onClick={() => onLink(row.index)}>
+          <Link2 className="w-4 h-4" />
+        </button>
+      )}
+      {row.canPendingGoing && (
+        <button type="button" className="icon-btn icon-btn-pending" title="Create pending going DO (PG####)" onClick={() => onPendingGoing(row.index)}>
+          <PlusCircle className="w-4 h-4" />
+        </button>
+      )}
+      {row.canPendingReturn && (
+        <button type="button" className="icon-btn icon-btn-pending" title="Create pending return DO (PR####)" onClick={() => onPendingReturn(row.index)}>
+          <Clock className="w-4 h-4" />
+        </button>
+      )}
+      <button type="button" className="icon-btn icon-btn-danger text-[#dc2626] dark:text-red-400" title="Remove entry" onClick={() => onDelete(row.index)}>
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </span>
+  );
+}
+
 const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   rows,
   onView,
@@ -248,6 +351,7 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   const [sortKey, setSortKey] = useState<SortKey>('truck');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const selectAllMobileRef = useRef<HTMLInputElement>(null);
 
   const clearSelected = () => {
     setSelected((prev) => (prev.size === 0 ? prev : new Set()));
@@ -356,8 +460,9 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   const allVisibleSelected = visibleIndexes.length > 0 && selectedVisible === visibleIndexes.length;
 
   useEffect(() => {
-    if (!selectAllRef.current) return;
-    selectAllRef.current.indeterminate = selectedVisible > 0 && !allVisibleSelected;
+    const indeterminate = selectedVisible > 0 && !allVisibleSelected;
+    if (selectAllRef.current) selectAllRef.current.indeterminate = indeterminate;
+    if (selectAllMobileRef.current) selectAllMobileRef.current.indeterminate = indeterminate;
   }, [selectedVisible, allVisibleSelected]);
 
   const toggleVisible = () => {
@@ -383,17 +488,17 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+      <div className="grid grid-cols-2 gap-1.5 mb-2 md:flex md:flex-wrap md:items-center">
         <FilterMenu label={loadingPoints.length ? `Loading point (${loadingPoints.length})` : 'Loading point'} active={loadingPoints.length > 0}>
           <CheckList options={loadingOptions} selected={loadingPoints} onChange={setLoadingPointsFiltered} />
         </FilterMenu>
-        <FilterMenu label={destinations.length ? `Destination (${destinations.length})` : 'Destination'} active={destinations.length > 0}>
+        <FilterMenu align="end" label={destinations.length ? `Destination (${destinations.length})` : 'Destination'} active={destinations.length > 0}>
           <CheckList options={destinationOptions} selected={destinations} onChange={setDestinationsFiltered} />
         </FilterMenu>
         <FilterMenu label={totals.length ? `Total liters (${totals.length})` : 'Total liters'} active={totals.length > 0}>
           <CheckList options={totalOptions} selected={totals} onChange={setTotalsFiltered} />
         </FilterMenu>
-        <FilterMenu label={balances.length ? `Balance (${balances.length})` : 'Balance'} active={balances.length > 0}>
+        <FilterMenu align="end" label={balances.length ? `Balance (${balances.length})` : 'Balance'} active={balances.length > 0}>
           <CheckList options={balanceOptions} selected={balances} onChange={setBalancesFiltered} />
         </FilterMenu>
         <FilterMenu label={shownCheckpoints.length ? `Checkpoints (${shownCheckpoints.length})` : 'Checkpoints'} active={checkpointPick != null}>
@@ -405,10 +510,10 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
             }}
           />
         </FilterMenu>
-        <FilterMenu label={checkpointLiters.length ? `Checkpoint liters (${checkpointLiters.length})` : 'Checkpoint liters'} active={checkpointLiters.length > 0}>
+        <FilterMenu align="end" label={checkpointLiters.length ? `Checkpoint liters (${checkpointLiters.length})` : 'Checkpoint liters'} active={checkpointLiters.length > 0}>
           <CheckList options={checkpointLiterOptionList} selected={checkpointLiters} onChange={setCheckpointLitersFiltered} />
         </FilterMenu>
-        <span className="ml-auto text-[12px] text-[#9aa6b6] font-medium">Showing {sorted.length} of {rows.length}</span>
+        <span className="col-span-2 md:ml-auto text-[12px] text-[#9aa6b6] font-medium">Showing {sorted.length} of {rows.length}</span>
       </div>
 
       {chips.length > 0 && (
@@ -443,7 +548,87 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
         </div>
       )}
 
-      <div className="rounded-[13px] border border-[#eaedf3] dark:border-[#1e293b] overflow-hidden">
+      <div className="md:hidden space-y-1.5">
+        <label className="flex items-center gap-2 px-0.5 text-[12px] font-semibold text-[#64748b] dark:text-gray-300">
+          <input
+            ref={selectAllMobileRef}
+            type="checkbox"
+            checked={allVisibleSelected}
+            onChange={toggleVisible}
+            disabled={visibleIndexes.length === 0}
+            title="Select the trucks these filters are showing"
+            className="accent-[#4f46e5]"
+          />
+          Select shown
+        </label>
+        {sorted.length === 0 ? (
+          <div className="px-3 py-8 text-center text-[12px] text-[#9aa6b6] rounded-[13px] border border-[#eaedf3] dark:border-[#1e293b]">
+            {rows.length === 0 ? 'No trucks on this order yet.' : 'No trucks match these filters.'}
+          </div>
+        ) : sorted.map((row) => {
+          const checkpointFields = REVIEW_CHECKPOINTS.filter((col) => shownCheckpoints.includes(col.field) && (row.checkpoints[col.field] || 0) > 0);
+          return (
+            <div key={row.index} className="rounded-[12px] border border-[#eaedf3] dark:border-[#1e293b] bg-white dark:bg-[#0f172a] p-3">
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={selected.has(row.index)}
+                  onChange={() => toggleRow(row.index)}
+                  title="Select this truck"
+                  className="mt-0.5 accent-[#4f46e5]"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[14px] font-bold text-[#0f1729] dark:text-gray-100">{row.truckNo || '—'}</span>
+                    <DoModeValue row={row} />
+                    <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${row.direction === 'returning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200' : 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200'}`}>
+                      {row.direction === 'returning' ? 'Return' : 'Going'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 mt-2.5">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[#9aa6b6]">Loading point</div>
+                  <div className="text-[12px] text-[#0f1729] dark:text-gray-100 truncate">{row.loadingPoint || '—'}</div>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[#9aa6b6]">Destination</div>
+                  <div className="text-[12px] text-[#0f1729] dark:text-gray-100 truncate">{row.destination || '—'}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[#9aa6b6]">Total L</div>
+                  <div className="text-[12px] font-semibold text-[#0f1729] dark:text-gray-100">{row.hasFuelRecord && row.totalLts != null ? row.totalLts : '—'}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-[#9aa6b6]">Balance</div>
+                  <div className="text-[12px] font-semibold text-[#0f1729] dark:text-gray-100">{row.hasFuelRecord && row.balance != null ? row.balance : '—'}</div>
+                </div>
+                {checkpointFields.map((col) => (
+                  <div key={col.field}>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-[#9aa6b6]">{col.label}</div>
+                    <div className="text-[12px] font-semibold text-[#0f1729] dark:text-gray-100">{row.checkpoints[col.field]}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-[#eef1f6] dark:border-[#1e293b]">
+                <ReviewRowActions
+                  layout="bar"
+                  row={row}
+                  onView={onView}
+                  onDelete={onDelete}
+                  onOpenEntry={onOpenEntry}
+                  onLink={onLink}
+                  onPendingGoing={onPendingGoing}
+                  onPendingReturn={onPendingReturn}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden md:block rounded-[13px] border border-[#eaedf3] dark:border-[#1e293b] overflow-hidden">
         <div className="lpo-scroll overflow-x-auto">
           <table className="lpo-table">
             <thead>
@@ -498,17 +683,7 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
                     <div className="text-[13px] font-semibold text-[#0f1729] dark:text-gray-100">{row.truckNo || '—'}</div>
                   </td>
                   <td>
-                    {row.entryType === 'regular' ? (
-                      <span className="text-[12px] font-semibold text-[#0f1729] dark:text-gray-100">{row.doNo.trim() || '—'}</span>
-                    ) : (
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
-                        row.entryType === 'da' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200'
-                        : row.entryType === 'ref' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200'
-                        : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200'
-                      }`}>
-                        {doOrModeLabel(row)}
-                      </span>
-                    )}
+                    <DoModeValue row={row} />
                   </td>
                   <td>
                     <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${row.direction === 'returning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200' : 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200'}`}>
@@ -528,32 +703,15 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
                     );
                   })}
                   <td style={{ textAlign: 'right' }}>
-                    <span className="inline-flex gap-1 justify-end">
-                      <button type="button" className="icon-btn text-[#2563eb] dark:text-blue-400" title="Show this truck on the entry table" onClick={() => onOpenEntry(row.index)}>
-                        <Locate className="w-4 h-4" />
-                      </button>
-                      <button type="button" className="icon-btn text-[#2563eb] dark:text-blue-400 disabled:opacity-40" title={row.canView ? 'Inspect fuel record' : 'No fuel record'} disabled={!row.canView} onClick={() => onView(row.index)}>
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      {row.canLink && (
-                        <button type="button" className="icon-btn text-indigo-600 dark:text-indigo-400" title="Link export DO as the return DO" onClick={() => onLink(row.index)}>
-                          <Link2 className="w-4 h-4" />
-                        </button>
-                      )}
-                      {row.canPendingGoing && (
-                        <button type="button" className="icon-btn icon-btn-pending" title="Create pending going DO (PG####)" onClick={() => onPendingGoing(row.index)}>
-                          <PlusCircle className="w-4 h-4" />
-                        </button>
-                      )}
-                      {row.canPendingReturn && (
-                        <button type="button" className="icon-btn icon-btn-pending" title="Create pending return DO (PR####)" onClick={() => onPendingReturn(row.index)}>
-                          <Clock className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button type="button" className="icon-btn icon-btn-danger text-[#dc2626] dark:text-red-400" title="Remove entry" onClick={() => onDelete(row.index)}>
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </span>
+                    <ReviewRowActions
+                      row={row}
+                      onView={onView}
+                      onDelete={onDelete}
+                      onOpenEntry={onOpenEntry}
+                      onLink={onLink}
+                      onPendingGoing={onPendingGoing}
+                      onPendingReturn={onPendingReturn}
+                    />
                   </td>
                 </tr>
               ))}
