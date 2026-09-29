@@ -60,10 +60,28 @@ interface LPOEntryReviewProps {
 
 const BLANK = '(blank)';
 
-function uniqueValues(rows: LPOReviewRow[], pick: (row: LPOReviewRow) => string): string[] {
-  const set = new Set<string>();
-  rows.forEach((row) => set.add(pick(row).trim() || BLANK));
-  return Array.from(set).sort((a, b) => a.localeCompare(b));
+type ReviewTableRow = LPOReviewRow & { checkpoints: Record<string, number> };
+type ReviewFilters = {
+  loadingPoints: string[];
+  destinations: string[];
+  totals: string[];
+  balances: string[];
+  checkpointPick: string[];
+  checkpointLiters: string[];
+};
+type FilterSkip = 'loading' | 'destination' | 'total' | 'balance' | 'liters';
+
+function sameStrings(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function sameFilters(left: ReviewFilters, right: ReviewFilters): boolean {
+  return sameStrings(left.loadingPoints, right.loadingPoints)
+    && sameStrings(left.destinations, right.destinations)
+    && sameStrings(left.totals, right.totals)
+    && sameStrings(left.balances, right.balances)
+    && sameStrings(left.checkpointPick, right.checkpointPick)
+    && sameStrings(left.checkpointLiters, right.checkpointLiters);
 }
 
 function readCheckpoints(record: FuelRecord | null): Record<string, number> {
@@ -97,10 +115,11 @@ function checkpointLiterOptions(
   rows: { index: number; hasFuelRecord: boolean; checkpoints: Record<string, number> }[],
   fields: string[]
 ): ValueOption[] {
+  if (fields.length === 0) return [];
   const map = new Map<string, { label: string; trucks: Set<number>; sort: number }>();
   rows.forEach((row) => {
     const values = new Set<string>();
-    if (!row.hasFuelRecord || fields.length === 0) values.add(BLANK);
+    if (!row.hasFuelRecord) values.add(BLANK);
     else {
       let found = false;
       fields.forEach((field) => {
@@ -138,7 +157,7 @@ function rowHasCheckpointLiter(
 ): boolean {
   if (selected.length === 0) return true;
   const values = new Set<string>();
-  if (!row.hasFuelRecord || fields.length === 0) values.add(BLANK);
+  if (!row.hasFuelRecord) values.add(BLANK);
   else {
     let found = false;
     fields.forEach((field) => {
@@ -151,6 +170,86 @@ function rowHasCheckpointLiter(
     if (!found) values.add(BLANK);
   }
   return selected.some((value) => values.has(value));
+}
+
+function textOptions(rows: ReviewTableRow[], pick: (row: ReviewTableRow) => string): ValueOption[] {
+  const map = new Map<string, number>();
+  rows.forEach((row) => {
+    const value = pick(row).trim() || BLANK;
+    map.set(value, (map.get(value) || 0) + 1);
+  });
+  return Array.from(map.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([value, count]) => ({ value, label: value === BLANK ? 'Blank' : value, count }));
+}
+
+function checkpointChoices(rows: ReviewTableRow[]): ValueOption[] {
+  return REVIEW_CHECKPOINTS.flatMap((col) => {
+    const count = rows.filter((row) => (row.checkpoints[col.field] || 0) > 0).length;
+    return count > 0 ? [{ value: col.field, label: col.label, count }] : [];
+  });
+}
+
+function keepKnown(selected: string[], options: ValueOption[]): string[] {
+  if (selected.length === 0) return selected;
+  const allowed = new Set(options.map((option) => option.value));
+  const next = selected.filter((value) => allowed.has(value));
+  return sameStrings(next, selected) ? selected : next;
+}
+
+function rowPasses(row: ReviewTableRow, filters: ReviewFilters, skip?: FilterSkip): boolean {
+  if (skip !== 'loading' && filters.loadingPoints.length > 0) {
+    const loading = row.loadingPoint.trim() || BLANK;
+    if (!filters.loadingPoints.includes(loading)) return false;
+  }
+  if (skip !== 'destination' && filters.destinations.length > 0) {
+    const destination = row.destination.trim() || BLANK;
+    if (!filters.destinations.includes(destination)) return false;
+  }
+  if (skip !== 'total' && filters.totals.length > 0 && !filters.totals.includes(amountKey(row.totalLts, row.hasFuelRecord))) return false;
+  if (skip !== 'balance' && filters.balances.length > 0 && !filters.balances.includes(amountKey(row.balance, row.hasFuelRecord))) return false;
+  if (skip !== 'liters' && !rowHasCheckpointLiter(row, filters.checkpointPick, filters.checkpointLiters)) return false;
+  return true;
+}
+
+function reconcileReviewFilters(rows: ReviewTableRow[], filters: ReviewFilters) {
+  let current = filters;
+  for (let pass = 0; pass < 8; pass += 1) {
+    const except = (skip?: FilterSkip) => rows.filter((row) => rowPasses(row, current, skip));
+    const literOptions = current.checkpointPick.length === 0
+      ? []
+      : checkpointLiterOptions(except('liters'), current.checkpointPick);
+    const checkpointLiters = current.checkpointPick.length === 0 ? [] : keepKnown(current.checkpointLiters, literOptions);
+    const withLiters = { ...current, checkpointLiters };
+    const checkpointPick = keepKnown(current.checkpointPick, checkpointChoices(rows.filter((row) => rowPasses(row, withLiters))));
+    const litersAfterPick = checkpointPick.length === 0
+      ? []
+      : keepKnown(
+        checkpointLiters,
+        checkpointLiterOptions(rows.filter((row) => rowPasses(row, { ...withLiters, checkpointPick }, 'liters')), checkpointPick)
+      );
+    const next: ReviewFilters = {
+      loadingPoints: keepKnown(current.loadingPoints, textOptions(except('loading'), (row) => row.loadingPoint)),
+      destinations: keepKnown(current.destinations, textOptions(except('destination'), (row) => row.destination)),
+      totals: keepKnown(current.totals, valueOptions(except('total'), (row) => amountKey(row.totalLts, row.hasFuelRecord))),
+      balances: keepKnown(current.balances, valueOptions(except('balance'), (row) => amountKey(row.balance, row.hasFuelRecord))),
+      checkpointPick,
+      checkpointLiters: litersAfterPick,
+    };
+    if (sameFilters(next, current)) break;
+    current = next;
+  }
+
+  const except = (skip?: FilterSkip) => rows.filter((row) => rowPasses(row, current, skip));
+  return {
+    filters: current,
+    loadingOptions: textOptions(except('loading'), (row) => row.loadingPoint),
+    destinationOptions: textOptions(except('destination'), (row) => row.destination),
+    totalOptions: valueOptions(except('total'), (row) => amountKey(row.totalLts, row.hasFuelRecord)),
+    balanceOptions: valueOptions(except('balance'), (row) => amountKey(row.balance, row.hasFuelRecord)),
+    checkpointOptionList: checkpointChoices(rows.filter((row) => rowPasses(row, current))),
+    literOptions: current.checkpointPick.length === 0 ? [] : checkpointLiterOptions(except('liters'), current.checkpointPick),
+  };
 }
 
 function DoModeValue({ row }: { row: LPOReviewRow }) {
@@ -186,8 +285,17 @@ function FilterMenu({
     const onDoc = (event: MouseEvent) => {
       if (!ref.current?.contains(event.target as Node)) setOpen(false);
     };
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && ref.current?.contains(target)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('scroll', onScroll, true);
+    };
   }, [open]);
 
   return (
@@ -353,7 +461,7 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   const [destinations, setDestinations] = useState<string[]>([]);
   const [totals, setTotals] = useState<string[]>([]);
   const [balances, setBalances] = useState<string[]>([]);
-  const [checkpointPick, setCheckpointPick] = useState<string[] | null>(null);
+  const [checkpointPick, setCheckpointPick] = useState<string[]>([]);
   const [checkpointLiters, setCheckpointLiters] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>('truck');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -370,47 +478,44 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   const setTotalsFiltered = (next: string[]) => { setTotals(next); clearSelected(); };
   const setBalancesFiltered = (next: string[]) => { setBalances(next); clearSelected(); };
   const setCheckpointLitersFiltered = (next: string[]) => { setCheckpointLiters(next); clearSelected(); };
-  const setCheckpointPickFiltered = (next: string[] | null) => { setCheckpointPick(next); clearSelected(); };
+  const setCheckpointPickFiltered = (next: string[]) => { setCheckpointPick(next); clearSelected(); };
 
   const tableRows = useMemo(
     () => rows.map((row) => ({ ...row, checkpoints: readCheckpoints(row.fuelRecord) })),
     [rows]
   );
 
-  const defaultCheckpoints = useMemo(() => {
-    return REVIEW_CHECKPOINTS
-      .filter((col) => tableRows.some((row) => (row.checkpoints[col.field] || 0) > 0))
-      .map((col) => col.field);
-  }, [tableRows]);
-  const shownCheckpoints = checkpointPick ?? defaultCheckpoints;
+  const model = useMemo(
+    () => reconcileReviewFilters(tableRows, {
+      loadingPoints,
+      destinations,
+      totals,
+      balances,
+      checkpointPick,
+      checkpointLiters,
+    }),
+    [tableRows, loadingPoints, destinations, totals, balances, checkpointPick, checkpointLiters]
+  );
+  const activeFilters = model.filters;
+  const shownCheckpoints = activeFilters.checkpointPick;
 
-  const loadingOptions = useMemo(() => uniqueValues(tableRows, (row) => row.loadingPoint), [tableRows]);
-  const destinationOptions = useMemo(() => uniqueValues(tableRows, (row) => row.destination), [tableRows]);
-  const totalOptions = useMemo(
-    () => valueOptions(tableRows, (row) => amountKey(row.totalLts, row.hasFuelRecord)),
-    [tableRows]
-  );
-  const balanceOptions = useMemo(
-    () => valueOptions(tableRows, (row) => amountKey(row.balance, row.hasFuelRecord)),
-    [tableRows]
-  );
-  const checkpointLiterOptionList = useMemo(
-    () => checkpointLiterOptions(tableRows, shownCheckpoints),
-    [tableRows, shownCheckpoints]
-  );
+  if (!sameFilters(activeFilters, { loadingPoints, destinations, totals, balances, checkpointPick, checkpointLiters })) {
+    setLoadingPoints(activeFilters.loadingPoints);
+    setDestinations(activeFilters.destinations);
+    setTotals(activeFilters.totals);
+    setBalances(activeFilters.balances);
+    setCheckpointPick(activeFilters.checkpointPick);
+    setCheckpointLiters(activeFilters.checkpointLiters);
+  }
+  if (sortKey.startsWith('cp:') && !shownCheckpoints.includes(sortKey.slice(3))) {
+    setSortKey('truck');
+    setSortDir('asc');
+  }
 
-  const filtered = useMemo(() => {
-    return tableRows.filter((row) => {
-      const loading = row.loadingPoint.trim() || BLANK;
-      const destination = row.destination.trim() || BLANK;
-      if (loadingPoints.length > 0 && !loadingPoints.includes(loading)) return false;
-      if (destinations.length > 0 && !destinations.includes(destination)) return false;
-      if (totals.length > 0 && !totals.includes(amountKey(row.totalLts, row.hasFuelRecord))) return false;
-      if (balances.length > 0 && !balances.includes(amountKey(row.balance, row.hasFuelRecord))) return false;
-      if (!rowHasCheckpointLiter(row, shownCheckpoints, checkpointLiters)) return false;
-      return true;
-    });
-  }, [tableRows, loadingPoints, destinations, totals, balances, shownCheckpoints, checkpointLiters]);
+  const filtered = useMemo(
+    () => tableRows.filter((row) => rowPasses(row, activeFilters)),
+    [tableRows, activeFilters]
+  );
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -446,11 +551,12 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   const sortMark = (key: SortKey) => (sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '');
 
   const chips: { key: string; label: string; clear: () => void }[] = [];
-  if (loadingPoints.length) chips.push({ key: 'lp', label: `Loading point · ${loadingPoints.join(', ')}`, clear: () => setLoadingPointsFiltered([]) });
-  if (destinations.length) chips.push({ key: 'dest', label: `Destination · ${destinations.join(', ')}`, clear: () => setDestinationsFiltered([]) });
-  if (totals.length) chips.push({ key: 'total', label: `Total liters · ${totals.map((value) => value === BLANK ? 'Blank' : value).join(', ')}`, clear: () => setTotalsFiltered([]) });
-  if (balances.length) chips.push({ key: 'bal', label: `Balance · ${balances.map((value) => value === BLANK ? 'Blank' : value).join(', ')}`, clear: () => setBalancesFiltered([]) });
-  if (checkpointLiters.length) chips.push({ key: 'cp', label: `Checkpoint liters · ${checkpointLiters.map((value) => value === BLANK ? 'Blank' : value).join(', ')}`, clear: () => setCheckpointLitersFiltered([]) });
+  if (activeFilters.loadingPoints.length) chips.push({ key: 'lp', label: `Loading point · ${activeFilters.loadingPoints.join(', ')}`, clear: () => setLoadingPointsFiltered([]) });
+  if (activeFilters.destinations.length) chips.push({ key: 'dest', label: `Destination · ${activeFilters.destinations.join(', ')}`, clear: () => setDestinationsFiltered([]) });
+  if (activeFilters.totals.length) chips.push({ key: 'total', label: `Total liters · ${activeFilters.totals.map((value) => value === BLANK ? 'Blank' : value).join(', ')}`, clear: () => setTotalsFiltered([]) });
+  if (activeFilters.balances.length) chips.push({ key: 'bal', label: `Balance · ${activeFilters.balances.map((value) => value === BLANK ? 'Blank' : value).join(', ')}`, clear: () => setBalancesFiltered([]) });
+  if (shownCheckpoints.length) chips.push({ key: 'cpick', label: `Checkpoints · ${REVIEW_CHECKPOINTS.filter((col) => shownCheckpoints.includes(col.field)).map((col) => col.label).join(', ')}`, clear: () => setCheckpointPickFiltered([]) });
+  if (activeFilters.checkpointLiters.length) chips.push({ key: 'cp', label: `Checkpoint liters · ${activeFilters.checkpointLiters.map((value) => value === BLANK ? 'Blank' : value).join(', ')}`, clear: () => setCheckpointLitersFiltered([]) });
 
   const clearAll = () => {
     setLoadingPoints([]);
@@ -458,7 +564,7 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
     setTotals([]);
     setBalances([]);
     setCheckpointLiters([]);
-    setCheckpointPick(null);
+    setCheckpointPick([]);
     clearSelected();
   };
 
@@ -494,29 +600,33 @@ const LPOEntryReview: React.FC<LPOEntryReviewProps> = ({
   return (
     <div>
       <div className="grid grid-cols-2 gap-1.5 mb-2 md:flex md:flex-wrap md:items-center">
-        <FilterMenu label={loadingPoints.length ? `Loading point (${loadingPoints.length})` : 'Loading point'} active={loadingPoints.length > 0}>
-          <CheckList options={loadingOptions} selected={loadingPoints} onChange={setLoadingPointsFiltered} />
+        <FilterMenu label={activeFilters.loadingPoints.length ? `Loading point (${activeFilters.loadingPoints.length})` : 'Loading point'} active={activeFilters.loadingPoints.length > 0}>
+          <CheckList options={model.loadingOptions} selected={activeFilters.loadingPoints} onChange={setLoadingPointsFiltered} />
         </FilterMenu>
-        <FilterMenu align="end" label={destinations.length ? `Destination (${destinations.length})` : 'Destination'} active={destinations.length > 0}>
-          <CheckList options={destinationOptions} selected={destinations} onChange={setDestinationsFiltered} />
+        <FilterMenu align="end" label={activeFilters.destinations.length ? `Destination (${activeFilters.destinations.length})` : 'Destination'} active={activeFilters.destinations.length > 0}>
+          <CheckList options={model.destinationOptions} selected={activeFilters.destinations} onChange={setDestinationsFiltered} />
         </FilterMenu>
-        <FilterMenu label={totals.length ? `Total liters (${totals.length})` : 'Total liters'} active={totals.length > 0}>
-          <CheckList options={totalOptions} selected={totals} onChange={setTotalsFiltered} />
+        <FilterMenu label={activeFilters.totals.length ? `Total liters (${activeFilters.totals.length})` : 'Total liters'} active={activeFilters.totals.length > 0}>
+          <CheckList options={model.totalOptions} selected={activeFilters.totals} onChange={setTotalsFiltered} />
         </FilterMenu>
-        <FilterMenu align="end" label={balances.length ? `Balance (${balances.length})` : 'Balance'} active={balances.length > 0}>
-          <CheckList options={balanceOptions} selected={balances} onChange={setBalancesFiltered} />
+        <FilterMenu align="end" label={activeFilters.balances.length ? `Balance (${activeFilters.balances.length})` : 'Balance'} active={activeFilters.balances.length > 0}>
+          <CheckList options={model.balanceOptions} selected={activeFilters.balances} onChange={setBalancesFiltered} />
         </FilterMenu>
-        <FilterMenu label={shownCheckpoints.length ? `Checkpoints (${shownCheckpoints.length})` : 'Checkpoints'} active={checkpointPick != null}>
-          <CheckList
-            options={REVIEW_CHECKPOINTS.map((col) => col.label)}
-            selected={REVIEW_CHECKPOINTS.filter((col) => shownCheckpoints.includes(col.field)).map((col) => col.label)}
-            onChange={(labels) => {
-              setCheckpointPickFiltered(REVIEW_CHECKPOINTS.filter((col) => labels.includes(col.label)).map((col) => col.field));
-            }}
-          />
+        <FilterMenu label={shownCheckpoints.length ? `Checkpoints (${shownCheckpoints.length})` : 'Checkpoints'} active={shownCheckpoints.length > 0}>
+          {model.checkpointOptionList.length === 0 ? (
+            <p className="px-2 py-1.5 text-[12px] text-[#9aa6b6]">No checkpoints on these trucks</p>
+          ) : (
+            <CheckList options={model.checkpointOptionList} selected={shownCheckpoints} onChange={setCheckpointPickFiltered} />
+          )}
         </FilterMenu>
-        <FilterMenu align="end" label={checkpointLiters.length ? `Checkpoint liters (${checkpointLiters.length})` : 'Checkpoint liters'} active={checkpointLiters.length > 0}>
-          <CheckList options={checkpointLiterOptionList} selected={checkpointLiters} onChange={setCheckpointLitersFiltered} />
+        <FilterMenu align="end" label={activeFilters.checkpointLiters.length ? `Checkpoint liters (${activeFilters.checkpointLiters.length})` : 'Checkpoint liters'} active={activeFilters.checkpointLiters.length > 0}>
+          {shownCheckpoints.length === 0 ? (
+            <p className="px-2 py-1.5 text-[12px] text-[#9aa6b6]">Select a checkpoint first</p>
+          ) : model.literOptions.length === 0 ? (
+            <p className="px-2 py-1.5 text-[12px] text-[#9aa6b6]">No checkpoint liters on these trucks</p>
+          ) : (
+            <CheckList options={model.literOptions} selected={activeFilters.checkpointLiters} onChange={setCheckpointLitersFiltered} />
+          )}
         </FilterMenu>
         <span className="col-span-2 md:ml-auto text-[12px] text-[#9aa6b6] font-medium">Showing {sorted.length} of {rows.length}</span>
       </div>
