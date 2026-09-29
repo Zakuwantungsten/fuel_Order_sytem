@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { X, Link2, Loader2, ArrowRight, AlertCircle, CheckCircle2, Calendar, Fuel, Eye } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { deliveryOrdersAPI } from '../services/api';
-import { DeliveryOrder } from '../types';
-import DODetailModal from './DODetailModal';
+import FuelRecordInspectModal from './FuelRecordInspectModal';
 
 export interface UnlinkedExportCandidate {
   id: string;
@@ -41,8 +40,7 @@ export default function FuelRecordExportLinkModal({
   const [candidates, setCandidates] = useState<UnlinkedExportCandidate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [alreadyHasReturnDo, setAlreadyHasReturnDo] = useState(false);
-  const [inspectOrder, setInspectOrder] = useState<DeliveryOrder | null>(null);
-  const [inspectingId, setInspectingId] = useState<string | null>(null);
+  const [inspectOpen, setInspectOpen] = useState(false);
 
   const loadCandidates = useCallback(async () => {
     if (!fuelRecordId) return;
@@ -66,19 +64,6 @@ export default function FuelRecordExportLinkModal({
   useEffect(() => {
     if (isOpen && fuelRecordId) loadCandidates();
   }, [isOpen, fuelRecordId, loadCandidates]);
-
-  const handleInspect = async (candidateId: string) => {
-    if (inspectingId) return;
-    setInspectingId(candidateId);
-    try {
-      const order = await deliveryOrdersAPI.getById(candidateId);
-      setInspectOrder(order);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to open this delivery order');
-    } finally {
-      setInspectingId(null);
-    }
-  };
 
   const handleConfirm = async () => {
     if (!selectedId || !fuelRecordId) return;
@@ -197,17 +182,12 @@ export default function FuelRecordExportLinkModal({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        void handleInspect(candidate.id);
+                        setInspectOpen(true);
                       }}
-                      disabled={inspectingId === candidate.id}
-                      className="mt-0.5 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-50"
-                      title="Inspect delivery order"
+                      className="mt-0.5 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-400"
+                      title="Inspect fuel record"
                     >
-                      {inspectingId === candidate.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
+                      <Eye className="h-4 w-4" />
                     </button>
                   </label>
                 );
@@ -239,18 +219,12 @@ export default function FuelRecordExportLinkModal({
       </div>
     </div>
 
-    {inspectOrder && (
-      <div
-        className="fixed inset-0 z-[80]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <DODetailModal
-          order={inspectOrder}
-          isOpen
-          onClose={() => setInspectOrder(null)}
-        />
-      </div>
-    )}
+    <FuelRecordInspectModal
+      isOpen={inspectOpen}
+      onClose={() => setInspectOpen(false)}
+      fuelRecordId={fuelRecordId}
+      truckNumber={truckNo}
+    />
     </>
   );
 }
