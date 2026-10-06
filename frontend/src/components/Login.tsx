@@ -598,7 +598,7 @@ const Login: React.FC = () => {
           />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/45 to-transparent px-8 pb-8 pt-28">
             <p className="mx-auto max-w-lg rounded-2xl border border-white/30 bg-white/25 px-6 py-4 text-center text-xl font-semibold text-white shadow-lg backdrop-blur-md">
-              Fuel orders for the fleet, at your fingertips
+              Laduuu Maaaaan
             </p>
           </div>
         </div>
