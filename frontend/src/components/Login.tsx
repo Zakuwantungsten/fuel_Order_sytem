@@ -5,7 +5,7 @@ import { MFAVerification } from './MFAVerification';
 import { MFASetupLogin } from './MFASetupLogin';
 import { loginWithPasskey, isPasskeySupported, describePasskeyError } from '../services/passkeyService';
 import tahmeedLogo from '../assets/logo.png';
-import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
+import tahmeedLogoOnDark from '../assets/tahmeed-logo-on-dark.png';
 // Pexels / Harrison Fitts — truck on a desert mountain highway under a blue sky.
 import loginFleetRoad from '../assets/login-fleet-road.jpg';
 import { useLocation, Link } from 'react-router-dom';
@@ -266,14 +266,14 @@ const Login: React.FC = () => {
         style={{ background: '#0f1722', fontFamily: 'inherit', overflowY: 'auto' }}
       >
         {/* Brand Hero */}
-        <div style={{ position: 'relative', background: 'linear-gradient(168deg, #1f2a3b 0%, #0f1722 100%)', padding: '64px 28px 108px', flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ position: 'relative', background: 'linear-gradient(168deg, #1f2a3b 0%, #0f1722 100%)', padding: '36px 28px 100px', flexShrink: 0, overflow: 'hidden' }}>
           {/* Ambient glows */}
           <div style={{ position: 'absolute', top: -60, right: -40, width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.22), transparent 70%)' }} />
           <div style={{ position: 'absolute', bottom: -40, left: -30, width: 160, height: 160, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.12), transparent 70%)' }} />
 
           {/* Logo + Welcome text */}
           <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-            <img src={tahmeedLogoDark} alt="Tahmeed" style={{ height: 56, width: 'auto', objectFit: 'contain', marginBottom: 28 }} />
+            <img src={tahmeedLogoOnDark} alt="Tahmeed" style={{ height: 112, width: 'auto', objectFit: 'contain', marginBottom: 14 }} />
             <h1 style={{ margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: '-0.02em', color: '#fff', lineHeight: 1.1 }}>Welcome back</h1>
             <p style={{ margin: '9px 0 0', fontSize: 14, fontWeight: 500, color: '#94a1b6', lineHeight: 1.5 }}>
               Sign in to manage your fuel orders<br />and delivery sheets.
@@ -441,10 +441,6 @@ const Login: React.FC = () => {
                 <Fingerprint size={18} />
                 <span>{passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}</span>
               </button>
-              <p style={{ fontSize: 11.5, color: '#9aa4b6', textAlign: 'center', marginTop: 10, lineHeight: 1.5 }}>
-                First time? Log in with your password, then add a passkey in
-                Settings → Security to use your fingerprint or face.
-              </p>
             </>
           )}
 
@@ -464,9 +460,9 @@ const Login: React.FC = () => {
         <div className="flex items-center justify-center overflow-y-auto px-8 py-10 lg:px-14">
           <div className="w-full max-w-[400px]">
             <div className="mb-8 text-center">
-              <div className="mx-auto mb-6 h-16 w-44">
+              <div className="mx-auto mb-6 h-32 w-[22rem] max-w-full">
                 <img src={tahmeedLogo} alt="Tahmeed Logo" className="h-full w-full object-contain dark:hidden" />
-                <img src={tahmeedLogoDark} alt="Tahmeed Logo" className="hidden h-full w-full object-contain dark:block" />
+                <img src={tahmeedLogoOnDark} alt="Tahmeed Logo" className="hidden h-full w-full object-contain dark:block" />
               </div>
               <h1 className="mb-1.5 text-3xl font-bold tracking-tight text-slate-900 dark:text-gray-100">Welcome Back</h1>
               <p className="text-sm text-slate-500 dark:text-gray-400">Sign in to Fuel Order Management System</p>
@@ -589,10 +585,6 @@ const Login: React.FC = () => {
                   <Fingerprint className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                   {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
                 </button>
-                <p className="mt-2.5 text-center text-xs leading-relaxed text-slate-400 dark:text-gray-500">
-                  First time? Log in with your password, then add a passkey in
-                  Settings → Security to use your fingerprint or face.
-                </p>
               </>
             )}
           </div>

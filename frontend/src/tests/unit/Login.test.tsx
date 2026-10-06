@@ -27,6 +27,7 @@ vi.mock('../../contexts/AuthContext', async () => {
 // Mock images
 vi.mock('../../assets/logo.png', () => ({ default: 'logo.png' }));
 vi.mock('../../assets/Dec 2, 2025, 06_08_52 PM.png', () => ({ default: 'logo-dark.png' }));
+vi.mock('../../assets/tahmeed-logo-on-dark.png', () => ({ default: 'logo-on-dark.png' }));
 
 const renderLogin = () => {
   return render(
