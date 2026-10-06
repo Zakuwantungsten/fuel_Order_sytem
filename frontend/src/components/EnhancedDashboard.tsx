@@ -49,6 +49,7 @@ import {
 // Eagerly loaded — needed on first render (header/auth)
 import { useAuth } from '../contexts/AuthContext';
 import NotificationBell from './NotificationBell';
+import { MobileBottomNav, MobileMorePage } from './MobileAppNav';
 import { replaceUrlPreservingState } from '../utils/historyState';
 
 // Lazy-loaded components — only fetched when the user navigates to them
@@ -121,11 +122,12 @@ const getInitialTab = (userRole: string): string => {
     if (userRole === 'admin' || userRole === 'boss') {
       return [
         'overview', 'do', 'fuel_records', 'lpo', 'tanga_lpo', 'dar_lpo', 'truck_batches', 'fleet_tracking',
+        'checkpoints', 'journey_config',
         'admin_users', 'admin_fuel_stations', 'admin_fuel_prices', 'admin_routes', 'admin_reports', 'driver_credentials', 'excel_import'
       ];
     }
     if (userRole === 'fuel_order_maker') {
-      return ['overview', 'do', 'fuel_records', 'lpo', 'tanga_lpo', 'dar_lpo', 'fleet_tracking', 'reports'];
+      return ['overview', 'do', 'fuel_records', 'lpo', 'tanga_lpo', 'dar_lpo', 'fleet_tracking', 'checkpoints', 'journey_config', 'reports'];
     }
     if (userRole === 'payment_manager') {
       return ['overview', 'payments'];
@@ -162,11 +164,14 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const isOfficer = user.role === 'import_officer' || user.role === 'export_officer';
   const isClerk = user.role === 'clerk';
   const isManager = user.role === 'manager' || user.role === 'super_manager' || user.role === 'station_manager';
+  // Phone bottom bar replaces the slide-out menu for the roles that have these pages.
+  const usesMobileBottomNav = user.role === 'admin' || user.role === 'fuel_order_maker';
   
   // For drivers, default to driver_portal, no overview
   // Now reads from localStorage to persist across refreshes
   const [activeTab, setActiveTab] = useState(() => getInitialTab(user.role));
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
     try {
       const stored = sessionStorage.getItem('fuel_order_collapsed_sections');
@@ -228,6 +233,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   const isRestoringFromHistory = useRef(false);
 
   const navigateToTab = (tab: string) => {
+    setMoreOpen(false);
     if (tab === activeTab) return;
     window.history.pushState({ tab }, '', window.location.pathname + window.location.search);
     setActiveTab(tab);
@@ -253,6 +259,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
       // Restore any prior tab (including home) when it differs from the current one
       if (previousTab && previousTab !== activeTab) {
         isRestoringFromHistory.current = true;
+        setMoreOpen(false);
         setActiveTab(previousTab);
         return;
       }
@@ -280,6 +287,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
   useEffect(() => {
     const defaultTab = getInitialTab(user.role);
     setActiveTab(defaultTab);
+    setMoreOpen(false);
   }, [user.role]);
 
   // Set when handleNavigate is about to write highlight params, so the
@@ -645,8 +653,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: isDark ? '#0F172A' : '#F8FAFC' }}>
-      {/* Mobile sidebar backdrop */}
-      {sidebarOpen && user.role !== 'super_admin' && (
+      {/* Mobile sidebar backdrop — not used when the phone bottom bar replaces the drawer */}
+      {sidebarOpen && user.role !== 'super_admin' && !usesMobileBottomNav && (
         <div 
           className="fixed inset-0 z-20 lg:hidden"
           style={{ background: 'rgba(15,23,42,0.6)' }}
@@ -654,8 +662,8 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         />
       )}
       
-      {/* Sidebar */}
-      <div className={`transition-all duration-300 flex flex-col fixed lg:relative inset-y-0 left-0 z-30 transform ${
+      {/* Sidebar. Admin and fuel order maker keep it on desktop only. */}
+      <div className={`transition-all duration-300 ${usesMobileBottomNav ? 'hidden lg:flex' : 'flex'} flex-col fixed lg:relative inset-y-0 left-0 z-30 transform ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       } w-60 ${!sidebarOpen && 'lg:w-14'}`} style={{ background: isDark ? '#0F172A' : '#FFFFFF', borderRight: isDark ? '1px solid #1E293B' : '1px solid #E2E8F0' }}>
         <div className="p-3 flex-shrink-0">
@@ -801,18 +809,20 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
         <header className="lg:hidden p-3 flex items-center justify-between flex-shrink-0" style={{ background: isDark ? '#0F172A' : '#FFFFFF', borderBottom: isDark ? '1px solid #1E293B' : '1px solid #E2E8F0', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 0 }}>
           {/* Left: hamburger + page name */}
           <div className="flex items-center gap-2 min-w-0">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-1.5 rounded-lg transition-colors flex-shrink-0"
-              style={{ color: isDark ? '#94A3B8' : '#64748B' }}
-              onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#1E293B' : '#F1F5F9')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              aria-label="Open menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
+            {!usesMobileBottomNav && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-1.5 rounded-lg transition-colors flex-shrink-0"
+                style={{ color: isDark ? '#94A3B8' : '#64748B' }}
+                onMouseEnter={e => (e.currentTarget.style.background = isDark ? '#1E293B' : '#F1F5F9')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                aria-label="Open menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+            )}
             <h2 className="text-base font-bold truncate" style={{ color: isDark ? '#F1F5F9' : '#0F172A' }}>
-              {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
+              {moreOpen ? 'More' : (menuItems.find(item => item.id === activeTab)?.label || 'Dashboard')}
             </h2>
           </div>
           {/* Right: theme toggle, notification bell, profile avatar */}
@@ -1072,7 +1082,7 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
           </div>
         </header>
 
-        <main id="main-scroll-container" className="flex-1 overflow-y-auto p-6" style={{ background: isDark ? '#0F172A' : '#F8FAFC' }}>
+        <main id="main-scroll-container" className={`flex-1 overflow-y-auto ${usesMobileBottomNav && moreOpen ? 'hidden lg:block lg:p-6' : 'p-6'}`} style={{ background: isDark ? '#0F172A' : '#F8FAFC' }}>
           {/* Always-mounted overview dashboards — stay alive when navigating to other tabs */}
           <Suspense fallback={<TabFallback />}>
             {hasOverviewTab && (
@@ -1083,6 +1093,27 @@ export function EnhancedDashboard({ user }: EnhancedDashboardProps) {
             {renderActiveComponent()}
           </Suspense>
         </main>
+
+        {usesMobileBottomNav && moreOpen && (
+          <div className="lg:hidden flex-1 overflow-y-auto" style={{ background: isDark ? '#0F172A' : '#F1F5F9' }}>
+            <MobileMorePage
+              items={menuItems}
+              activeId={activeTab}
+              isDark={isDark}
+              onSelect={navigateToTab}
+            />
+          </div>
+        )}
+
+        {usesMobileBottomNav && (
+          <MobileBottomNav
+            activeTab={activeTab}
+            moreOpen={moreOpen}
+            isDark={isDark}
+            onSelectPrimary={navigateToTab}
+            onOpenMore={() => setMoreOpen(true)}
+          />
+        )}
       </div>
 
       {/* Change Password Modal */}

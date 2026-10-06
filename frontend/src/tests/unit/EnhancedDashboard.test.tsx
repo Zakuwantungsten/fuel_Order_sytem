@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -205,6 +205,61 @@ describe('EnhancedDashboard', () => {
         expect(screen.getByText(/Fuel Records/i)).toBeInTheDocument();
         expect(screen.getByText(/LPO Management/i)).toBeInTheDocument();
       });
+    });
+
+    it('should use the phone bottom bar for admin and fuel order maker only', async () => {
+      const user = userEvent.setup();
+      renderEnhancedDashboard(mockOperatorUser);
+
+      const bar = await screen.findByTestId('mobile-bottom-nav');
+      expect(bar).toHaveTextContent('Overview');
+      expect(bar).toHaveTextContent('Fuel');
+      expect(bar).toHaveTextContent('LPO');
+      expect(bar).toHaveTextContent('DO');
+      expect(bar).toHaveTextContent('More');
+      expect(screen.queryByRole('button', { name: 'Open menu' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'More' }));
+      const more = await screen.findByTestId('mobile-more-page');
+      expect(more).toHaveTextContent('Yards');
+      expect(more).toHaveTextContent('Tanga LPO');
+      expect(more).toHaveTextContent('Fleet');
+      expect(more).toHaveTextContent('Reports');
+      expect(more).not.toHaveTextContent('DO Management');
+      expect(more).not.toHaveTextContent('User Support');
+
+      await user.click(within(more).getByRole('button', { name: /Reports/i }));
+      expect(await screen.findByTestId('reports')).toBeInTheDocument();
+      expect(screen.queryByTestId('mobile-more-page')).not.toBeInTheDocument();
+    });
+
+    it('should put admin tools on the More page', async () => {
+      const user = userEvent.setup();
+      renderEnhancedDashboard({
+        ...mockOperatorUser,
+        id: 'admin-1',
+        username: 'admin',
+        role: 'admin',
+      });
+
+      await user.click(await screen.findByRole('button', { name: 'More' }));
+      const more = await screen.findByTestId('mobile-more-page');
+      expect(more).toHaveTextContent('Truck Batches');
+      expect(more).toHaveTextContent('User Support');
+      expect(more).toHaveTextContent('Excel Import');
+      expect(more).not.toHaveTextContent('DO Management');
+    });
+
+    it('should keep the hamburger for roles outside the phone bar', async () => {
+      renderEnhancedDashboard({
+        ...mockOperatorUser,
+        id: 'boss-1',
+        username: 'boss',
+        role: 'boss',
+      });
+
+      expect(await screen.findByRole('button', { name: 'Open menu' })).toBeInTheDocument();
+      expect(screen.queryByTestId('mobile-bottom-nav')).not.toBeInTheDocument();
     });
   });
 
