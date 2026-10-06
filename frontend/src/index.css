@@ -23,6 +23,20 @@ input:-webkit-autofill:active {
   caret-color: #1f2937;
 }
 
+/* Desktop login: saved-login fill must follow the dark panel, not the light default. */
+html.dark #username-desktop:-webkit-autofill,
+html.dark #username-desktop:-webkit-autofill:hover,
+html.dark #username-desktop:-webkit-autofill:focus,
+html.dark #username-desktop:-webkit-autofill:active,
+html.dark #password-desktop:-webkit-autofill,
+html.dark #password-desktop:-webkit-autofill:hover,
+html.dark #password-desktop:-webkit-autofill:focus,
+html.dark #password-desktop:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #151c28 inset !important;
+  -webkit-text-fill-color: #f3f4f6 !important;
+  caret-color: #f3f4f6;
+}
+
 /* Hide the browser's native password reveal button (Edge & Chrome) so it
    doesn't double up with the custom eye icon toggle in password fields. */
 input[type="password"]::-ms-reveal,

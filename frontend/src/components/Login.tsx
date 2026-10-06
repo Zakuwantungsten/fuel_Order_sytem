@@ -6,6 +6,8 @@ import { MFASetupLogin } from './MFASetupLogin';
 import { loginWithPasskey, isPasskeySupported, describePasskeyError } from '../services/passkeyService';
 import tahmeedLogo from '../assets/logo.png';
 import tahmeedLogoDark from '../assets/Dec 2, 2025, 06_08_52 PM.png';
+// Pexels / Harrison Fitts — truck on a desert mountain highway under a blue sky.
+import loginFleetRoad from '../assets/login-fleet-road.jpg';
 import { useLocation, Link } from 'react-router-dom';
 
 const Login: React.FC = () => {
@@ -264,7 +266,7 @@ const Login: React.FC = () => {
         style={{ background: '#0f1722', fontFamily: 'inherit', overflowY: 'auto' }}
       >
         {/* Brand Hero */}
-        <div style={{ position: 'relative', background: 'linear-gradient(168deg, #1f2a3b 0%, #0f1722 100%)', padding: '64px 28px 48px', flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ position: 'relative', background: 'linear-gradient(168deg, #1f2a3b 0%, #0f1722 100%)', padding: '64px 28px 108px', flexShrink: 0, overflow: 'hidden' }}>
           {/* Ambient glows */}
           <div style={{ position: 'absolute', top: -60, right: -40, width: 200, height: 200, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.22), transparent 70%)' }} />
           <div style={{ position: 'absolute', bottom: -40, left: -30, width: 160, height: 160, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.12), transparent 70%)' }} />
@@ -277,10 +279,20 @@ const Login: React.FC = () => {
               Sign in to manage your fuel orders<br />and delivery sheets.
             </p>
           </div>
+          <svg
+            viewBox="0 0 390 86"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            style={{ position: 'absolute', left: 0, bottom: -1, width: '100%', height: 86, display: 'block' }}
+          >
+            <path fill="#9a3412" d="M0,34 C46,4 98,70 158,28 C214,0 252,62 318,26 C354,8 374,40 390,22 L390,86 L0,86 Z" />
+            <path fill="#ea580c" d="M0,46 C58,78 112,10 176,42 C232,70 286,14 390,36 L390,86 L0,86 Z" />
+            <path fill="#f4f6f9" d="M0,58 C64,84 118,30 184,56 C244,80 304,28 390,52 L390,86 L0,86 Z" />
+          </svg>
         </div>
 
         {/* Form Sheet */}
-        <div style={{ flex: 1, background: '#f4f6f9', borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -26, padding: '30px 24px 32px' }}>
+        <div style={{ flex: 1, background: '#f4f6f9', marginTop: -1, padding: '18px 24px 32px' }}>
 
           {/* Session banner */}
           {sessionMessage && (
@@ -448,151 +460,154 @@ const Login: React.FC = () => {
       </div>
 
       {/* ===== DESKTOP LAYOUT (hidden on mobile) ===== */}
-      <div className="hidden sm:flex min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 items-center justify-center p-6 transition-all duration-500">
-        <div className="w-full max-w-md bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/20 dark:border-gray-700/50">
-          <div className="w-full p-8 lg:p-12">
-            <div className="max-w-md mx-auto">
-              {/* Logo and Title */}
-              <div className="text-center mb-8">
-                <div className="w-40 h-24 mx-auto mb-4">
-                  <img src={tahmeedLogo} alt="Tahmeed Logo" className="w-full h-full object-contain dark:hidden" />
-                  <img src={tahmeedLogoDark} alt="Tahmeed Logo" className="w-full h-full object-contain hidden dark:block" />
+      <div className="hidden sm:grid h-screen min-h-0 overflow-hidden bg-white dark:bg-[#0f1722] md:grid-cols-[minmax(400px,44%)_1fr]">
+        <div className="flex items-center justify-center overflow-y-auto px-8 py-10 lg:px-14">
+          <div className="w-full max-w-[400px]">
+            <div className="mb-8 text-center">
+              <div className="mx-auto mb-6 h-16 w-44">
+                <img src={tahmeedLogo} alt="Tahmeed Logo" className="h-full w-full object-contain dark:hidden" />
+                <img src={tahmeedLogoDark} alt="Tahmeed Logo" className="hidden h-full w-full object-contain dark:block" />
+              </div>
+              <h1 className="mb-1.5 text-3xl font-bold tracking-tight text-slate-900 dark:text-gray-100">Welcome Back</h1>
+              <p className="text-sm text-slate-500 dark:text-gray-400">Sign in to Fuel Order Management System</p>
+            </div>
+
+            {sessionMessage && (
+              <div className="mb-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/30">
+                <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500 dark:text-amber-400" />
+                <div>
+                  <h4 className="text-sm font-medium text-amber-800 dark:text-amber-300">{sessionMessageTitle}</h4>
+                  <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">{sessionMessage}</p>
                 </div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Welcome Back</h1>
-                <p className="text-base text-gray-600 dark:text-gray-400">Sign in to Fuel Order Management System</p>
+              </div>
+            )}
+
+            {(error || passkeyError) && (
+              <div className="mb-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+                <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500 dark:text-red-400" />
+                <div>
+                  <h4 className="text-sm font-medium text-red-800 dark:text-red-300">Login Failed</h4>
+                  <p className="mt-1 text-sm text-red-700 dark:text-red-400">{error || passkeyError}</p>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label htmlFor="username-desktop" className="mb-2 block text-sm font-semibold text-slate-700 dark:text-gray-300">
+                  Username <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="username-desktop"
+                  name="username"
+                  type="text"
+                  required
+                  value={credentials.username}
+                  onChange={handleInputChange}
+                  className="block w-full rounded-full border border-slate-200 bg-slate-50 px-5 py-3.5 text-base text-slate-900 placeholder-slate-400 transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/25 dark:border-[#2a3548] dark:bg-[#151c28] dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-blue-400 dark:focus:bg-[#151c28]"
+                  placeholder="Enter your username"
+                />
               </div>
 
-              {/* Session Message */}
-              {sessionMessage && (
-                <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start space-x-3">
-                  <AlertCircle className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-medium text-amber-800 dark:text-amber-300">{sessionMessageTitle}</h4>
-                    <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">{sessionMessage}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Error Alert */}
-              {(error || passkeyError) && (
-                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-start space-x-3">
-                  <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-sm font-medium text-red-800 dark:text-red-300">Login Failed</h4>
-                    <p className="text-sm text-red-700 dark:text-red-400 mt-1">{error || passkeyError}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Login Form */}
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label htmlFor="username-desktop" className="block text-sm font-semibold text-slate-700 dark:text-gray-300 mb-3">Username</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <User className="h-5 w-5 text-slate-400 dark:text-gray-500" />
-                    </div>
-                    <input
-                      id="username-desktop"
-                      name="username"
-                      type="text"
-                      required
-                      value={credentials.username}
-                      onChange={handleInputChange}
-                      className="block w-full pl-12 pr-4 py-4 text-base border-2 border-slate-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white/80 dark:bg-gray-700 text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-gray-500 backdrop-blur transition-all duration-200"
-                      placeholder="Enter your username"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="password-desktop" className="block text-sm font-semibold text-slate-700 dark:text-gray-300 mb-3">Password</label>
-                  <div className="relative">
-                    <input
-                      id="password-desktop"
-                      name="password"
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      value={credentials.password}
-                      onChange={handleInputChange}
-                      className="block w-full pl-4 pr-14 py-4 text-base border-2 border-slate-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white/80 dark:bg-gray-700 text-slate-900 dark:text-gray-100 placeholder-slate-400 dark:placeholder-gray-500 backdrop-blur transition-all duration-200"
-                      placeholder="Enter your password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-4 flex items-center transition-colors"
-                    >
-                      {showPassword
-                        ? <EyeOff className="h-5 w-5 text-slate-400 hover:text-slate-600 dark:text-gray-400 dark:hover:text-gray-300" />
-                        : <Eye className="h-5 w-5 text-slate-400 hover:text-slate-600 dark:text-gray-400 dark:hover:text-gray-300" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <input
-                      id="remember-me-desktop"
-                      name="remember-me"
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
-                    />
-                    <label htmlFor="remember-me-desktop" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">Remember me</label>
-                  </div>
-                  <Link to="/forgot-password" className="text-sm font-medium text-orange-600 dark:text-orange-400 hover:text-orange-500 dark:hover:text-orange-300 transition-colors">
-                    Forgot password?
-                  </Link>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={!canSubmit}
-                  className="w-full btn btn-primary py-4 px-6 text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                      </svg>
-                      Signing in...
-                    </div>
-                  ) : (
-                    <div className="flex items-center">
-                      <LogIn className="w-5 h-5 mr-2" />
-                      Sign in
-                    </div>
-                  )}
-                </button>
-              </form>
-
-              {/* Passkey sign-in (only when the browser supports WebAuthn) */}
-              {passkeySupported && (
-                <>
-                  <div className="flex items-center gap-3 my-6">
-                    <div className="flex-1 h-px bg-slate-200 dark:bg-gray-700" />
-                    <span className="text-xs font-semibold text-slate-400 dark:text-gray-500">OR</span>
-                    <div className="flex-1 h-px bg-slate-200 dark:bg-gray-700" />
-                  </div>
+              <div>
+                <label htmlFor="password-desktop" className="mb-2 block text-sm font-semibold text-slate-700 dark:text-gray-300">
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    id="password-desktop"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={credentials.password}
+                    onChange={handleInputChange}
+                    className="block w-full rounded-full border border-slate-200 bg-slate-50 py-3.5 pl-5 pr-40 text-base text-slate-900 placeholder-slate-400 transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/25 dark:border-[#2a3548] dark:bg-[#151c28] dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-blue-400 dark:focus:bg-[#151c28]"
+                    placeholder="Enter your password"
+                  />
                   <button
                     type="button"
-                    onClick={handlePasskeyLogin}
-                    disabled={passkeyBusy || isLoading}
-                    className="w-full flex items-center justify-center gap-2 py-4 px-6 text-base font-semibold border-2 border-slate-200 dark:border-gray-600 rounded-xl text-slate-700 dark:text-gray-200 bg-white/80 dark:bg-gray-700 hover:bg-slate-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-1 right-1 flex items-center gap-1.5 rounded-full px-3 text-sm font-medium text-slate-500 transition-colors hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-200"
                   >
-                    <Fingerprint className="w-5 h-5" />
-                    {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
+                    <span>{showPassword ? 'Hide' : 'Show password'}</span>
+                    {showPassword
+                      ? <EyeOff className="h-4 w-4" />
+                      : <Eye className="h-4 w-4" />}
                   </button>
-                  <p className="text-xs text-center text-slate-400 dark:text-gray-500 mt-2.5 leading-relaxed">
-                    First time? Log in with your password, then add a passkey in
-                    Settings → Security to use your fingerprint or face.
-                  </p>
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <input
+                    id="remember-me-desktop"
+                    name="remember-me"
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 bg-white text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                  />
+                  <label htmlFor="remember-me-desktop" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">Remember me</label>
+                </div>
+                <Link to="/forgot-password" className="text-sm font-semibold text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                  Forgot password?
+                </Link>
+              </div>
+
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="btn btn-primary w-full !rounded-full py-3.5 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <svg className="mr-3 h-5 w-5 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                    </svg>
+                    Signing in...
+                  </div>
+                ) : (
+                  <span>Sign in</span>
+                )}
+              </button>
+            </form>
+
+            {passkeySupported && (
+              <>
+                <div className="my-6 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-gray-700" />
+                  <span className="text-xs font-medium text-slate-400 dark:text-gray-500">Or continue with</span>
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-gray-700" />
+                </div>
+                <button
+                  type="button"
+                  onClick={handlePasskeyLogin}
+                  disabled={passkeyBusy || isLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-300 bg-white py-3.5 text-base font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                >
+                  <Fingerprint className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
+                </button>
+                <p className="mt-2.5 text-center text-xs leading-relaxed text-slate-400 dark:text-gray-500">
+                  First time? Log in with your password, then add a passkey in
+                  Settings → Security to use your fingerprint or face.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="relative hidden md:block">
+          <img
+            src={loginFleetRoad}
+            alt="Truck driving a desert highway through rocky mountains"
+            className="absolute inset-0 h-full w-full object-cover object-[72%_center]"
+          />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/45 to-transparent px-8 pb-8 pt-28">
+            <p className="mx-auto max-w-lg rounded-2xl border border-white/30 bg-white/25 px-6 py-4 text-center text-xl font-semibold text-white shadow-lg backdrop-blur-md">
+              Fuel orders for the fleet, at your fingertips
+            </p>
           </div>
         </div>
       </div>
