@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { performTokenRefresh } from './api';
 
 /** Edit-lock change broadcast — drives the "Editing: <name>" badge in place. */
 export interface LockChangeEvent {
@@ -10,6 +11,8 @@ export interface LockChangeEvent {
 
 let socket: Socket | null = null;
 let reconnectAttempts = 0;
+/** One token refresh per failed connection streak — prevents a refresh/reject loop. */
+let authRefreshAttempted = false;
 /** Keep trying forever — recovery after a long outage should not require a refresh. */
 const MAX_RECONNECT_ATTEMPTS = Infinity;
 
@@ -78,7 +81,9 @@ export const initializeWebSocket = (token: string): Socket => {
   console.log('[WebSocket] Initializing connection to:', WS_URL);
 
   socket = io(WS_URL, {
-    auth: { token },
+    // Read on every (re)connect — the access token rotates after page load, and a
+    // stale one is rejected by the server middleware.
+    auth: (cb) => cb({ token: sessionStorage.getItem('fuel_order_token') || token }),
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 1000,
@@ -119,9 +124,15 @@ export const initializeWebSocket = (token: string): Socket => {
     if (_announcementEventCallback) _announcementEventCallback(event);
   });
 
+  let hasConnectedBefore = false;
   socket.on('connect', () => {
     console.log('[WebSocket] Connected - Socket ID:', socket?.id);
     reconnectAttempts = 0;
+    authRefreshAttempted = false;
+    // Covers manager auto-reconnects and manual connect() after a token refresh,
+    // so subscribers reload anything missed while the socket was down.
+    if (hasConnectedBefore) _reconnectCallbacks.forEach((cb) => cb());
+    hasConnectedBefore = true;
   });
 
   socket.on('connected', (data) => {
@@ -135,19 +146,28 @@ export const initializeWebSocket = (token: string): Socket => {
   socket.on('connect_error', (error) => {
     console.error('[WebSocket] Connection error:', error.message);
     reconnectAttempts++;
+    // A middleware rejection (expired/invalid token) stops auto-reconnect
+    // (socket.active === false). Refresh the token once and retry.
+    if (socket && !socket.active && !authRefreshAttempted) {
+      authRefreshAttempted = true;
+      performTokenRefresh()
+        .then((newToken) => {
+          if (newToken && socket && !socket.connected) socket.connect();
+        })
+        .catch((err) => console.error('[WebSocket] Token refresh failed:', err));
+    }
   });
 
-  socket.on('reconnect', (attemptNumber) => {
+  // Reconnection lifecycle events are emitted by the Manager, not the Socket (socket.io-client v4).
+  socket.io.on('reconnect', (attemptNumber) => {
     console.log('[WebSocket] Reconnected after', attemptNumber, 'attempts');
-    // Notify all subscribers so they can reload any data that may have been missed
-    _reconnectCallbacks.forEach((cb) => cb());
   });
 
-  socket.on('reconnect_attempt', (attemptNumber) => {
+  socket.io.on('reconnect_attempt', (attemptNumber) => {
     console.log('[WebSocket] Reconnection attempt:', attemptNumber);
   });
 
-  socket.on('reconnect_failed', () => {
+  socket.io.on('reconnect_failed', () => {
     console.error('[WebSocket] Reconnection failed');
   });
 
