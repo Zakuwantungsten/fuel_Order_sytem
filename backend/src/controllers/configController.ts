@@ -5,7 +5,7 @@ import { YardConfig } from '../models/YardConfig';
 import { RouteConfig } from '../models/RouteConfig';
 import { SystemConfig } from '../models/SystemConfig';
 import { AuditLog } from '../models/AuditLog';
-import { FuelRecord } from '../models';
+import { FuelRecord, DeliveryOrder } from '../models';
 import { FuelPriceHistory } from '../models/FuelPrice';
 import { emitDataChange } from '../services/websocket';
 import { syncConfigNotifications } from './notificationController';
@@ -67,11 +67,28 @@ async function autoFillFuelRecordsForRoute(route: any, username: string): Promis
       isCancelled: { $ne: true },
     });
 
+    // Older records stored start/from as a DAR/TANGA bucket, so the going DO's
+    // loading point is the authoritative origin for matching.
+    const goingDos = lockedRecords.map((r) => r.goingDo).filter(Boolean);
+    const importDOs = goingDos.length
+      ? await DeliveryOrder.find({
+          doNumber: { $in: goingDos },
+          importOrExport: 'IMPORT',
+          isDeleted: { $ne: true },
+        })
+          .select('doNumber loadingPoint')
+          .lean()
+      : [];
+    const loadingPointByDo = new Map<string, string>(
+      importDOs.map((d: any) => [String(d.doNumber), String(d.loadingPoint || '').trim()])
+    );
+
     let updatedCount = 0;
 
     for (const record of lockedRecords) {
       const recordDest = (record.to || '').toUpperCase().trim();
-      const recordOrigin = record.from || record.start || '';
+      const doLoadingPoint = loadingPointByDo.get(String(record.goingDo)) || '';
+      const recordOrigin = doLoadingPoint || record.from || record.start || '';
 
       // Require origin + destination (or alias). No dest-only / partial fallback.
       const destMatch =
@@ -111,12 +128,19 @@ async function autoFillFuelRecordsForRoute(route: any, username: string): Promis
         Math.abs(record.tangaReturn || 0);
       const newBalance = totalFuel - totalCheckpoints;
 
-      await FuelRecord.findByIdAndUpdate(record._id, {
+      const routeFix: Record<string, any> = {
         totalLts: newTotalLts,
         balance: newBalance,
         isLocked: newIsLocked,
         pendingConfigReason: newPendingReason,
-      });
+      };
+      if (doLoadingPoint && record.start !== doLoadingPoint) {
+        routeFix.start = doLoadingPoint;
+        if (record.returnDo) routeFix.originalGoingFrom = doLoadingPoint;
+        else routeFix.from = doLoadingPoint;
+      }
+
+      await FuelRecord.findByIdAndUpdate(record._id, routeFix);
 
       // Sync notifications: resolve if fully unlocked, otherwise downgrade the
       // alert to the remaining issue (missing_extra_fuel).

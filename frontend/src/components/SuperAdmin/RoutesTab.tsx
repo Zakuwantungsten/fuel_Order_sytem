@@ -164,10 +164,8 @@ export default function RoutesTab({ onMessage, initialDestination, initialLoadin
     }
     const dest = choiceDestination.trim().toUpperCase();
     const existingAliases = (route.destinationAliases || []).map(a => a.toUpperCase());
-    if (route.destination.toUpperCase() === dest || existingAliases.includes(dest)) {
-      onMessage('error', `"${dest}" is already part of ${route.routeName}`);
-      return;
-    }
+    // Already covered: re-saving the route re-runs the backend auto-fill for waiting records.
+    const alreadyCovered = route.destination.toUpperCase() === dest || existingAliases.includes(dest);
 
     setSavingAlias(true);
     try {
@@ -175,12 +173,17 @@ export default function RoutesTab({ onMessage, initialDestination, initialLoadin
         routeName: route.routeName,
         origin: route.origin,
         destination: route.destination,
-        destinationAliases: [...existingAliases, dest],
+        destinationAliases: alreadyCovered ? existingAliases : [...existingAliases, dest],
         routeType: route.routeType,
         defaultTotalLiters: route.defaultTotalLiters,
         description: route.description,
       });
-      onMessage('success', `Added "${dest}" as an alias of ${route.routeName} (${route.defaultTotalLiters} L) — matching fuel records will update automatically`);
+      onMessage(
+        'success',
+        alreadyCovered
+          ? `"${dest}" is already part of ${route.routeName} — applied ${route.defaultTotalLiters} L to waiting fuel records`
+          : `Added "${dest}" as an alias of ${route.routeName} (${route.defaultTotalLiters} L) — matching fuel records will update automatically`
+      );
       setShowRouteChoice(false);
       loadData();
     } catch (error: any) {
