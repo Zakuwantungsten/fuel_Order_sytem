@@ -190,7 +190,7 @@ interface BulkDOEntryGridProps {
 }
 
 const BulkDOEntryGrid = ({ rateType, rows, onChange, disabled }: BulkDOEntryGridProps) => {
-  const amountHeader = rateType === 'per_ton' ? 'Rate Per Ton' : 'Total Amount';
+  const amountHeader = rateType === 'per_ton' ? 'Rate/Ton' : 'Amount';
 
   const updateCell = (rowIndex: number, field: BulkGridField, value: string) => {
     if (field === 'tonnages' && !isTonnageInput(value)) return;
@@ -269,38 +269,46 @@ const BulkDOEntryGrid = ({ rateType, rows, onChange, disabled }: BulkDOEntryGrid
   };
 
   const inputClass =
-    'w-full min-w-0 px-2 py-1.5 text-sm border-0 bg-transparent text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 placeholder:text-gray-300 dark:placeholder:text-gray-600';
+    'w-full min-w-0 h-8 px-1.5 sm:px-2 text-sm border-0 bg-transparent text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 placeholder:text-gray-300 dark:placeholder:text-gray-600';
+  const headCell =
+    'h-8 px-1.5 sm:px-2 text-[11px] sm:text-xs font-semibold text-left text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 border-b border-r border-gray-300 dark:border-gray-600 whitespace-nowrap';
+  const bodyCell = 'p-0 border-b border-r border-gray-200 dark:border-gray-700';
+  // # and Truck No stay frozen while the grid scrolls sideways on narrow screens
+  const frozenNum = 'sticky left-0 z-10';
+  const frozenTruck = 'sticky left-8 z-10';
+
+  const placeholders: Record<BulkGridField, string> = {
+    truckNo: 'T844 EKS',
+    trailerNo: 'T629 ELE',
+    driverName: 'John Doe',
+    tonnages: '30.001',
+    amountOrRate: rateType === 'per_ton' ? '1850' : '55500',
+  };
 
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto rounded-md border border-gray-300 dark:border-gray-600">
-        <table className="w-full border-collapse min-w-[720px]">
+        <table className="w-full table-fixed border-separate border-spacing-0 min-w-[600px]">
+          <colgroup>
+            <col className="w-8" />
+            <col className="w-[92px]" />
+            <col className="w-[92px]" />
+            <col />
+            <col className="w-[72px]" />
+            <col className="w-[84px]" />
+            {rateType === 'per_ton' && <col className="w-[84px]" />}
+            <col className="w-8" />
+          </colgroup>
           <thead>
-            <tr className="bg-gray-100 dark:bg-gray-700">
-              <th className="w-10 px-2 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 text-center border-b border-r border-gray-300 dark:border-gray-600">
-                #
-              </th>
-              <th className="px-2 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 text-left border-b border-r border-gray-300 dark:border-gray-600">
-                Truck No
-              </th>
-              <th className="px-2 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 text-left border-b border-r border-gray-300 dark:border-gray-600">
-                Trailer No
-              </th>
-              <th className="px-2 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 text-left border-b border-r border-gray-300 dark:border-gray-600">
-                Driver Name
-              </th>
-              <th className="px-2 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 text-left border-b border-r border-gray-300 dark:border-gray-600 w-28">
-                Tonnage
-              </th>
-              <th className="px-2 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200 text-left border-b border-r border-gray-300 dark:border-gray-600 w-32">
-                {amountHeader}
-              </th>
-              {rateType === 'per_ton' && (
-                <th className="px-2 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 text-left border-b border-r border-gray-300 dark:border-gray-600 w-28">
-                  Total (calc)
-                </th>
-              )}
-              <th className="w-10 px-1 py-2 border-b border-gray-300 dark:border-gray-600" />
+            <tr>
+              <th className={`${headCell} ${frozenNum} !text-center !text-gray-500`}>#</th>
+              <th className={`${headCell} ${frozenTruck}`}>Truck No</th>
+              <th className={headCell}>Trailer No</th>
+              <th className={headCell}>Driver</th>
+              <th className={headCell}>Tons</th>
+              <th className={headCell}>{amountHeader}</th>
+              {rateType === 'per_ton' && <th className={`${headCell} !text-gray-500 dark:!text-gray-400`}>Total</th>}
+              <th className="h-8 bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600" />
             </tr>
           </thead>
           <tbody>
@@ -310,50 +318,37 @@ const BulkDOEntryGrid = ({ rateType, rows, onChange, disabled }: BulkDOEntryGrid
               const calcTotal = rateType === 'per_ton' ? tonnage * rate : null;
 
               return (
-                <tr
-                  key={rowIndex}
-                  className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/40"
-                >
-                  <td className="px-2 py-0 text-xs text-center text-gray-400 dark:text-gray-500 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 select-none">
+                <tr key={rowIndex} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                  <td
+                    className={`${bodyCell} ${frozenNum} text-[11px] text-center text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 select-none`}
+                  >
                     {rowIndex + 1}
                   </td>
                   {EDITABLE_FIELDS.map((field) => (
                     <td
                       key={field}
-                      className="p-0 border-r border-gray-200 dark:border-gray-700"
+                      className={`${bodyCell} ${field === 'truckNo' ? `${frozenTruck} bg-white dark:bg-gray-800` : ''}`}
                     >
                       <input
                         type="text"
-                        inputMode={field === 'tonnages' ? 'decimal' : undefined}
+                        inputMode={field === 'tonnages' || field === 'amountOrRate' ? 'decimal' : undefined}
                         value={row[field]}
                         disabled={disabled}
                         onChange={(e) => updateCell(rowIndex, field, e.target.value)}
                         onPaste={(e) => handlePaste(rowIndex, field, e)}
                         className={`${inputClass} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        placeholder={
-                          field === 'truckNo'
-                            ? 'T844 EKS'
-                            : field === 'trailerNo'
-                            ? 'T629 ELE'
-                            : field === 'driverName'
-                            ? 'John Doe'
-                            : field === 'tonnages'
-                            ? '30.001'
-                            : rateType === 'per_ton'
-                            ? '1850'
-                            : '55500'
-                        }
+                        placeholder={rowIndex === 0 ? placeholders[field] : undefined}
                       />
                     </td>
                   ))}
                   {rateType === 'per_ton' && (
-                    <td className="px-2 py-1.5 text-sm text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 tabular-nums">
+                    <td className={`${bodyCell} px-1.5 sm:px-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/40 tabular-nums truncate`}>
                       {row.tonnages.trim() && row.amountOrRate.trim()
                         ? calcTotal!.toLocaleString(undefined, { maximumFractionDigits: 2 })
                         : ''}
                     </td>
                   )}
-                  <td className="px-1 py-0.5 text-center">
+                  <td className="p-0 text-center border-b border-gray-200 dark:border-gray-700">
                     <button
                       type="button"
                       onClick={() => removeRow(rowIndex)}
@@ -378,24 +373,24 @@ const BulkDOEntryGrid = ({ rateType, rows, onChange, disabled }: BulkDOEntryGrid
           type="button"
           onClick={() => addRows(5)}
           disabled={disabled}
-          className={`inline-flex items-center px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 ${
+          className={`inline-flex items-center h-8 px-2.5 text-xs sm:text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 ${
             disabled ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         >
-          <Plus className="w-4 h-4 mr-1" />
-          Add rows
+          <Plus className="w-3.5 h-3.5 mr-1" />
+          Add 5 rows
         </button>
         <button
           type="button"
           onClick={clearAll}
           disabled={disabled}
-          className={`inline-flex items-center px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 ${
+          className={`inline-flex items-center h-8 px-2.5 text-xs sm:text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 ${
             disabled ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         >
           Clear grid
         </button>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
+        <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">
           Tip: paste Excel cells into any cell — data fills across and down like a spreadsheet.
         </span>
       </div>
