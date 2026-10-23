@@ -64,7 +64,7 @@ const clearDODraft = () => {
 
 // text-base on mobile keeps iOS Safari from zooming in when an input is focused
 const inputClass =
-  'w-full h-10 px-3 text-base sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent';
+  'w-full h-10 px-2.5 sm:px-3 text-base sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent';
 const labelClass = 'block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1';
 
 const SectionTitle = ({ children, first }: { children: ReactNode; first?: boolean }) => (
@@ -104,7 +104,7 @@ function Segmented<T extends string>({ value, options, onChange, ariaLabel, disa
             aria-checked={active}
             disabled={disabled}
             onClick={() => !active && onChange(opt.value)}
-            className={`px-2 rounded-md text-xs sm:text-sm font-medium truncate transition-colors disabled:cursor-not-allowed ${
+            className={`px-1 sm:px-2 rounded-md text-xs sm:text-sm font-medium truncate transition-colors disabled:cursor-not-allowed ${
               active
                 ? 'bg-white dark:bg-gray-900 text-primary-700 dark:text-primary-300 shadow-sm'
                 : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
@@ -525,45 +525,48 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                 </>
               )}
 
-              <div>
-                <label className={labelClass}>Date *</label>
-                <input
-                  type="date"
-                  name="date"
-                  value={formData.date || ''}
-                  onChange={handleChange}
-                  required
-                  className={inputClass}
-                />
-              </div>
+              {/* Mobile: Date | Invoice | Import/Export on one row. md+: Date | Import/Export, then Invoice full width. */}
+              <div className="col-span-2 grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] md:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-3">
+                <div>
+                  <label className={labelClass}>Date *</label>
+                  <input
+                    type="date"
+                    name="date"
+                    value={formData.date || ''}
+                    onChange={handleChange}
+                    required
+                    className={inputClass}
+                  />
+                </div>
 
-              <div>
-                <label className={`${labelClass} flex items-center gap-1`}>
-                  Import/Export *
-                  {isDirectionRoleLocked && <Lock className="w-3 h-3" aria-label="Set by your role" />}
-                </label>
-                <Segmented
-                  ariaLabel="Import or export"
-                  value={formData.importOrExport === 'EXPORT' ? 'EXPORT' : 'IMPORT'}
-                  options={[
-                    { value: 'IMPORT', label: 'Import' },
-                    { value: 'EXPORT', label: 'Export' },
-                  ]}
-                  onChange={(v) => setFormData(prev => ({ ...prev, importOrExport: v }))}
-                  disabled={isDirectionRoleLocked}
-                />
-              </div>
+                <div className="md:order-last md:col-span-2">
+                  <label className={labelClass}>Invoice No.</label>
+                  <input
+                    type="text"
+                    name="invoiceNos"
+                    value={formData.invoiceNos || ''}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder="Optional"
+                  />
+                </div>
 
-              <div className="col-span-2">
-                <label className={labelClass}>Invoice Numbers</label>
-                <input
-                  type="text"
-                  name="invoiceNos"
-                  value={formData.invoiceNos || ''}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Optional"
-                />
+                <div>
+                  <label className={`${labelClass} flex items-center gap-1`}>
+                    <span className="truncate">Import/Export *</span>
+                    {isDirectionRoleLocked && <Lock className="w-3 h-3 shrink-0" aria-label="Set by your role" />}
+                  </label>
+                  <Segmented
+                    ariaLabel="Import or export"
+                    value={formData.importOrExport === 'EXPORT' ? 'EXPORT' : 'IMPORT'}
+                    options={[
+                      { value: 'IMPORT', label: 'Import' },
+                      { value: 'EXPORT', label: 'Export' },
+                    ]}
+                    onChange={(v) => setFormData(prev => ({ ...prev, importOrExport: v }))}
+                    disabled={isDirectionRoleLocked}
+                  />
+                </div>
               </div>
 
               <SectionTitle>Client & Haulier</SectionTitle>
