@@ -7,6 +7,7 @@ import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
 import { formatTruckNumber, parseTonnage, formatTonnage } from '../utils/dataCleanup';
 import { toast } from 'react-toastify';
+import RouteSuggestInput, { useRouteLocationSuggestions } from './RouteSuggestInput';
 import BulkDOEntryGrid, {
   BulkGridRow,
   createEmptyGridRows,
@@ -158,6 +159,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
     rateType: 'per_ton' as 'per_ton' | 'fixed_total',
     startingNumber: '',
   });
+  const routeSuggestions = useRouteLocationSuggestions(commonData.importOrExport);
 
   // Fetch next DO/SDO number when component opens or doType changes
   useEffect(() => {
@@ -1038,11 +1040,11 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Loading Point *
                   </label>
-                  <input
-                    type="text"
+                  <RouteSuggestInput
                     name="loadingPoint"
                     value={commonData.loadingPoint}
-                    onChange={handleCommonChange}
+                    onChange={(v) => setCommonData(prev => ({ ...prev, loadingPoint: v.toUpperCase() }))}
+                    suggestions={routeSuggestions.origins}
                     required
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="e.g., DAR"
@@ -1053,11 +1055,11 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Destination *
                   </label>
-                  <input
-                    type="text"
+                  <RouteSuggestInput
                     name="destination"
                     value={commonData.destination}
-                    onChange={handleCommonChange}
+                    onChange={(v) => setCommonData(prev => ({ ...prev, destination: v.toUpperCase() }))}
+                    suggestions={routeSuggestions.destinations}
                     required
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="e.g., CCR KOLWEZI"

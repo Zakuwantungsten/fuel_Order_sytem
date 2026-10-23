@@ -93,11 +93,6 @@ export function extractMonthFromDate(dateStr: string): string {
   return `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-/** Determine journey start location from the DO loading point. */
-export function determineJourneyStart(loadingPoint?: string): 'TANGA' | 'DAR' {
-  return (loadingPoint || '').toLowerCase().includes('tanga') ? 'TANGA' : 'DAR';
-}
-
 /**
  * Origin equality for route matching.
  * Exact match, or either string contains the other (e.g. "TANGA TANGA" ↔ "TANGA").
@@ -308,7 +303,8 @@ export function buildImportFuelRecord(
   if (missingTotalLiters) missingFields.push('totalLiters');
   if (missingExtraFuel) missingFields.push('extraFuel');
 
-  const start = determineJourneyStart(deliveryOrder.loadingPoint);
+  // Start is the DO loading point as entered — route matching relies on it.
+  const start = (deliveryOrder.loadingPoint || '').trim();
   const month = extractMonthFromDate(deliveryOrder.date);
 
   const fuelRecord: Record<string, any> = {

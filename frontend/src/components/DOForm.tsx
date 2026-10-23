@@ -7,6 +7,7 @@ import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import axios from 'axios';
 import { cleanDeliveryOrder, isCorruptedDriverName, formatTruckNumber, isTonnageInput, parseTonnage, quantityToInputValue, formatTonnage } from '../utils/dataCleanup';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
+import RouteSuggestInput, { useRouteLocationSuggestions } from './RouteSuggestInput';
 
 interface DOFormProps {
   order?: DeliveryOrder;
@@ -111,6 +112,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const autoDownloadPdf = journeyConfig?.autoDownloadDOPdf ?? true;
   const fuelAutomation = journeyConfig?.fuelAutomation;
   const isEditMode = !!order;
+  const routeSuggestions = useRouteLocationSuggestions(formData.importOrExport === 'EXPORT' ? 'EXPORT' : 'IMPORT');
 
   // Dropdown states
   const [showRateTypeDropdown, setShowRateTypeDropdown] = useState(false);
@@ -716,11 +718,11 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Loading Point *
                 </label>
-                <input
-                  type="text"
+                <RouteSuggestInput
                   name="loadingPoint"
                   value={formData.loadingPoint || ''}
-                  onChange={handleChange}
+                  onChange={(v) => setFormData(prev => ({ ...prev, loadingPoint: v.toUpperCase() }))}
+                  suggestions={routeSuggestions.origins}
                   required
                   style={{ textTransform: 'uppercase' }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -732,11 +734,11 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                   Destination *
                 </label>
-                <input
-                  type="text"
+                <RouteSuggestInput
                   name="destination"
                   value={formData.destination || ''}
-                  onChange={handleChange}
+                  onChange={(v) => setFormData(prev => ({ ...prev, destination: v.toUpperCase() }))}
+                  suggestions={routeSuggestions.destinations}
                   required
                   style={{ textTransform: 'uppercase' }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"

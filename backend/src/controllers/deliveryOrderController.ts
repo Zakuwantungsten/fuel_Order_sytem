@@ -35,7 +35,6 @@ import {
   buildImportFuelRecord,
   matchExportRouteLiters,
   buildReturnUpdate,
-  determineJourneyStart,
   recalculateBalanceFromTotal,
   resolveStoredOutboundLiters,
   buildExportReturnUnlinkUpdate,
@@ -357,15 +356,14 @@ const cascadeUpdateToFuelRecord = async (
     if (needsImportRouteRematch) {
       const newLoadingPoint = updatedData.loadingPoint || originalDO.loadingPoint || '';
       const newDestination = updatedData.destination || originalDO.destination || '';
-      const goingStart = determineJourneyStart(newLoadingPoint);
       const hasReturn = !!(fuelRecord.returnDo && String(fuelRecord.returnDo).trim());
 
+      // `start` is fixed at DO creation; amends never rewrite it.
       if (hasReturn) {
         // Case B: return already linked — keep live from/to; update stored going details only
         if (lpChanged || destChanged) {
-          updates.originalGoingFrom = goingStart;
+          updates.originalGoingFrom = String(newLoadingPoint).trim();
           updates.originalGoingTo = newDestination;
-          updates.start = goingStart;
           if (lpChanged) {
             changes.push(
               `Going loading point (stored): ${originalDO.loadingPoint} → ${newLoadingPoint}`
@@ -380,8 +378,7 @@ const cascadeUpdateToFuelRecord = async (
       } else {
         // Case A: no return — update live journey fields
         if (lpChanged) {
-          updates.from = goingStart;
-          updates.start = goingStart;
+          updates.from = String(newLoadingPoint).trim();
           changes.push(`Loading Point (from): ${originalDO.loadingPoint} → ${newLoadingPoint}`);
         }
         if (destChanged) {
