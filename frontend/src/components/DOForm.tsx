@@ -568,7 +568,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
 
               <SectionTitle>Client & Haulier</SectionTitle>
 
-              <div className="col-span-2 md:col-span-1">
+              <div>
                 <label className={labelClass}>Client Name *</label>
                 <input
                   type="text"
@@ -582,7 +582,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                 />
               </div>
 
-              <div className="col-span-2 md:col-span-1">
+              <div>
                 <label className={labelClass}>Haulier</label>
                 <input
                   type="text"
@@ -656,28 +656,30 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                 />
               </div>
 
-              <div className="col-span-2 md:col-span-1">
-                <label className={labelClass}>Driver Name</label>
-                <input
-                  type="text"
-                  name="driverName"
-                  value={formData.driverName || ''}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Optional"
-                />
-              </div>
+              <div className="col-span-2 grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:grid-cols-2 gap-x-3 sm:gap-x-4">
+                <div>
+                  <label className={labelClass}>Driver Name</label>
+                  <input
+                    type="text"
+                    name="driverName"
+                    value={formData.driverName || ''}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder="Optional"
+                  />
+                </div>
 
-              <div className="col-span-2 md:col-span-1">
-                <label className={labelClass}>Border Entry DRC</label>
-                <input
-                  type="text"
-                  name="borderEntryDRC"
-                  value={formData.borderEntryDRC || ''}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Optional"
-                />
+                <div>
+                  <label className={labelClass}>Border Entry DRC</label>
+                  <input
+                    type="text"
+                    name="borderEntryDRC"
+                    value={formData.borderEntryDRC || ''}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder="Optional"
+                  />
+                </div>
               </div>
 
               <SectionTitle>Route</SectionTitle>
