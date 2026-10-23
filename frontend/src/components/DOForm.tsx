@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import { toast } from 'react-toastify';
-import { X, ChevronDown, Check } from 'lucide-react';
+import { X, Lock } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import axios from 'axios';
-import { cleanDeliveryOrder, isCorruptedDriverName, formatTruckNumber, isTonnageInput, parseTonnage, quantityToInputValue, formatTonnage } from '../utils/dataCleanup';
+import { cleanDeliveryOrder, isCorruptedDriverName, formatTruckNumber, isTonnageInput, parseTonnage, quantityToInputValue } from '../utils/dataCleanup';
 import ConfirmModal from './SuperAdmin/ConfirmModal';
 import RouteSuggestInput, { useRouteLocationSuggestions } from './RouteSuggestInput';
 
@@ -61,6 +62,62 @@ const clearDODraft = () => {
   }
 };
 
+// text-base on mobile keeps iOS Safari from zooming in when an input is focused
+const inputClass =
+  'w-full h-10 px-3 text-base sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent';
+const labelClass = 'block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1';
+
+const SectionTitle = ({ children, first }: { children: ReactNode; first?: boolean }) => (
+  <h4
+    className={`col-span-2 text-[11px] font-semibold tracking-wider uppercase text-gray-500 dark:text-gray-400 ${
+      first ? '' : 'mt-2 pt-4 border-t border-gray-100 dark:border-gray-700'
+    }`}
+  >
+    {children}
+  </h4>
+);
+
+interface SegmentedProps<T extends string> {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+  ariaLabel: string;
+  disabled?: boolean;
+}
+
+function Segmented<T extends string>({ value, options, onChange, ariaLabel, disabled }: SegmentedProps<T>) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className={`grid grid-flow-col auto-cols-fr gap-1 h-10 p-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/60 ${
+        disabled ? 'opacity-60' : ''
+      }`}
+    >
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={disabled}
+            onClick={() => !active && onChange(opt.value)}
+            className={`px-2 rounded-md text-xs sm:text-sm font-medium truncate transition-colors disabled:cursor-not-allowed ${
+              active
+                ? 'bg-white dark:bg-gray-900 text-primary-700 dark:text-primary-300 shadow-sm'
+                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: DOFormProps) => {
   const getCurrentDate = useCallback(() => {
     const now = new Date();
@@ -113,37 +170,6 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const fuelAutomation = journeyConfig?.fuelAutomation;
   const isEditMode = !!order;
   const routeSuggestions = useRouteLocationSuggestions(formData.importOrExport === 'EXPORT' ? 'EXPORT' : 'IMPORT');
-
-  // Dropdown states
-  const [showRateTypeDropdown, setShowRateTypeDropdown] = useState(false);
-  
-  // Dropdown refs
-  const rateTypeDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Click outside detection
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (rateTypeDropdownRef.current && !rateTypeDropdownRef.current.contains(event.target as Node)) {
-        setShowRateTypeDropdown(false);
-      }
-    };
-
-    const handleScroll = (event: Event) => {
-      const target = event.target as Node;
-      if (rateTypeDropdownRef.current?.contains(target)) return;
-      setShowRateTypeDropdown(false);
-    };
-
-    const scrollEl = document.getElementById('main-scroll-container');
-    document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
-    scrollEl?.addEventListener('scroll', handleScroll);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
-      scrollEl?.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
 
   // Update form data when order prop changes (for edit mode)
   useEffect(() => {
@@ -247,8 +273,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     }));
   };
 
-  const handleDOTypeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newType = e.target.value as 'DO' | 'SDO';
+  const handleDOTypeChange = async (newType: 'DO' | 'SDO') => {
     setFormData(prev => ({ ...prev, doType: newType }));
     
     // Fetch next number for the selected type
@@ -412,173 +437,139 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
 
   if (!isOpen) return null;
 
+  const isDirectionRoleLocked = user?.role === 'import_officer' || user?.role === 'export_officer';
+  const isPerTon = formData.rateType === 'per_ton';
+  const totalAmount = isPerTon
+    ? (formData.tonnages || 0) * (formData.ratePerTon || 0)
+    : formData.ratePerTon || 0;
+
   return (
     <>
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-2 md:px-4 pt-2 md:pt-4 pb-10 md:pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 transition-opacity bg-gray-500 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-80"
-          onClick={handleClose}
-        />
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+      <div
+        className="absolute inset-0 transition-opacity bg-gray-500 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-80"
+        onClick={handleClose}
+      />
 
-        {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle w-full max-w-[98%] md:max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="bg-primary-600 dark:bg-primary-700 px-3 md:px-6 py-3 md:py-4 flex items-center justify-between">
-            <h3 className="text-base md:text-lg font-semibold text-white">
+      {/* Bottom sheet on mobile, centered dialog from sm up */}
+      <div className="relative flex flex-col w-full sm:max-w-3xl max-h-[94dvh] sm:max-h-[90vh] bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-xl shadow-xl overflow-hidden text-left">
+        <div className="shrink-0 bg-primary-600 dark:bg-primary-700 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-base sm:text-lg font-semibold text-white truncate">
               {order ? `Edit ${order.doType || 'DO'}-${order.doNumber}` : 'New Delivery Order'}
             </h3>
-            <button onClick={handleClose} className="p-1 md:p-2 text-white hover:bg-primary-700 dark:hover:bg-primary-600 rounded">
-              <X className="w-4 h-4 md:w-5 md:h-5" />
-            </button>
+            {isEditMode && (
+              <p className="flex items-center gap-1 text-xs text-white/80">
+                <Lock className="w-3 h-3" />
+                Type and number are locked after creation
+              </p>
+            )}
           </div>
+          <button
+            type="button"
+            onClick={handleClose}
+            aria-label="Close"
+            className="shrink-0 p-1.5 text-white hover:bg-primary-700 dark:hover:bg-primary-600 rounded-md"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 px-3 md:px-6 py-4 md:py-6 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
             {hasDraft && !order && (
-              <div className="mb-4 flex items-center justify-between rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-2">
-                <span className="text-sm text-amber-800 dark:text-amber-300">
-                  Restored your unsaved draft. Continue where you left off, or discard it.
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
+                <span className="text-xs sm:text-sm text-amber-800 dark:text-amber-300">
+                  Restored your unsaved draft.
                 </span>
                 <button
                   type="button"
                   onClick={handleDiscardDraft}
-                  className="text-sm font-medium text-amber-800 dark:text-amber-300 hover:underline"
+                  className="shrink-0 text-xs sm:text-sm font-medium text-amber-800 dark:text-amber-300 hover:underline"
                 >
-                  Discard draft
+                  Discard
                 </button>
               </div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6">
-              {/* Basic Information */}
-              <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 uppercase">
-                  Basic Information
-                </h4>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                  Type *
-                </label>
-                <div className="flex items-center space-x-6">
-                  <label className={`inline-flex items-center ${isEditMode ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                    <input
-                      type="radio"
-                      name="doType"
-                      value="DO"
-                      checked={formData.doType === 'DO'}
+            <div className="grid grid-cols-2 gap-x-3 sm:gap-x-4 gap-y-3">
+              <SectionTitle first>Basic Information</SectionTitle>
+
+              {!isEditMode && (
+                <>
+                  <div>
+                    <label className={labelClass}>Type *</label>
+                    <Segmented
+                      ariaLabel="Order type"
+                      value={formData.doType || 'DO'}
+                      options={[
+                        { value: 'DO', label: 'DO' },
+                        { value: 'SDO', label: 'SDO' },
+                      ]}
                       onChange={handleDOTypeChange}
-                      disabled={isEditMode}
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600"
                     />
-                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">DO (Delivery Order)</span>
-                  </label>
-                  <label className={`inline-flex items-center ${isEditMode ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                  </div>
+                  <div>
+                    <label className={labelClass}>
+                      {formData.doType || 'DO'} Number * <span className="font-normal text-gray-400">(auto)</span>
+                    </label>
                     <input
-                      type="radio"
-                      name="doType"
-                      value="SDO"
-                      checked={formData.doType === 'SDO'}
-                      onChange={handleDOTypeChange}
-                      disabled={isEditMode}
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600"
+                      type="text"
+                      name="doNumber"
+                      value={formData.doNumber || ''}
+                      onChange={handleChange}
+                      required
+                      className={inputClass}
                     />
-                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">SDO (Special Delivery Order)</span>
-                  </label>
-                </div>
-                {isEditMode && (
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    DO type cannot be changed after creation
-                  </p>
-                )}
-              </div>
+                  </div>
+                </>
+              )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  {formData.doType || 'DO'} Number *
-                </label>
-                <input
-                  type="text"
-                  name="doNumber"
-                  value={formData.doNumber || ''}
-                  onChange={handleChange}
-                  required
-                  disabled={isEditMode}
-                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 ${isEditMode ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : 'bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent'}`}
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {isEditMode ? 'DO number cannot be changed after creation' : 'Auto-assigned — you can override if needed'}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Date *</label>
+                <label className={labelClass}>Date *</label>
                 <input
                   type="date"
                   name="date"
                   value={formData.date || ''}
                   onChange={handleChange}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Import/Export *</label>
-                {(user?.role === 'import_officer' || user?.role === 'export_officer') ? (
-                  <>
-                    <input
-                      type="text"
-                      value={formData.importOrExport || 'IMPORT'}
-                      readOnly
-                      disabled
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 text-gray-900 dark:text-gray-100 cursor-not-allowed"
-                    />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Auto-selected based on your role (cannot be changed)
-                    </p>
-                  </>
-                ) : (
-                  <select
-                    name="importOrExport"
-                    value={formData.importOrExport || 'IMPORT'}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  >
-                    <option value="IMPORT">IMPORT</option>
-                    <option value="EXPORT">EXPORT</option>
-                  </select>
-                )}
+                <label className={`${labelClass} flex items-center gap-1`}>
+                  Import/Export *
+                  {isDirectionRoleLocked && <Lock className="w-3 h-3" aria-label="Set by your role" />}
+                </label>
+                <Segmented
+                  ariaLabel="Import or export"
+                  value={formData.importOrExport === 'EXPORT' ? 'EXPORT' : 'IMPORT'}
+                  options={[
+                    { value: 'IMPORT', label: 'Import' },
+                    { value: 'EXPORT', label: 'Export' },
+                  ]}
+                  onChange={(v) => setFormData(prev => ({ ...prev, importOrExport: v }))}
+                  disabled={isDirectionRoleLocked}
+                />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Invoice Numbers
-                </label>
+              <div className="col-span-2">
+                <label className={labelClass}>Invoice Numbers</label>
                 <input
                   type="text"
                   name="invoiceNos"
                   value={formData.invoiceNos || ''}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className={inputClass}
                   placeholder="Optional"
                 />
               </div>
 
-              {/* Client Information */}
-              <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 mt-4 uppercase">
-                  Client & Haulier Information
-                </h4>
-              </div>
+              <SectionTitle>Client & Haulier</SectionTitle>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Client Name *
-                </label>
+              <div className="col-span-2 md:col-span-1">
+                <label className={labelClass}>Client Name *</label>
                 <input
                   type="text"
                   name="clientName"
@@ -586,35 +577,28 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   onChange={handleChange}
                   required
                   style={{ textTransform: 'uppercase' }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className={inputClass}
                   placeholder="Enter client name"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Haulier</label>
+              <div className="col-span-2 md:col-span-1">
+                <label className={labelClass}>Haulier</label>
                 <input
                   type="text"
                   name="haulier"
                   value={formData.haulier || ''}
                   onChange={handleChange}
                   style={{ textTransform: 'uppercase' }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter haulier name"
+                  className={inputClass}
+                  placeholder="Optional"
                 />
               </div>
 
-              {/* Vehicle Information */}
-              <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 mt-4 uppercase">
-                  Vehicle Information
-                </h4>
-              </div>
+              <SectionTitle>Vehicle & Cargo</SectionTitle>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Truck Number *
-                </label>
+                <label className={labelClass}>Truck No. *</label>
                 <input
                   type="text"
                   name="truckNo"
@@ -622,15 +606,13 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   onChange={handleChange}
                   required
                   style={{ textTransform: 'uppercase' }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="e.g., T844 EKS"
+                  className={inputClass}
+                  placeholder="T844 EKS"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Trailer Number *
-                </label>
+                <label className={labelClass}>Trailer No. *</label>
                 <input
                   type="text"
                   name="trailerNo"
@@ -638,86 +620,70 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   onChange={handleChange}
                   required
                   style={{ textTransform: 'uppercase' }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="e.g., T629 ELE"
+                  className={inputClass}
+                  placeholder="T629 ELE"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Cargo Type *
-                </label>
-                <select
-                  name="cargoType"
+                <label className={labelClass}>Cargo Type *</label>
+                <Segmented
+                  ariaLabel="Cargo type"
                   value={formData.cargoType || 'loosecargo'}
-                  onChange={(e) => {
-                    const cargoType = e.target.value as 'loosecargo' | 'container';
-                    setFormData(prev => ({ 
-                      ...prev, 
+                  options={[
+                    { value: 'loosecargo', label: 'Loose' },
+                    { value: 'container', label: 'Container' },
+                  ]}
+                  onChange={(cargoType) =>
+                    setFormData(prev => ({
+                      ...prev,
                       cargoType,
-                      containerNo: cargoType === 'container' ? 'CONTAINER' : 'LOOSE CARGO'
-                    }));
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="loosecargo">Loose Cargo</option>
-                  <option value="container">Container</option>
-                </select>
+                      containerNo: cargoType === 'container' ? 'CONTAINER' : 'LOOSE CARGO',
+                    }))
+                  }
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Container Number
-                </label>
+                <label className={labelClass}>Container No.</label>
                 <input
                   type="text"
                   name="containerNo"
                   value={formData.containerNo || ''}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="e.g., LOOSE CARGO or CONTAINER"
+                  className={inputClass}
+                  placeholder="Container no."
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Border Entry DRC
-                </label>
-                <input
-                  type="text"
-                  name="borderEntryDRC"
-                  value={formData.borderEntryDRC || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Optional"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Driver Name
-                </label>
+              <div className="col-span-2 md:col-span-1">
+                <label className={labelClass}>Driver Name</label>
                 <input
                   type="text"
                   name="driverName"
                   value={formData.driverName || ''}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter driver name"
+                  className={inputClass}
+                  placeholder="Optional"
                 />
               </div>
 
-              {/* Route Information */}
-              <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 mt-4 uppercase">
-                  Route Information
-                </h4>
+              <div className="col-span-2 md:col-span-1">
+                <label className={labelClass}>Border Entry DRC</label>
+                <input
+                  type="text"
+                  name="borderEntryDRC"
+                  value={formData.borderEntryDRC || ''}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Optional"
+                />
               </div>
 
+              <SectionTitle>Route</SectionTitle>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Loading Point *
-                </label>
+                <label className={labelClass}>Loading Point *</label>
                 <RouteSuggestInput
                   name="loadingPoint"
                   value={formData.loadingPoint || ''}
@@ -725,15 +691,13 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   suggestions={routeSuggestions.origins}
                   required
                   style={{ textTransform: 'uppercase' }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="e.g., DAR"
+                  className={inputClass}
+                  placeholder="DAR"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Destination *
-                </label>
+                <label className={labelClass}>Destination *</label>
                 <RouteSuggestInput
                   name="destination"
                   value={formData.destination || ''}
@@ -741,189 +705,93 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
                   suggestions={routeSuggestions.destinations}
                   required
                   style={{ textTransform: 'uppercase' }}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="e.g., CCR KOLWEZI"
+                  className={inputClass}
+                  placeholder="CCR KOLWEZI"
                 />
               </div>
 
-              {/* Financial Information */}
-              <div className="md:col-span-2">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3 mt-4 uppercase">
-                  Financial Information
-                </h4>
+              <SectionTitle>Financial</SectionTitle>
+
+              <div className="col-span-2">
+                <label className={labelClass}>Rate Structure *</label>
+                <Segmented
+                  ariaLabel="Rate structure"
+                  value={isPerTon ? 'per_ton' : 'fixed_total'}
+                  options={[
+                    { value: 'per_ton', label: 'Per ton × tonnage' },
+                    { value: 'fixed_total', label: 'Fixed total' },
+                  ]}
+                  onChange={(rateType) => setFormData(prev => ({ ...prev, rateType }))}
+                />
               </div>
 
-              <div className="relative" ref={rateTypeDropdownRef}>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Rate Structure *
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowRateTypeDropdown(!showRateTypeDropdown)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between"
-                >
-                  <span>
-                    {formData.rateType === 'per_ton' ? 'Per Ton Rate (Tonnage × Rate)' : 'Fixed Total Amount'}
-                  </span>
-                  <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${showRateTypeDropdown ? 'rotate-180' : ''}`} />
-                </button>
-                {showRateTypeDropdown && (
-                  <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, rateType: 'per_ton' }));
-                        setShowRateTypeDropdown(false);
-                      }}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                        formData.rateType === 'per_ton' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
-                      }`}
-                    >
-                      <span>Per Ton Rate (Tonnage × Rate)</span>
-                      {formData.rateType === 'per_ton' && <Check className="w-4 h-4" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, rateType: 'fixed_total' }));
-                        setShowRateTypeDropdown(false);
-                      }}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
-                        formData.rateType === 'fixed_total' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'text-gray-900 dark:text-gray-100'
-                      }`}
-                    >
-                      <span>Fixed Total Amount</span>
-                      {formData.rateType === 'fixed_total' && <Check className="w-4 h-4" />}
-                    </button>
-                  </div>
-                )}
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {formData.rateType === 'per_ton' 
-                    ? 'Calculate: Tonnage × Rate Per Ton'
-                    : 'Single fixed amount for this DO'}
-                </p>
+              <div>
+                <label className={labelClass}>Tonnage *</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  name="tonnages"
+                  value={tonnageInput}
+                  onChange={handleChange}
+                  required
+                  className={inputClass}
+                  placeholder="30.001"
+                />
               </div>
 
-              <div></div>
+              <div>
+                <label className={labelClass}>{isPerTon ? 'Rate per ton ($) *' : 'Total amount ($) *'}</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  name="ratePerTon"
+                  value={formData.ratePerTon || ''}
+                  onChange={handleChange}
+                  onWheel={preventNumberInputScroll}
+                  required
+                  min="0"
+                  step="0.01"
+                  className={inputClass}
+                  placeholder="0.00"
+                />
+              </div>
 
-              {formData.rateType === 'per_ton' ? (
+              <div className="col-span-2 flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-700/50 px-3 py-2 text-sm">
+                <span className="text-gray-600 dark:text-gray-300">
+                  Total amount{isPerTon ? '' : ' (fixed)'}
+                </span>
+                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                  ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="shrink-0 flex gap-2 sm:justify-end border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={isSubmitting || isDownloading}
+              className="flex-1 sm:flex-none h-10 px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || isDownloading}
+              className="flex-1 sm:flex-none inline-flex items-center justify-center h-10 px-5 rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting || isDownloading ? (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                      Tonnage *
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      name="tonnages"
-                      value={tonnageInput}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="e.g. 30.001"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                      Rate Per Ton ($) *
-                    </label>
-                    <input
-                      type="number"
-                      name="ratePerTon"
-                      value={formData.ratePerTon || ''}
-                      onChange={handleChange}
-                      onWheel={preventNumberInputScroll}
-                      required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Enter rate per ton"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3 rounded-md">
-                      <div className="text-sm text-gray-700 dark:text-gray-300">
-                        <strong>Total Amount:</strong> ${((formData.tonnages || 0) * (formData.ratePerTon || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  </div>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  {isDownloading ? 'Downloading PDF...' : (order ? 'Updating...' : 'Creating...')}
                 </>
               ) : (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                      Tonnage *
-                    </label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      name="tonnages"
-                      value={tonnageInput}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="e.g. 30.001"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                      Total Amount ($) *
-                    </label>
-                    <input
-                      type="number"
-                      name="ratePerTon"
-                      value={formData.ratePerTon || ''}
-                      onChange={handleChange}
-                      onWheel={preventNumberInputScroll}
-                      required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Enter fixed total amount"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3 rounded-md">
-                      <div className="text-sm text-gray-700 dark:text-gray-300">
-                        <strong>Total Amount:</strong> ${(formData.ratePerTon || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Fixed) &middot; <strong>Tonnage:</strong> {formatTonnage(formData.tonnages)} tons
-                      </div>
-                    </div>
-                  </div>
-                </>
+                <>{order ? 'Update' : 'Create'} {formData.doType || 'DO'}</>
               )}
-
-            </div>
-
-            {/* Footer */}
-            <div className="mt-6 flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={isSubmitting || isDownloading}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting || isDownloading}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting || isDownloading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    {isDownloading ? 'Downloading PDF...' : (order ? 'Updating...' : 'Creating...')}
-                  </>
-                ) : (
-                  <>{order ? 'Update' : 'Create'} DO</>
-                )}
-              </button>
-            </div>
-          </form>
-
-        </div>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
