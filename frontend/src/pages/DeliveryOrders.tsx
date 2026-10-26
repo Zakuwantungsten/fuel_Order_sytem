@@ -1010,6 +1010,10 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             `DO ${savedOrder.doType}-${savedOrder.doNumber} updated. Manual fuel steps required:\n• ${manualFlipSteps.join('\n• ')}`,
             { autoClose: 12000 }
           );
+        } else if (result.cascadeResults?.fuelAutomationSkipped) {
+          toast.warn(result.message || 'Delivery order updated. Fuel automation is off — adjust the fuel record manually.', {
+            autoClose: 12000,
+          });
         } else if (result.message && result.message !== 'Delivery order updated successfully') {
           toast.info(result.message, { autoClose: 8000 });
         }

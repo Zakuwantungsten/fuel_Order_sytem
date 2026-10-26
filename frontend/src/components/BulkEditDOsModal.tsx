@@ -20,6 +20,7 @@ import {
   RotateCcw,
   Check,
   Plus,
+  Info,
 } from 'lucide-react';
 import {
   deliveryOrdersAPI,
@@ -62,6 +63,9 @@ const FIELD_ORDER: FieldKey[] = [
 ];
 
 const ROUTE_FIELDS: FieldKey[] = ['loadingPoint', 'destination', 'importOrExport'];
+
+/** Server message suffix that the per-row notice already shows. */
+const NOTICE_NOTE_RE = /\. Note: (fuel-record automation is disabled|no linked fuel record).*$/;
 
 type FieldValues = {
   loadingPoint: string;
@@ -480,8 +484,14 @@ const BulkEditDOsModal = ({ isOpen, onClose, onCompleted }: BulkEditDOsModalProp
         .filter((o) => updatedIds.has(getOrderId(o)))
         .map((o) => ({ ...o, ...fields }) as DeliveryOrder);
 
-      const { updated, failed, skipped } = response.summary;
-      if (failed === 0 && skipped === 0) {
+      const { updated, failed, skipped, fuelAutomationOff = 0 } = response.summary;
+      if (fuelAutomationOff > 0) {
+        toast.warning(
+          `Bulk edit finished: ${updated} updated, ${skipped} skipped, ${failed} failed. ` +
+            `Fuel automation is off — adjust the fuel record manually for ${fuelAutomationOff} DO(s).`,
+          { autoClose: 12000 }
+        );
+      } else if (failed === 0 && skipped === 0) {
         toast.success(`Bulk edit complete: ${updated} DO(s) updated`);
       } else {
         toast.warning(`Bulk edit finished: ${updated} updated, ${skipped} skipped, ${failed} failed`);
@@ -1163,6 +1173,21 @@ const BulkEditDOsModal = ({ isOpen, onClose, onCompleted }: BulkEditDOsModalProp
             );
           })}
         </div>
+        {(summary.fuelAutomationOff ?? 0) > 0 && (
+          <div className="flex gap-2 p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-200 text-sm">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>
+              Fuel automation is off: {summary.fuelAutomationOff} DO(s) were updated but their fuel records were not
+              adjusted. Update those fuel records manually.
+            </span>
+          </div>
+        )}
+        {(summary.noFuelRecord ?? 0) > 0 && (
+          <div className="flex gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 text-sm">
+            <Info className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{summary.noFuelRecord} DO(s) have no linked fuel record — only the DO was updated.</span>
+          </div>
+        )}
         <div className="flex-1 min-h-[16rem] overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/60 sticky top-0 z-10">
@@ -1198,9 +1223,25 @@ const BulkEditDOsModal = ({ isOpen, onClose, onCompleted }: BulkEditDOsModalProp
                       ))}
                     </td>
                     <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
-                      {r.message}
+                      {r.notice ? r.message.replace(NOTICE_NOTE_RE, '') : r.message}
                       {r.cascadeMessage && (
                         <div className="mt-1 text-amber-700 dark:text-amber-300">{r.cascadeMessage}</div>
+                      )}
+                      {r.notice && (
+                        <div
+                          className={`mt-1 inline-flex items-center gap-1 ${
+                            r.notice.kind === 'automation_off'
+                              ? 'font-medium text-amber-700 dark:text-amber-300'
+                              : 'text-gray-500 dark:text-gray-400'
+                          }`}
+                        >
+                          {r.notice.kind === 'automation_off' ? (
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                          ) : (
+                            <Info className="w-3 h-3 shrink-0" />
+                          )}
+                          {r.notice.text}
+                        </div>
                       )}
                     </td>
                   </tr>

@@ -178,6 +178,7 @@ const emitFuelRecordChange = async (fuelRecordId?: string): Promise<void> => {
  *  - Truck amend: rematch extra using going destination (originalGoingTo), not export dest.
  *
  * SDO: no fuel interaction.
+ * No linked fuel record: nothing to cascade; the DO edit still goes through.
  */
 const cascadeUpdateToFuelRecord = async (
   originalDO: any,
@@ -186,6 +187,7 @@ const cascadeUpdateToFuelRecord = async (
   session?: ClientSession
 ): Promise<{
   updated: boolean;
+  noLinkedFuelRecord?: boolean;
   fuelRecordId?: string;
   changes?: string[];
   routeNotificationCreated?: boolean;
@@ -228,14 +230,8 @@ const cascadeUpdateToFuelRecord = async (
     }
 
     if (!fuelRecord) {
-      logger.info(`No fuel record found for DO ${originalDO.doNumber}`);
-      if (session) {
-        throw new ApiError(
-          422,
-          `Cannot update delivery order ${originalDO.doNumber}: no linked fuel record found to cascade changes. Create/fix the fuel record first, or turn off amend cascade automation.`,
-        );
-      }
-      return { updated: false };
+      logger.info(`No linked fuel record for DO ${originalDO.doNumber} — updating the DO only`);
+      return { updated: false, noLinkedFuelRecord: true };
     }
 
     affectedFuelRecordIds.add(fuelRecord._id.toString());
@@ -2479,6 +2475,10 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       fuelRecordId?: string;
       fuelRecordLocked?: boolean;
       routeNotificationCreated?: boolean;
+      /** Route/truck changed but the DO has no linked fuel record, so only the DO was updated. */
+      noLinkedFuelRecord?: boolean;
+      /** A fuel automation toggle is off, so the fuel record was not adjusted. */
+      fuelAutomationSkipped?: boolean;
       lpoEntriesUpdated: number;
       affectedFuelRecordIds: string[];
       fuelAudit?: { resourceId: string; previous: Record<string, any>; next: Record<string, any> };
@@ -2694,6 +2694,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
             cascadeResults.fuelRecordUpdated = fuelResult.updated;
             cascadeResults.fuelRecordChanges = fuelResult.changes || [];
             cascadeResults.fuelRecordId = fuelResult.fuelRecordId;
+            cascadeResults.noLinkedFuelRecord = fuelResult.noLinkedFuelRecord;
             cascadeResults.routeNotificationCreated = fuelResult.routeNotificationCreated;
             cascadeResults.pendingConfigNotification = fuelResult.pendingConfigNotification;
             mergeAffectedFuelRecordIds(fuelResult.affectedFuelRecordIds || []);
@@ -2986,6 +2987,9 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       }).catch((err: any) => logger.warn(`Failed to write audit breadcrumb for skipped amend cascade (DO ${deliveryOrder.doNumber}): ${err?.message}`));
     }
 
+    if (cascadeResults.pendingMerged) cascadeResults.noLinkedFuelRecord = undefined;
+    if (amendCascadeSkipped) cascadeResults.fuelAutomationSkipped = true;
+
     // Build response message
     let responseMessage = 'Delivery order updated successfully';
     if (cascadeResults.pendingConfigNotification) {
@@ -3005,6 +3009,8 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       responseMessage += `. Manual fuel steps: ${cascadeResults.importExportFlip.manualSteps.join(' ')}`;
     } else if (amendCascadeSkipped) {
       responseMessage += '. Note: fuel-record automation is disabled — adjust the fuel record manually.';
+    } else if (cascadeResults.noLinkedFuelRecord) {
+      responseMessage += '. Note: no linked fuel record — only the delivery order was updated.';
     }
     if (revivedPending && !cascadeResults.importExportFlip?.manualSteps.length) {
       responseMessage += `. Pending ${revivedPending.kind} DO ${revivedPending.pendingDo} restored on the fuel record`;

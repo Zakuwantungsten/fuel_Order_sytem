@@ -221,6 +221,38 @@ describe('bulkUpdateDeliveryOrders', () => {
     expect(entry.newValue.items[0].changes).toEqual([{ field: 'haulier', oldValue: 'OLD', newValue: 'NEW' }]);
   });
 
+  it('marks updated DOs whose fuel record was not adjusted', async () => {
+    mockOrders([
+      { _id: ID_A, doNumber: 'DO1', doType: 'DO', destination: 'OLD' },
+      { _id: ID_B, doNumber: 'DO2', doType: 'DO', destination: 'OLD' },
+      { _id: ID_C, doNumber: 'DO3', doType: 'DO', destination: 'OLD' },
+    ]);
+    const cascadeById: Record<string, any> = {
+      [ID_A]: { fuelAutomationSkipped: true },
+      [ID_B]: { noLinkedFuelRecord: true },
+      [ID_C]: { fuelRecordUpdated: true },
+    };
+    mockUpdateDeliveryOrder.mockImplementation(async (req: any, res: any) => {
+      res.status(200).json({ success: true, data: { _id: req.params.id, ...req.body }, cascadeResults: cascadeById[req.params.id] });
+    });
+    const res = makeRes();
+
+    await bulkUpdateDeliveryOrders(makeReq({ ids: [ID_A, ID_B, ID_C], fields: { destination: 'NEW' } }), res);
+
+    const { results, summary } = res.json.mock.calls[0][0].data;
+    expect(results.map((r: any) => [r.status, r.notice?.kind])).toEqual([
+      ['updated', 'automation_off'],
+      ['updated', 'no_fuel_record'],
+      ['updated', undefined],
+    ]);
+    expect(summary).toMatchObject({ updated: 3, fuelAutomationOff: 1, noFuelRecord: 1 });
+    expect(mockAuditLog.mock.calls[0][0].newValue.items.map((i: any) => i.notice)).toEqual([
+      'automation_off',
+      'no_fuel_record',
+      undefined,
+    ]);
+  });
+
   const flaggedImpact = {
     doNumber: 'DO1',
     requiresConfirmation: true,

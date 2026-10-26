@@ -39,6 +39,21 @@ export interface BulkItemResult {
   message: string;
   changes?: Array<{ field: string; oldValue: any; newValue: any }>;
   cascadeMessage?: string;
+  /** Updated, but the fuel record was not adjusted (automation off) or there was none to adjust. */
+  notice?: { kind: 'automation_off' | 'no_fuel_record'; text: string };
+}
+
+function noticeFromCascade(cascadeResults: any): BulkItemResult['notice'] {
+  if (cascadeResults?.fuelAutomationSkipped) {
+    return {
+      kind: 'automation_off',
+      text: 'Fuel automation is off — the fuel record was not adjusted. Update it manually.',
+    };
+  }
+  if (cascadeResults?.noLinkedFuelRecord) {
+    return { kind: 'no_fuel_record', text: 'No linked fuel record — only the DO was updated.' };
+  }
+  return undefined;
 }
 
 function normalizeRequestedFields(raw: any): Partial<Record<BulkField, any>> {
@@ -377,6 +392,7 @@ export const bulkUpdateDeliveryOrders = async (req: AuthRequest, res: Response):
         message: payload.message || 'Updated',
         changes,
         cascadeMessage: manualSteps.length ? manualSteps.join(' ') : undefined,
+        notice: noticeFromCascade(payload.cascadeResults),
       });
     } catch (err: any) {
       const code = err?.statusCode;
@@ -404,6 +420,8 @@ export const bulkUpdateDeliveryOrders = async (req: AuthRequest, res: Response):
     unchanged: results.filter((r) => r.status === 'unchanged').length,
     skipped: results.filter((r) => r.status === 'skipped').length,
     failed: results.filter((r) => r.status === 'failed').length,
+    fuelAutomationOff: results.filter((r) => r.notice?.kind === 'automation_off').length,
+    noFuelRecord: results.filter((r) => r.notice?.kind === 'no_fuel_record').length,
   };
 
   const updatedDoNumbers = results.filter((r) => r.status === 'updated').map((r) => r.doNumber);
@@ -446,13 +464,14 @@ export const bulkUpdateDeliveryOrders = async (req: AuthRequest, res: Response):
           }))
         : undefined,
       summary,
-      items: results.map(({ id, doNumber, doType, status, message, changes }) => ({
+      items: results.map(({ id, doNumber, doType, status, message, changes, notice }) => ({
         id,
         doNumber,
         doType,
         status,
         message,
         changes,
+        notice: notice?.kind,
       })),
     },
     ipAddress: req.ip,

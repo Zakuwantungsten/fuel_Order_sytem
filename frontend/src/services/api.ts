@@ -53,11 +53,21 @@ export interface DOBulkItemResult {
   message: string;
   changes?: Array<{ field: string; oldValue: any; newValue: any }>;
   cascadeMessage?: string;
+  /** Updated, but the fuel record was not adjusted (automation off) or there was none to adjust. */
+  notice?: { kind: 'automation_off' | 'no_fuel_record'; text: string };
 }
 
 export interface DOBulkUpdateResponse {
   bulkId: string;
-  summary: { requested: number; updated: number; unchanged: number; skipped: number; failed: number };
+  summary: {
+    requested: number;
+    updated: number;
+    unchanged: number;
+    skipped: number;
+    failed: number;
+    fuelAutomationOff?: number;
+    noFuelRecord?: number;
+  };
   results: DOBulkItemResult[];
   message?: string;
 }
