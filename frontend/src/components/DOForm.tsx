@@ -6,7 +6,7 @@ import { deliveryOrdersAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
 import axios from 'axios';
 import { cleanDeliveryOrder, isCorruptedDriverName, formatTruckNumber, isTonnageInput, parseTonnage, quantityToInputValue } from '../utils/dataCleanup';
-import ConfirmModal from './SuperAdmin/ConfirmModal';
+import DOSaveConfirmModal, { buildDOFieldChanges, formatDOValue, type DOConfirmDetail } from './DOSaveConfirmModal';
 import RouteSuggestInput, { useRouteLocationSuggestions } from './RouteSuggestInput';
 import { Segmented, SectionTitle, inputClass, labelClass } from './DOFormControls';
 
@@ -62,6 +62,14 @@ const clearDODraft = () => {
   }
 };
 
+// Fields shown in the save-confirmation diff. Pending (PG/PR) edits only sync these to the fuel record.
+const PENDING_EDIT_FIELDS = ['truckNo', 'trailerNo', 'date', 'loadingPoint', 'destination'] as const;
+const EDIT_FIELDS = [
+  'doType', 'importOrExport', 'date', 'truckNo', 'trailerNo', 'driverName', 'clientName', 'haulier',
+  'loadingPoint', 'destination', 'tonnages', 'ratePerTon', 'rateType', 'containerNo', 'invoiceNos',
+  'cargoType', 'borderEntryDRC',
+] as const;
+
 const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: DOFormProps) => {
   const getCurrentDate = useCallback(() => {
     const now = new Date();
@@ -107,7 +115,7 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Whether a saved draft was restored on open (drives the "draft restored" banner)
   const [hasDraft, setHasDraft] = useState(false);
-  const [flipConfirmOpen, setFlipConfirmOpen] = useState(false);
+  const [saveConfirmOpen, setSaveConfirmOpen] = useState(false);
   const [pendingSaveData, setPendingSaveData] = useState<Partial<DeliveryOrder> | null>(null);
   const { data: journeyConfig } = useJourneyConfig();
   const autoDownloadPdf = journeyConfig?.autoDownloadDOPdf ?? true;
@@ -238,22 +246,33 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     formData.importOrExport === 'EXPORT' &&
     fuelAutomation?.doCancelCascade !== false;
 
-  const getImportToExportConfirmMessage = () => {
-    const doLabel = `${order?.doType || 'DO'}-${order?.doNumber}`;
+  const getImportToExportWarning = () => {
     const truck = formData.truckNo || order?.truckNo || 'this truck';
     const lines = [
-      `You are changing ${doLabel} from IMPORT to EXPORT.`,
-      '',
-      'If you continue:',
-      `• The fuel journey created for this IMPORT DO will be cancelled`,
+      'Changing IMPORT to EXPORT:',
+      '• The fuel journey created for this IMPORT DO will be cancelled (or its pending going DO restored)',
     ];
     if (fuelAutomation?.doExportUpdate !== false) {
       lines.push(`• This DO will be linked as the EXPORT return leg on truck ${truck}'s active going journey`);
     } else {
       lines.push(`• Export fuel automation is off — you will need to manually link this DO to truck ${truck} using the Link action`);
     }
-    lines.push('', 'Click OK to confirm and save the update.');
     return lines.join('\n');
+  };
+  const getCreateDetails = (data: Partial<DeliveryOrder>): DOConfirmDetail[] => {
+    const rows: DOConfirmDetail[] = [
+      { label: 'Date', value: formatDOValue('date', data.date) },
+      { label: 'Truck / Trailer', value: `${formatDOValue('truckNo', data.truckNo)} / ${formatDOValue('trailerNo', data.trailerNo)}` },
+      { label: 'Client', value: formatDOValue('clientName', data.clientName) },
+      { label: 'Route', value: `${formatDOValue('loadingPoint', data.loadingPoint)} → ${formatDOValue('destination', data.destination)}` },
+      { label: 'Tonnage', value: formatDOValue('tonnages', data.tonnages) },
+      { label: `Rate (${formatDOValue('rateType', data.rateType || 'per_ton')})`, value: formatDOValue('ratePerTon', data.ratePerTon) },
+      { label: 'Driver', value: formatDOValue('driverName', data.driverName) },
+      { label: 'Haulier', value: formatDOValue('haulier', data.haulier) },
+    ];
+    if (data.containerNo) rows.push({ label: 'Container', value: data.containerNo });
+    if (data.invoiceNos) rows.push({ label: 'Invoice No(s)', value: formatDOValue('invoiceNos', data.invoiceNos) });
+    return rows;
   };
 
   const executeSave = async (cleanedFormData: Partial<DeliveryOrder>) => {
@@ -300,18 +319,13 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       delete (cleanedFormData as any)._id;
     }
 
-    if (needsImportToExportConfirm) {
-      setPendingSaveData(cleanedFormData);
-      setFlipConfirmOpen(true);
-      return;
-    }
-
-    await executeSave(cleanedFormData);
+    setPendingSaveData(cleanedFormData);
+    setSaveConfirmOpen(true);
   };
 
-  const handleConfirmImportToExportFlip = async () => {
+  const handleConfirmSave = async () => {
     if (!pendingSaveData) return;
-    setFlipConfirmOpen(false);
+    setSaveConfirmOpen(false);
     try {
       await executeSave(pendingSaveData);
     } finally {
@@ -319,10 +333,21 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
     }
   };
 
-  const handleCancelImportToExportFlip = () => {
-    setFlipConfirmOpen(false);
+  const handleCancelSave = () => {
+    setSaveConfirmOpen(false);
     setPendingSaveData(null);
   };
+
+  const confirmData = pendingSaveData || formData;
+  const confirmDirection = confirmData.importOrExport === 'EXPORT' ? 'EXPORT' : 'IMPORT';
+  const confirmDoType = confirmData.doType === 'SDO' ? 'SDO' : 'DO';
+  const confirmChanges = order
+    ? buildDOFieldChanges(order, confirmData, order.isPendingDo ? PENDING_EDIT_FIELDS : EDIT_FIELDS)
+    : undefined;
+  const confirmLabelDo = order
+    ? `${order.doType || 'DO'}-${order.doNumber}`
+    : `${confirmDoType}-${confirmData.doNumber || '(auto)'}`;
+  const confirmTruck = confirmData.truckNo || order?.truckNo;
 
   const handleDownload = async (targetOrder: DeliveryOrder) => {
     setIsDownloading(true);
@@ -744,16 +769,21 @@ const DOForm = ({ order, isOpen, onClose, onSave, defaultDoType = 'DO', user }: 
       </div>
     </div>
 
-    <ConfirmModal
-      open={flipConfirmOpen}
-      title="Change IMPORT to EXPORT?"
-      message={getImportToExportConfirmMessage()}
-      confirmLabel="OK, update DO"
-      cancelLabel="Cancel"
-      variant="warning"
+    <DOSaveConfirmModal
+      open={saveConfirmOpen}
+      action={order ? 'edit' : 'create'}
+      direction={confirmDirection}
+      previousDirection={order ? (order.importOrExport === 'EXPORT' ? 'EXPORT' : 'IMPORT') : undefined}
+      doType={confirmDoType}
+      previousDoType={order ? (order.doType === 'SDO' ? 'SDO' : 'DO') : undefined}
+      isPending={!!order?.isPendingDo}
+      subtitle={confirmTruck ? `${confirmLabelDo} · Truck ${confirmTruck}` : confirmLabelDo}
+      details={order ? undefined : getCreateDetails(confirmData)}
+      changes={confirmChanges}
+      warnings={needsImportToExportConfirm ? [getImportToExportWarning()] : []}
       loading={isSubmitting}
-      onConfirm={handleConfirmImportToExportFlip}
-      onCancel={handleCancelImportToExportFlip}
+      onConfirm={handleConfirmSave}
+      onCancel={handleCancelSave}
     />
     </>
   );

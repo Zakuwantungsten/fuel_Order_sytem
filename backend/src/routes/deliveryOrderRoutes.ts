@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { deliveryOrderController } from '../controllers';
+import { bulkUpdateDeliveryOrders, previewBulkUpdateDeliveryOrders } from '../controllers/deliveryOrderBulkUpdateController';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { exportRateLimiter } from '../middleware/rateLimiters';
@@ -43,6 +44,18 @@ router.post(
   '/bulk',
   authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'import_officer', 'export_officer'),
   asyncHandler(deliveryOrderController.createBulkDeliveryOrders)
+);
+
+// Bulk edit common fields on many DOs (runs the single-DO update per item)
+router.post(
+  '/bulk-update/preview',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'),
+  asyncHandler(previewBulkUpdateDeliveryOrders)
+);
+router.post(
+  '/bulk-update',
+  authorize('super_admin', 'admin', 'manager', 'supervisor', 'clerk', 'fuel_order_maker', 'boss', 'station_manager', 'payment_manager', 'import_officer', 'export_officer'),
+  asyncHandler(bulkUpdateDeliveryOrders)
 );
 
 // Bulk DOs PDF download route (must be before /:id routes)

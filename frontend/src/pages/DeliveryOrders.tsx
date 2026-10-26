@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import usePersistedState from '../hooks/usePersistedState';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar, Link2, Clock, GitMerge } from 'lucide-react';
+import { Search, Plus, Download, Edit, FileSpreadsheet, List, BarChart3, FileDown, Ban, RotateCcw, FileEdit, ChevronDown, Check, Calendar, Link2, Clock, GitMerge, Layers } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI, doWorkbookAPI, sdoWorkbookAPI, resourceLockAPI, fuelRecordsAPI } from '../services/api';
 import DODetailModal from '../components/DODetailModal';
@@ -15,6 +15,7 @@ import AmendedDOsModal from '../components/AmendedDOsModal';
 import ExportLinkModal from '../components/ExportLinkModal';
 import MergeToPendingDoModal from '../components/MergeToPendingDoModal';
 import PendingDoFollowUpModal from '../components/PendingDoFollowUpModal';
+import BulkEditDOsModal from '../components/BulkEditDOsModal';
 import { useAmendedDOs } from '../contexts/AmendedDOsContext';
 import Pagination from '../components/Pagination';
 import UnifiedTabLoader from '../components/SuperAdmin/common/UnifiedTabLoader';
@@ -86,6 +87,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
   const [cancellingOrder, setCancellingOrder] = useState<DeliveryOrder | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [showPendingDoModal, setShowPendingDoModal] = useState(false);
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [pendingDoStats, setPendingDoStats] = useState({ total: 0, goingPending: 0, returnPending: 0 });
   const [editingOrder, setEditingOrder] = useState<DeliveryOrder | null>(null);
   const [linkingExportOrder, setLinkingExportOrder] = useState<DeliveryOrder | null>(null);
@@ -1344,7 +1346,7 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
             </button>
             <button
               onClick={() => setShowPendingDoModal(true)}
-              className="relative inline-flex items-center px-3 py-1.5 text-sm font-medium border-l dark:border-gray-600 rounded-r-md text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+              className="relative inline-flex items-center px-3 py-1.5 text-sm font-medium border-l dark:border-gray-600 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40"
               title="Follow up trucks with pending going/return DOs"
             >
               <Clock className="w-4 h-4 mr-2" />
@@ -1355,6 +1357,15 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
                   {pendingDoStats.total > 99 ? '99+' : pendingDoStats.total}
                 </span>
               )}
+            </button>
+            <button
+              onClick={() => setIsBulkEditModalOpen(true)}
+              className="relative inline-flex items-center px-3 py-1.5 text-sm font-medium border-l dark:border-gray-600 rounded-r-md text-primary-700 dark:text-primary-200 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40"
+              title="Bulk edit loading point, destination, rate, client, haulier or import/export on many DOs"
+            >
+              <Layers className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Bulk Edit DOs</span>
+              <span className="sm:hidden">Bulk Edit</span>
             </button>
           </div>
           <button 
@@ -2482,6 +2493,31 @@ const DeliveryOrders = ({ user }: DeliveryOrdersProps = {}) => {
       <PendingDoFollowUpModal
         isOpen={showPendingDoModal}
         onClose={() => setShowPendingDoModal(false)}
+      />
+
+      <BulkEditDOsModal
+        isOpen={isBulkEditModalOpen}
+        onClose={() => setIsBulkEditModalOpen(false)}
+        onCompleted={(response, updatedOrders) => {
+          const changedFieldsById = new Map(
+            response.results
+              .filter((r) => r.status === 'updated')
+              .map((r) => [r.id, (r.changes || []).map((c) => c.field)])
+          );
+          for (const order of updatedOrders) {
+            const orderId = String(order.id ?? (order as any)._id ?? '');
+            const fieldsChanged = changedFieldsById.get(orderId) || [];
+            if (fieldsChanged.length > 0) addAmendedDO(order, fieldsChanged);
+          }
+          if (response.summary.updated > 0) {
+            queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: deliveryOrderKeys.availablePeriods({}) });
+            queryClient.invalidateQueries({ queryKey: fuelRecordKeys.lists() });
+            fuelRecordsAPI.getPendingDoStats()
+              .then(setPendingDoStats)
+              .catch(() => { /* non-blocking */ });
+          }
+        }}
       />
 
       {/* Merge real DO → pending DO on the same truck (DO Management) */}

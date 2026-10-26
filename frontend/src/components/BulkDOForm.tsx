@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { ChangeEvent } from 'react';
-import { X, FileDown, Download, Upload, Lock } from 'lucide-react';
+import { X, Download, Upload, Lock } from 'lucide-react';
 import { DeliveryOrder } from '../types';
 import { deliveryOrdersAPI } from '../services/api';
 import { useJourneyConfig } from '../hooks/useJourneyConfig';
@@ -8,6 +8,7 @@ import { parseDONumber, formatDONumber } from '../utils/doNumberFormatter';
 import { formatTruckNumber, parseTonnage, formatTonnage } from '../utils/dataCleanup';
 import { toast } from 'react-toastify';
 import RouteSuggestInput, { useRouteLocationSuggestions } from './RouteSuggestInput';
+import DOSaveConfirmModal from './DOSaveConfirmModal';
 import { Segmented, SectionTitle, inputClass, labelClass } from './DOFormControls';
 import BulkDOEntryGrid, {
   BulkGridRow,
@@ -161,6 +162,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
     startingNumber: '',
   });
   const routeSuggestions = useRouteLocationSuggestions(commonData.importOrExport);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
   // Fetch next DO/SDO number when component opens or doType changes
   useEffect(() => {
@@ -192,7 +194,6 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
 
   const [gridRows, setGridRows] = useState<BulkGridRow[]>(() => createEmptyGridRows());
   const [parsedRows, setParsedRows] = useState<BulkDORow[]>([]);
-  const [createdOrders, setCreatedOrders] = useState<Partial<DeliveryOrder>[]>([]);
   // Progress tracking state
   const [isCreating, setIsCreating] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, status: '' });
@@ -212,7 +213,6 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       // Reset all form data when the modal closes
       setGridRows(createEmptyGridRows());
       setParsedRows([]);
-      setCreatedOrders([]);
       setProgress({ current: 0, total: 0, status: '' });
       setIsCreating(false);
       setUploadedFileName(null);
@@ -272,19 +272,19 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
 
   // Live-sync parsed rows from the grid so preview + create stay current
   useEffect(() => {
-    if (!isOpen || isCreating || createdOrders.length > 0) return;
+    if (!isOpen || isCreating) return;
     const rows: BulkDORow[] = [];
     for (const gridRow of gridRows) {
       const parsed = gridRowToBulkRow(gridRow, commonData.rateType);
       if (parsed) rows.push(parsed);
     }
     setParsedRows(rows);
-  }, [gridRows, commonData.rateType, isOpen, isCreating, createdOrders.length]);
+  }, [gridRows, commonData.rateType, isOpen, isCreating]);
 
   // Auto-save the draft (debounced) whenever meaningful data changes. Skip while
-  // creating or once orders have been created (that draft is spent).
+  // creating (on success the draft is cleared and the form closes).
   useEffect(() => {
-    if (!isOpen || isCreating || createdOrders.length > 0) return;
+    if (!isOpen || isCreating) return;
     const hasData = countFilledGridRows(gridRows) > 0 || parsedRows.length > 0;
     if (!hasData) return;
     const timeoutId = setTimeout(() => {
@@ -297,7 +297,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       setHasDraft(true);
     }, 1000);
     return () => clearTimeout(timeoutId);
-  }, [isOpen, isCreating, createdOrders.length, gridRows, parsedRows, commonData]);
+  }, [isOpen, isCreating, gridRows, parsedRows, commonData]);
 
   // Discard the current draft and start fresh
   const handleDiscardDraft = () => {
@@ -491,6 +491,36 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
     e.target.value = '';
   };
 
+  const validateBulkInput = (): boolean => {
+    if (parsedRows.length === 0) {
+      toast.warn('Please enter at least one truck row in the grid');
+      return false;
+    }
+    if (!commonData.clientName || !commonData.loadingPoint || !commonData.destination) {
+      toast.warn('Please fill in all required fields: Client Name, Loading Point, and Destination');
+      return false;
+    }
+    if (!commonData.startingNumber) {
+      toast.warn('Please enter a starting number for the orders');
+      return false;
+    }
+    if (!parseDONumber(commonData.startingNumber)) {
+      toast.error('Invalid DO number format. Expected format: XXXX/YY (e.g., 0001/26)');
+      return false;
+    }
+    return true;
+  };
+
+  const requestGenerateDOs = () => {
+    if (isCreating || !validateBulkInput()) return;
+    setBulkConfirmOpen(true);
+  };
+
+  const handleConfirmBulkCreate = () => {
+    setBulkConfirmOpen(false);
+    void generateDOs();
+  };
+
   const generateDOs = async () => {
     try {
       console.log('=== Starting Bulk DO Generation ===');
@@ -498,30 +528,10 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       console.log('Common Data:', commonData);
       console.log('Parsed Rows:', parsedRows);
       
-      if (parsedRows.length === 0) {
-        toast.warn('Please enter at least one truck row in the grid');
-        return;
-      }
-      
-      // Validate required fields
-      if (!commonData.clientName || !commonData.loadingPoint || !commonData.destination) {
-        toast.warn('Please fill in all required fields: Client Name, Loading Point, and Destination');
-        return;
-      }
-      
-      if (!commonData.startingNumber) {
-        toast.warn('Please enter a starting number for the orders');
-        return;
-      }
-      
-      // Parse the starting DO number (format: XXXX/YY)
-      const parsed = parseDONumber(commonData.startingNumber);
-      if (!parsed) {
-        toast.error('Invalid DO number format. Expected format: XXXX/YY (e.g., 0001/26)');
-        return;
-      }
+      if (!validateBulkInput()) return;
 
-      const { sequentialNumber: startNum, year } = parsed;
+      // Parse the starting DO number (format: XXXX/YY)
+      const { sequentialNumber: startNum, year } = parseDONumber(commonData.startingNumber)!;
       
       const orders: Partial<DeliveryOrder>[] = parsedRows.map((row, index) => ({
         sn: index + 1,
@@ -553,7 +563,6 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       // Initialize progress tracking
       setIsCreating(true);
       setProgress({ current: 0, total: paddedOrders.length, status: 'Preparing...' });
-      setCreatedOrders([]);
       
       // Save to backend with progress callback
       console.log('Calling onSave with orders...');
@@ -564,7 +573,6 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       if (!result.success || result.createdOrders.length === 0) {
         console.error('No orders were created');
         setIsCreating(false);
-        setCreatedOrders([]);
         toast.error('Failed to create any delivery orders. Check console for details.');
         return;
       }
@@ -576,8 +584,6 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
       clearBulkDraft();
       setHasDraft(false);
 
-      // Set only the actually created orders for display and PDF generation
-      setCreatedOrders(result.createdOrders);
       setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Generating PDF...' });
       
       // Conditionally download PDF based on config setting
@@ -601,7 +607,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         } catch (pdfError) {
           console.error('PDF generation error:', pdfError);
           setIsCreating(false);
-          toast.warn('Orders created successfully, but PDF download failed. Use the button below to re-download.');
+          toast.warn('Orders created successfully, but PDF download failed. Download it from the Delivery Orders list.');
         }
       } else {
         setProgress({ current: result.createdOrders.length, total: paddedOrders.length, status: 'Complete!' });
@@ -614,19 +620,15 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         toast.success(successMsg);
       }
 
-      // Don't close automatically - let user review and close manually
-      // onClose();
+      onClose();
     } catch (error) {
       console.error('✗ Error in generateDOs:', error);
+      setIsCreating(false);
       toast.error('Failed to create delivery orders. Please try again.');
-      setCreatedOrders([]);
     }
   };
 
-  const downloadAllAsPDF = async (ordersToDownload?: Partial<DeliveryOrder>[]) => {
-    // Use passed orders or fall back to state (for manual download button)
-    const orders = ordersToDownload || createdOrders;
-    
+  const downloadAllAsPDF = async (orders: Partial<DeliveryOrder>[]) => {
     if (orders.length === 0) {
       console.warn('No orders available for PDF generation');
       return;
@@ -673,7 +675,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
   if (!isOpen) return null;
 
   const isDirectionRoleLocked = user?.role === 'import_officer' || user?.role === 'export_officer';
-  const gridLocked = isCreating || createdOrders.length > 0;
+  const gridLocked = isCreating;
   const toolbarButtonClass =
     'inline-flex items-center h-8 px-2.5 text-xs sm:text-sm rounded-md border disabled:opacity-50 disabled:cursor-not-allowed';
 
@@ -727,7 +729,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
         )}
 
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
-          {hasDraft && createdOrders.length === 0 && (
+          {hasDraft && (
             <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
               <span className="text-xs sm:text-sm text-amber-800 dark:text-amber-300">
                 Restored your unsaved draft.
@@ -940,7 +942,7 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
           </div>
 
           {/* Pre-create processed preview */}
-          {previewOrders.length > 0 && createdOrders.length === 0 && (
+          {previewOrders.length > 0 && (
             <div className="mt-5 border border-indigo-200 dark:border-indigo-800 rounded-lg overflow-hidden">
               <div className="bg-indigo-50 dark:bg-indigo-900/20 px-3 sm:px-4 py-2 border-b border-indigo-200 dark:border-indigo-800">
                 <h4 className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">
@@ -1006,77 +1008,22 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
             </div>
           )}
 
-          {/* Preview of created orders */}
-          {createdOrders.length > 0 && (
-            <div className="mt-5 border-2 border-green-500 dark:border-green-400 rounded-lg">
-              <div className="bg-green-50 dark:bg-green-900/20 px-3 sm:px-4 py-2.5 border-b border-green-200 dark:border-green-700">
-                <h4 className="text-sm sm:text-base font-semibold text-green-800 dark:text-green-300 flex items-center">
-                  <svg className="w-5 h-5 mr-2 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  Successfully Created {createdOrders.length} Delivery Orders!
-                </h4>
-              </div>
-              <div className="p-3 sm:p-4">
-                <div className="mb-3">
-                  <p className="text-sm text-gray-700 dark:text-gray-300 mb-1 font-medium">What was created:</p>
-                  <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
-                    <li><strong>{createdOrders.length}</strong> Delivery Orders ({createdOrders[0]?.doNumber} to {createdOrders[createdOrders.length - 1]?.doNumber})</li>
-                    <li><strong>{createdOrders.length}</strong> Fuel Records with automatic fuel allocations</li>
-                    <li>LPO entries for station fuel purchases (if applicable)</li>
-                    <li>PDF file downloaded with all DOs</li>
-                  </ul>
-                </div>
-
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                  View these orders in the <strong>Delivery Orders</strong> tab, fuel records in <strong>Fuel Records</strong>, and LPOs in <strong>LPO Management</strong>.
-                </p>
-
-                <details className="text-xs">
-                  <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium">Show all created DOs</summary>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                    {createdOrders.map((order, idx) => (
-                      <div key={idx} className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 dark:border-gray-600">
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">{order.doType}-{order.doNumber}</span>
-                        <br />
-                        <span className="text-gray-600 dark:text-gray-400">{order.truckNo}</span>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="shrink-0 flex flex-wrap items-center gap-2 sm:justify-between border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          {createdOrders.length > 0 && !isCreating && (
-            <button
-              type="button"
-              onClick={() => downloadAllAsPDF()}
-              className="w-full sm:w-auto inline-flex items-center justify-center h-10 px-4 text-sm font-medium bg-green-600 dark:bg-green-500 text-white rounded-lg hover:bg-green-700 dark:hover:bg-green-600"
-            >
-              <FileDown className="w-4 h-4 mr-2" />
-              Download PDF Again
-            </button>
-          )}
           <div className="flex flex-1 sm:flex-none gap-2 sm:ml-auto">
             <button
               type="button"
               onClick={onClose}
               disabled={isCreating}
-              className={`flex-1 sm:flex-none h-10 px-4 border rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
-                createdOrders.length > 0
-                  ? 'bg-primary-600 dark:bg-primary-500 text-white hover:bg-primary-700 dark:hover:bg-primary-600 border-transparent'
-                  : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-600'
-              }`}
+              className="flex-1 sm:flex-none h-10 px-4 border rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-600"
             >
-              {createdOrders.length > 0 ? 'Done' : 'Cancel'}
+              Cancel
             </button>
-            {parsedRows.length > 0 && createdOrders.length === 0 && (
+            {parsedRows.length > 0 && (
               <button
                 type="button"
-                onClick={generateDOs}
+                onClick={requestGenerateDOs}
                 disabled={isCreating}
                 className="flex-1 sm:flex-none h-10 px-5 rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 dark:bg-primary-500 hover:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1086,6 +1033,48 @@ const BulkDOForm = ({ isOpen, onClose, onSave, user }: BulkDOFormProps) => {
           </div>
         </div>
       </div>
+
+      <DOSaveConfirmModal
+        open={bulkConfirmOpen}
+        action="create"
+        direction={commonData.importOrExport}
+        doType={commonData.doType}
+        count={previewOrders.length}
+        subtitle={
+          previewOrders.length > 0
+            ? `${commonData.doType}-${previewOrders[0].doNumber}` +
+              (previewOrders.length > 1
+                ? ` to ${commonData.doType}-${previewOrders[previewOrders.length - 1].doNumber}`
+                : '')
+            : undefined
+        }
+        details={[
+          { label: 'Date', value: commonData.date },
+          { label: 'Client', value: commonData.clientName },
+          { label: 'Route', value: `${commonData.loadingPoint} → ${commonData.destination}` },
+          { label: 'Haulier', value: commonData.haulier || '—' },
+          {
+            label: 'Cargo',
+            value: commonData.cargoType === 'container' ? commonData.containerNo || 'Container' : 'Loose cargo',
+          },
+          { label: 'Rate type', value: commonData.rateType === 'per_ton' ? 'Per ton' : 'Fixed total' },
+          {
+            label: 'Total amount',
+            value: previewOrders
+              .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
+              .toLocaleString(undefined, { maximumFractionDigits: 2 }),
+          },
+        ]}
+        items={previewOrders.map((o) => ({
+          key: `${o.doNumber}-${o.sn}`,
+          primary: `${o.doType}-${o.doNumber}`,
+          secondary: `${o.truckNo}${o.trailerNo ? ` / ${o.trailerNo}` : ''} · ${formatTonnage(o.tonnages)}`,
+        }))}
+        itemsLabel={`${commonData.doType}s and trucks`}
+        loading={isCreating}
+        onConfirm={handleConfirmBulkCreate}
+        onCancel={() => setBulkConfirmOpen(false)}
+      />
     </div>
   );
 };

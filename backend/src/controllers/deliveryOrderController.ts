@@ -20,6 +20,7 @@ import {
   type CheckpointDecision,
 } from '../services/truckChangeSnapshotService';
 import { logFuelRecordChange, snapshotFuelRecord } from '../utils/fuelRecordAudit';
+import { revivePendingOnDirectionFlip } from '../services/pendingDoRevival';
 import { addMonthlySummarySheets } from '../utils/monthlySheetGenerator';
 import { addDoSummaryTabSheets, parseMonthYearLabel } from '../utils/summaryTabExport';
 import unifiedExportService from '../services/unifiedExportService';
@@ -2485,6 +2486,7 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         from: string;
         to: string;
         manualSteps: string[];
+        revivedPending?: { kind: 'going' | 'return'; pendingDo: string; fuelRecordId: string; lpoRefsReverted: number };
       };
       pendingMergePreview?: {
         truckNo: string;
@@ -2555,7 +2557,26 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
           };
 
           // Undo the previous direction's fuel side-effect when cancel cascade is on.
-          if (fuelAutomationFlags.doCancelCascade) {
+          // A journey that was promoted from a PG/PR placeholder goes back to pending
+          // instead of being cancelled / stripped.
+          const revival = fuelAutomationFlags.doCancelCascade
+            ? await revivePendingOnDirectionFlip(originalDO as any, session)
+            : { revived: false as const };
+          if (revival.revived) {
+            cascadeResults.fuelRecordUpdated = true;
+            cascadeResults.fuelRecordId = revival.fuelRecordId;
+            mergeAffectedFuelRecordIds([revival.fuelRecordId]);
+            cascadeResults.fuelAudit = revival.fuelAudit;
+            cascadeResults.importExportFlip.revivedPending = {
+              kind: revival.kind,
+              pendingDo: revival.pendingDo,
+              fuelRecordId: revival.fuelRecordId,
+              lpoRefsReverted: revival.lpoRefsReverted,
+            };
+            cascadeResults.fuelRecordChanges.push(
+              `Restored pending ${revival.kind} DO ${revival.pendingDo} (was ${originalDO.doNumber})`
+            );
+          } else if (fuelAutomationFlags.doCancelCascade) {
             const rollbackResult = await cascadeCancelFuelRecord(
               originalDO,
               `Changed DO direction from ${originalDO.importOrExport} to ${deliveryOrder.importOrExport}`,
@@ -2622,7 +2643,12 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
               amendCascadeSkipped = true;
             }
           } else if (flippedToExport) {
-            if (fuelAutomationFlags.doExportUpdate) {
+            if (revival.revived && revival.kind === 'going') {
+              manualSteps.push(
+                `Pending going DO ${revival.pendingDo} was restored on truck ${deliveryOrder.truckNo}'s journey. ` +
+                  'Link this EXPORT DO manually using the Link action on the DO row.'
+              );
+            } else if (fuelAutomationFlags.doExportUpdate) {
               const { routes } = await loadFuelConfig();
               const exportResult = await applyExportFuelUpdates(
                 [deliveryOrder.toObject()],
@@ -2881,15 +2907,26 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         previousFields[c.field] = c.oldValue;
         newFields[c.field] = c.newValue;
       }
-      await AuditService.logUpdate(
-        req.user?.userId || 'system',
+      // Set only by the bulk-update controller on its internal request (not client-controllable).
+      const bulkOperationId: string | undefined = (req as any).bulkOperationId;
+      await AuditService.log({
+        userId: req.user?.userId || 'system',
         username,
-        'DeliveryOrder',
-        deliveryOrder._id.toString(),
-        previousFields,
-        { ...newFields, changes },
-        req.ip
-      );
+        action: 'UPDATE',
+        resourceType: 'DeliveryOrder',
+        resourceId: deliveryOrder._id.toString(),
+        previousValue: previousFields,
+        newValue: {
+          ...newFields,
+          changes,
+          ...(editReason ? { editReason } : {}),
+          ...(bulkOperationId ? { bulkOperationId } : {}),
+        },
+        ipAddress: req.ip,
+        correlationId: bulkOperationId,
+        details: editReason ? `Updated DeliveryOrder — ${editReason}` : 'Updated DeliveryOrder',
+        severity: 'low',
+      });
     }
 
     if (cascadeResults.fuelAudit) {
@@ -2904,6 +2941,34 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
         source: 'do_amend',
         tags: ['do_amend'],
         details: undefined,
+      });
+    }
+
+    const revivedPending = cascadeResults.importExportFlip?.revivedPending;
+    if (revivedPending) {
+      await AuditService.log({
+        userId: req.user?.userId,
+        username,
+        action: 'UPDATE',
+        resourceType: 'FuelRecord',
+        resourceId: revivedPending.fuelRecordId,
+        previousValue: {
+          [revivedPending.kind === 'going' ? 'goingDo' : 'returnDo']: originalDO.doNumber,
+          truckNo: originalDO.truckNo,
+        },
+        newValue: {
+          [revivedPending.kind === 'going' ? 'goingDo' : 'returnDo']: revivedPending.pendingDo,
+          truckNo: deliveryOrder.truckNo,
+          lpoRefsReverted: revivedPending.lpoRefsReverted,
+        },
+        details:
+          `Pending ${revivedPending.kind} DO ${revivedPending.pendingDo} restored on fuel record ` +
+          `${revivedPending.fuelRecordId} after DO ${deliveryOrder.doNumber} was switched from ` +
+          `${originalDO.importOrExport} to ${deliveryOrder.importOrExport}. ` +
+          `${revivedPending.lpoRefsReverted} LPO line(s) pointed back to ${revivedPending.pendingDo}.`,
+        ipAddress: req.ip,
+        severity: 'medium',
+        tags: ['pending_do', 'revive', revivedPending.kind],
       });
     }
 
@@ -2940,6 +3005,9 @@ export const updateDeliveryOrder = async (req: AuthRequest, res: Response): Prom
       responseMessage += `. Manual fuel steps: ${cascadeResults.importExportFlip.manualSteps.join(' ')}`;
     } else if (amendCascadeSkipped) {
       responseMessage += '. Note: fuel-record automation is disabled — adjust the fuel record manually.';
+    }
+    if (revivedPending && !cascadeResults.importExportFlip?.manualSteps.length) {
+      responseMessage += `. Pending ${revivedPending.kind} DO ${revivedPending.pendingDo} restored on the fuel record`;
     }
 
     // Don't leak internal notification payload on the API response

@@ -163,6 +163,93 @@ function FilterDropdown({ label, value, options, onChange }: {
   );
 }
 
+// Bulk operations that record per-record results in newValue.items (e.g. DO bulk edit)
+const isBulkItemsLog = (log: any) =>
+  log?.action === 'BULK_OPERATION' && Array.isArray(log?.newValue?.items);
+
+const BULK_STATUS_STYLES: Record<string, string> = {
+  updated: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  unchanged: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  skipped: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+  failed: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+};
+
+function BulkOperationItems({ value }: { value: any }) {
+  const items: any[] = value?.items ?? [];
+  const fields: Record<string, unknown> = value?.fields ?? {};
+  const summary = value?.summary;
+  return (
+    <div className="space-y-3">
+      {Object.keys(fields).length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fields set</p>
+          <div className="space-y-1 bg-gray-50 dark:bg-gray-700/40 rounded p-2">
+            {Object.entries(fields).map(([field, v]) => (
+              <div key={field} className="flex items-center gap-1 text-xs flex-wrap">
+                <span className="font-medium text-gray-600 dark:text-gray-300">{fieldLabel(field)}:</span>
+                <span className="text-green-600 dark:text-green-400">{formatAuditValue(v, field)}</span>
+              </div>
+            ))}
+            {value?.editReason && (
+              <div className="text-xs text-gray-600 dark:text-gray-300">
+                <span className="font-medium">Reason:</span> {String(value.editReason)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <div>
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+          Records ({items.length})
+          {summary && (
+            <span className="ml-2 font-normal">
+              {summary.updated ?? 0} updated · {summary.unchanged ?? 0} unchanged · {summary.skipped ?? 0} skipped · {summary.failed ?? 0} failed
+            </span>
+          )}
+        </p>
+        <div className="max-h-72 overflow-auto border dark:border-gray-700 rounded">
+          <table className="min-w-full text-xs">
+            <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+              <tr className="text-left text-gray-500 dark:text-gray-300">
+                <th className="px-2 py-1.5">Record</th>
+                <th className="px-2 py-1.5">Result</th>
+                <th className="px-2 py-1.5">Changes / reason</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {items.map((item, idx) => (
+                <tr key={item.id ?? idx}>
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{item.doNumber || item.id}</p>
+                    {item.doType && <p className="text-gray-400">{item.doType}</p>}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <span className={`px-1.5 py-0.5 rounded font-medium ${BULK_STATUS_STYLES[item.status] ?? BULK_STATUS_STYLES.unchanged}`}>
+                      {item.status}
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5 text-gray-700 dark:text-gray-200">
+                    {Array.isArray(item.changes) && item.changes.length > 0
+                      ? item.changes.map((c: any) => (
+                          <div key={c.field} className="flex items-center gap-1 flex-wrap">
+                            <span className="font-medium">{fieldLabel(c.field)}:</span>
+                            <span className="text-red-500 line-through">{formatAuditValue(c.oldValue, c.field)}</span>
+                            <span className="text-gray-400">→</span>
+                            <span className="text-green-600 dark:text-green-400">{formatAuditValue(c.newValue, c.field)}</span>
+                          </div>
+                        ))
+                      : <span className="text-gray-500">{item.message}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // â”€â”€ Log detail modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function LogDetailModal({ log, onClose }: { log: any; onClose: () => void }) {
   return (
@@ -210,7 +297,7 @@ function LogDetailModal({ log, onClose }: { log: any; onClose: () => void }) {
             </div>
           )}
 
-          {(() => {
+          {isBulkItemsLog(log) ? <BulkOperationItems value={log.newValue} /> : (() => {
             const diffs = extractDiffs(log.previousValue, log.newValue);
             if (diffs.length === 0) return null;
             return (

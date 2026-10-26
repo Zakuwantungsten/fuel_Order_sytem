@@ -30,6 +30,70 @@ export interface DOSummaryAggregate {
   byDestination: Record<string, number>;
 }
 
+// Bulk edit of common DO fields (see deliveryOrdersAPI.bulkUpdate)
+export const DO_BULK_UPDATE_MAX = 200;
+
+export interface DOBulkUpdateFields {
+  loadingPoint?: string;
+  destination?: string;
+  ratePerTon?: number;
+  rateType?: 'per_ton' | 'fixed_total';
+  clientName?: string;
+  haulier?: string;
+  importOrExport?: 'IMPORT' | 'EXPORT';
+}
+
+export type DOBulkItemStatus = 'updated' | 'unchanged' | 'skipped' | 'failed';
+
+export interface DOBulkItemResult {
+  id: string;
+  doNumber?: string;
+  doType?: string;
+  status: DOBulkItemStatus;
+  message: string;
+  changes?: Array<{ field: string; oldValue: any; newValue: any }>;
+  cascadeMessage?: string;
+}
+
+export interface DOBulkUpdateResponse {
+  bulkId: string;
+  summary: { requested: number; updated: number; unchanged: number; skipped: number; failed: number };
+  results: DOBulkItemResult[];
+  message?: string;
+}
+
+/** What a direction switch would touch on the DO's current fuel journey (server preview). */
+export interface DOFlipImpact {
+  doNumber: string;
+  from: 'IMPORT' | 'EXPORT';
+  to: 'IMPORT' | 'EXPORT';
+  affectsFuel: boolean;
+  pendingToRevive: { kind: 'going' | 'return'; pendingDo: string; pendingAt?: string } | null;
+  lpoLines: Array<{ source: 'LPO' | 'DAR' | 'TANGA'; lpoNo: string; station?: string; liters: number }>;
+  lpoLiters: number;
+  fuelIssued: Array<{ field: string; liters: number }>;
+  fuelIssuedLiters: number;
+  requiresConfirmation: boolean;
+}
+
+/** A DO whose post-edit route is missing from the route configuration (server preview). */
+export interface DORouteIssue {
+  doNumber: string;
+  direction: 'IMPORT' | 'EXPORT';
+  loadingPoint: string;
+  destination: string;
+  effect: 'fuel_record_locked' | 'no_outbound_liters';
+}
+
+export interface DOBulkPreviewItem {
+  id: string;
+  doNumber?: string;
+  status: 'will_change' | 'unchanged' | 'skipped';
+  message: string;
+  flipImpact?: DOFlipImpact;
+  routeIssue?: DORouteIssue;
+}
+
 // Use relative URL to leverage Vite proxy (/api/v1 -> http://localhost:5000/api/v1)
 // This makes requests same-origin, allowing cookies to work properly
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
@@ -372,6 +436,38 @@ export const deliveryOrdersAPI = {
     };
   }> => {
     const response = await apiClient.post('/delivery-orders/bulk', { orders });
+    return response.data.data;
+  },
+
+  // Bulk-edit common fields; the server applies the normal single-DO update per item.
+  bulkUpdate: async (
+    ids: string[],
+    fields: DOBulkUpdateFields,
+    editReason?: string,
+    confirm?: { fuelImpact?: boolean; missingRoutes?: boolean }
+  ): Promise<DOBulkUpdateResponse> => {
+    // Items are processed sequentially server-side (lock + transaction each).
+    const timeout = Math.min(15 * 60_000, Math.max(60_000, ids.length * 4_000));
+    const response = await apiClient.post(
+      '/delivery-orders/bulk-update',
+      {
+        ids,
+        fields,
+        editReason: editReason?.trim() || undefined,
+        confirmFuelImpact: confirm?.fuelImpact || undefined,
+        confirmMissingRoutes: confirm?.missingRoutes || undefined,
+      },
+      { timeout }
+    );
+    return { ...response.data.data, message: response.data.message };
+  },
+
+  // Read-only: per-DO impact of a bulk edit (direction-switch fuel/LPO/pending flags, unconfigured routes).
+  bulkUpdatePreview: async (
+    ids: string[],
+    fields: DOBulkUpdateFields
+  ): Promise<{ items: DOBulkPreviewItem[] }> => {
+    const response = await apiClient.post('/delivery-orders/bulk-update/preview', { ids, fields }, { timeout: 60_000 });
     return response.data.data;
   },
 
